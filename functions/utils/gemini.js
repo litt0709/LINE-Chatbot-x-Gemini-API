@@ -65,8 +65,8 @@ const multimodal = async (imageBinary) => {
   return response.text;
 };
 
-const chat = async (userId, prompt) => {
-  const chatRef = db.collection("users").doc(userId).collection("history");
+const chat = async (sessionId, prompt) => {
+  const chatRef = db.collection("users").doc(sessionId).collection("history");
 
   // Lấy 10 tin nhắn gần nhất từ Firestore
   const snapshot = await chatRef.orderBy("createdAt", "desc").limit(10).get();

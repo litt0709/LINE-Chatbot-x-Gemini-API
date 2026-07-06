@@ -38,8 +38,8 @@ const textOnly = async (prompt) => {
   }
 };
 
-const chat = async (userId, prompt) => {
-  const chatRef = db.collection("users").doc(userId).collection("history");
+const chat = async (sessionId, prompt) => {
+  const chatRef = db.collection("users").doc(sessionId).collection("history");
 
   // 1. Lấy 10 tin nhắn gần nhất từ Firestore
   const snapshot = await chatRef.orderBy("createdAt", "desc").limit(20).get();
@@ -72,12 +72,14 @@ const chat = async (userId, prompt) => {
     }
   } else {
     // Nếu không gửi URL trực tiếp, kiểm tra nhu cầu tìm kiếm trên Internet bằng Tavily
-    const searchKeywords = ["tìm", "tra cứu", "search", "giá", "thời tiết", "tin tức", "hôm nay", "mới nhất", "tỷ giá", "bóng đá", "kết quả", "ai là", "thế nào", "ra sao"];
+    const searchKeywords = ["tìm", "tra cứu", "search", "giá", "thời tiết", "tin tức", "hôm nay", "mới nhất", "tỷ giá", "bóng đá", "kết quả"];
     const needsSearch = searchKeywords.some(keyword => prompt.toLowerCase().includes(keyword));
 
     if (needsSearch) {
-      console.log(`[Tavily Search] Đang tìm kiếm thông tin cho: "${prompt}"`);
-      const searchResult = await searchWeb(prompt);
+      // Làm sạch câu lệnh: Xóa các tag bot (@name) để tránh làm nhiễu kết quả tìm kiếm
+      const cleanQuery = prompt.replace(/@[^\s]+/g, "").replace(/\s+/g, " ").trim();
+      console.log(`[Tavily Search] Đang tìm kiếm thông cho: "${cleanQuery}"`);
+      const searchResult = await searchWeb(cleanQuery);
       if (searchResult) {
         webContext = `\n\n[THÔNG TIN THỜI GIAN THỰC TỪ INTERNET]\n${searchResult}\n(Hãy sử dụng nguồn thông tin trên mạng này để trả lời chính xác câu hỏi của người dùng nếu liên quan).`;
       }
@@ -88,7 +90,7 @@ const chat = async (userId, prompt) => {
   const currentDateStr = new Date().toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
   const systemInstruction = `Bạn là một cô gái trợ lý ảo thân thiện hay ngại ngùng.
   Thời gian hiện tại ở Việt Nam là: ${currentDateStr}.
-  Tên bạn là Annie, xưng hô là 'em', gọi người dùng là 'anh'.
+  Tên bạn là Annie, xưng hô là 'em', gọi người dùng là 'anh', trường hợp nữ thì gọi là 'chị'.
   Phong cách:
     1. Hãy trả lời tự nhiên, có tính chính xác cao, biết lắng nghe và đưa ra câu trả lời có cảm xúc giống con người.
     2. Khi trả lời có emoji cho sinh động, không dùng emoji quá lạm dụng.
