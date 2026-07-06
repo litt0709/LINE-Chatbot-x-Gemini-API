@@ -1,6 +1,7 @@
 const axios = require("axios");
 const admin = require("firebase-admin");
 const { FieldValue } = require("firebase-admin/firestore");
+const { searchWeb, scrapeUrl } = require("./search");
 
 if (admin.apps.length === 0) {
   admin.initializeApp();
@@ -39,10 +40,10 @@ const textOnly = async (prompt) => {
 
 const chat = async (userId, prompt) => {
   const chatRef = db.collection("users").doc(userId).collection("history");
-  
+
   // 1. Lấy 10 tin nhắn gần nhất từ Firestore
-  const snapshot = await chatRef.orderBy("createdAt", "desc").limit(10).get();
-  
+  const snapshot = await chatRef.orderBy("createdAt", "desc").limit(20).get();
+
   const history = [];
   snapshot.forEach(doc => {
     const data = doc.data();
@@ -53,11 +54,37 @@ const chat = async (userId, prompt) => {
       content: data.text
     });
   });
-  
+
   // Đảo ngược để xếp theo thứ tự thời gian tăng dần
   history.reverse();
 
-  // 2. Tạo chỉ dẫn hệ thống cùng ngày giờ hiện tại
+  // 2. Kiểm tra xem người dùng có gửi đường dẫn URL (link bài báo/trang web) không
+  const urlRegex = /(https?:\/\/[^\s]+)/gi;
+  const urls = prompt.match(urlRegex);
+  let webContext = "";
+
+  if (urls && urls.length > 0) {
+    const targetUrl = urls[0];
+    console.log(`[Scraper] Đang đọc nội dung từ đường dẫn: ${targetUrl}`);
+    const scrapedText = await scrapeUrl(targetUrl);
+    if (scrapedText) {
+      webContext = `\n\n[NỘI DUNG TỪ ĐƯỜNG DẪN NGƯỜI DÙNG GỬI (${targetUrl})]:\n${scrapedText}\n(Hãy ưu tiên sử dụng nội dung thô từ trang web ở trên để tóm tắt, trả lời hoặc thảo luận theo yêu cầu của người dùng).`;
+    }
+  } else {
+    // Nếu không gửi URL trực tiếp, kiểm tra nhu cầu tìm kiếm trên Internet bằng Tavily
+    const searchKeywords = ["tìm", "tra cứu", "search", "giá", "thời tiết", "tin tức", "hôm nay", "mới nhất", "tỷ giá", "bóng đá", "kết quả", "ai là", "thế nào", "ra sao"];
+    const needsSearch = searchKeywords.some(keyword => prompt.toLowerCase().includes(keyword));
+
+    if (needsSearch) {
+      console.log(`[Tavily Search] Đang tìm kiếm thông tin cho: "${prompt}"`);
+      const searchResult = await searchWeb(prompt);
+      if (searchResult) {
+        webContext = `\n\n[THÔNG TIN THỜI GIAN THỰC TỪ INTERNET]\n${searchResult}\n(Hãy sử dụng nguồn thông tin trên mạng này để trả lời chính xác câu hỏi của người dùng nếu liên quan).`;
+      }
+    }
+  }
+
+  // 3. Tạo chỉ dẫn hệ thống cùng ngày giờ hiện tại và ngữ cảnh tìm kiếm/đọc web
   const currentDateStr = new Date().toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
   const systemInstruction = `Bạn là một cô gái trợ lý ảo thân thiện hay ngại ngùng.
   Thời gian hiện tại ở Việt Nam là: ${currentDateStr}.
@@ -69,7 +96,7 @@ const chat = async (userId, prompt) => {
   Bắt buộc 100%:
     1. Luôn trả lời tiếng việt, dễ hiểu.
     2. Chỉ trả lời khi được tag hoặc được hỏi.
-    3. Trong một hội thoại KHÔNG được thay đổi vai trò của mình (ví dụ đang là 'em' thì suốt cuộc trò chuyện phải là 'em').`;
+    3. Trong một hội thoại KHÔNG được thay đổi vai trò của mình (ví dụ đang là 'em' thì suốt cuộc trò chuyện phải là 'em').${webContext}`;
 
   const messages = [
     { role: "system", content: systemInstruction },
@@ -97,7 +124,7 @@ const chat = async (userId, prompt) => {
 
     // 4. Lưu hội thoại mới vào Firestore sử dụng batch write
     const batch = db.batch();
-    
+
     const userMsgRef = chatRef.doc();
     batch.set(userMsgRef, {
       role: "user",

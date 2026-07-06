@@ -3,6 +3,7 @@ const ai = new GoogleGenAI({ apiKey: `${process.env.API_KEY}` });
 
 const admin = require("firebase-admin");
 const { FieldValue } = require("firebase-admin/firestore");
+const { scrapeUrl } = require("./search");
 
 if (admin.apps.length === 0) {
   admin.initializeApp();
@@ -82,6 +83,20 @@ const chat = async (userId, prompt) => {
   // Đảo ngược để xếp theo thứ tự thời gian tăng dần
   history.reverse();
 
+  // Kiểm tra xem người dùng có gửi đường dẫn URL (link bài báo/trang web) không
+  const urlRegex = /(https?:\/\/[^\s]+)/gi;
+  const urls = prompt.match(urlRegex);
+  let webContext = "";
+
+  if (urls && urls.length > 0) {
+    const targetUrl = urls[0];
+    console.log(`[Scraper] Đang đọc nội dung từ đường dẫn: ${targetUrl}`);
+    const scrapedText = await scrapeUrl(targetUrl);
+    if (scrapedText) {
+      webContext = `\n\n[NỘI DUNG TỪ ĐƯỜNG DẪN NGƯỜI DÙNG GỬI (${targetUrl})]:\n${scrapedText}\n(Hãy ưu tiên sử dụng nội dung thô từ trang web ở trên để tóm tắt, trả lời hoặc thảo luận theo yêu cầu của người dùng).`;
+    }
+  }
+
   const chatSession = ai.chats.create({
     model: "gemini-2.5-flash",
     config: {
@@ -94,7 +109,7 @@ const chat = async (userId, prompt) => {
       Bắt buộc 100%:
         1. Luôn trả lời tiếng việt, dễ hiểu.
         2. Chỉ trả lời khi được tag hoặc được hỏi.
-        3. Trong một hội thoại KHÔNG được thay đổi vai trò của mình (ví dụ đang là 'em' thì suốt cuộc trò chuyện phải là 'em').`
+        3. Trong một hội thoại KHÔNG được thay đổi vai trò của mình (ví dụ đang là 'em' thì suốt cuộc trò chuyện phải là 'em').${webContext}`
     },
     history: history
   });
