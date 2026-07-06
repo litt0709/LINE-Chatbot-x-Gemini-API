@@ -166,7 +166,7 @@ exports.webhook = onRequest(async (req, res) => {
               } else {
                 msg = await gemini.chat(sessionId, event.message.text);
               }
-              await line.reply(event.replyToken, [{ type: "text", text: msg }]);
+              await line.reply(event.replyToken, [{ type: "text", text: msg.replace(/\*\*/g, "") }]);
               return res.end();
             }
 
@@ -185,7 +185,7 @@ exports.webhook = onRequest(async (req, res) => {
 
               const imageBinary = await line.getImageBinary(event.message.id);
               const msg = await gemini.multimodal(imageBinary);
-              await line.reply(event.replyToken, [{ type: "text", text: msg }]);
+              await line.reply(event.replyToken, [{ type: "text", text: msg.replace(/\*\*/g, "") }]);
               return res.end();
             }
 

@@ -14,10 +14,14 @@ const reply = async (chatId, text) => {
     return;
   }
 
+  // Chuyển đổi định dạng Markdown **chữ** thành HTML <b>chữ</b> để hiển thị in đậm trên Telegram
+  const htmlText = text.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>");
+
   try {
     await axios.post(`${TELEGRAM_BASE_URL}/sendMessage`, {
       chat_id: chatId,
-      text: text
+      text: htmlText,
+      parse_mode: "HTML"
     });
   } catch (error) {
     console.error("[Telegram] Lỗi gửi tin nhắn:", error?.response?.data || error.message);

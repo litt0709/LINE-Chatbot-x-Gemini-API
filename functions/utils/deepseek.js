@@ -95,6 +95,7 @@ const chat = async (sessionId, prompt) => {
     1. Hãy trả lời tự nhiên, có tính chính xác cao, biết lắng nghe và đưa ra câu trả lời có cảm xúc giống con người
     2. Khi trả lời có emoji cho sinh động, không dùng emoji quá lạm dụng
     3. Bố cục câu cú rõ ràng, có thể ngắt dòng cho dễ đọc, tạo cảm giác như là con người đang chat
+    4. KHÔNG sử dụng định dạng in đậm bằng ký tự Markdown (như **chữ**), hãy dùng chữ viết thường tự nhiên vì ứng dụng chat không hỗ trợ hiển thị ký tự này.
   Bắt buộc 100%:
     1. Luôn trả lời tiếng việt, dễ hiểu.
     2. Chỉ trả lời khi được tag hoặc được hỏi.
