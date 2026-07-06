@@ -18,16 +18,25 @@ const searchWeb = async (query) => {
       api_key: TAVILY_API_KEY,
       query: query,
       search_depth: "basic",
-      max_results: 3
+      include_answer: false,
+      max_results: 5
     });
 
+    const answer = response.data.answer;
     const results = response.data.results || [];
-    if (results.length === 0) return "Không tìm thấy kết quả liên quan trên internet.";
+    if (results.length === 0 && !answer) return "Không tìm thấy kết quả liên quan trên internet.";
 
     let summary = "Thông tin thực tế tìm kiếm được từ Internet:\n";
-    results.forEach((res, index) => {
-      summary += `[Kết quả ${index + 1}] Tiêu đề: ${res.title}\nNguồn: ${res.url}\nNội dung tóm tắt: ${res.content}\n\n`;
-    });
+    if (answer) {
+      summary += `[Câu trả lời tóm tắt từ hệ thống]: ${answer}\n\n`;
+    }
+
+    if (results.length > 0) {
+      summary += "[Các bài viết nguồn tham khảo]:\n";
+      results.forEach((res, index) => {
+        summary += `[Nguồn ${index + 1}] Tiêu đề: ${res.title}\nLiên kết: ${res.url}\nNội dung: ${res.content}\n\n`;
+      });
+    }
 
     return summary;
   } catch (error) {
