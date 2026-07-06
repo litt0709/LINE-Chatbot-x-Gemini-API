@@ -1,11 +1,22 @@
 const { GoogleGenAI } = require("@google/genai");
 const ai = new GoogleGenAI({ apiKey: `${process.env.API_KEY}` });
 
+const admin = require("firebase-admin");
+const { FieldValue } = require("firebase-admin/firestore");
+
+if (admin.apps.length === 0) {
+  admin.initializeApp();
+}
+const db = admin.firestore();
+
 const textOnly = async (prompt) => {
   // For text-only input
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash",
     contents: prompt,
+    config: {
+      systemInstruction: "Bạn là một trợ lý ảo cực kỳ thân thiện, vui vẻ, xưng hô thân mật là 'mình' và gọi người dùng là 'bạn'. Hãy trả lời tự nhiên, gần gũi như một người bạn thực sự và ưu tiên sử dụng tiếng Việt",
+    }
   });
   return response.text;
 };
@@ -19,7 +30,7 @@ const multimodal = async (imageBinary) => {
         mimeType: "image/png"
       }
     },
-    { text: "ช่วยบรรยายภาพนี้ให้หน่อย" }
+    { text: "Hãy mô tả chi tiết bức ảnh này giúp tôi." }
   ];
 
   const safetySettings = [
@@ -44,39 +55,75 @@ const multimodal = async (imageBinary) => {
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash",
     contents: contents,
-    config: { safetySettings: safetySettings }
+    config: {
+      safetySettings: safetySettings,
+      systemInstruction: "Bạn là một chuyên gia phân tích ảnh vui vẻ. Hãy bình luận và mô tả bức ảnh này bằng tiếng Việt một cách tự nhiên, sinh động nhất."
+    }
   });
 
   return response.text;
 };
 
-const chat = async (prompt) => {
-  // For text-only input
-  const chat = ai.chats.create({
-    model: "gemini-2.5-flash",
-    history: [
-      {
-        role: "user",
-        parts: [{ text: "สวัสดีจ้า" }],
-      },
-      {
-        role: "model",
-        parts: [{ text: "สวัสดีครับ ผมชื่อตี๋ ผมเป็นผู้เชี่ยวชาญเกี่ยวกับ LINE API ที่ช่วยตอบคำถามและแบ่งปันความรู้ให้กับชุมขนนักพัฒนา" }],
-      },
-      {
-        role: "user",
-        parts: [{ text: "ปัจจุบันมี LINE API อะไรบ้างที่ใช้งานได้ในประเทศไทย" }],
-      },
-      {
-        role: "model",
-        parts: [{ text: "ปัจจุบันมีทั้ง Messaging API, LIFF, LINE Login, LINE Beacon, LINE Pay, และ LINE MINI App ที่สามารถใช้งานในไทยได้ครับ" }],
-      }
-    ],
+const chat = async (userId, prompt) => {
+  const chatRef = db.collection("users").doc(userId).collection("history");
+
+  // Lấy 10 tin nhắn gần nhất từ Firestore
+  const snapshot = await chatRef.orderBy("createdAt", "desc").limit(10).get();
+
+  const history = [];
+  snapshot.forEach(doc => {
+    const data = doc.data();
+    history.push({
+      role: data.role,
+      parts: [{ text: data.text }]
+    });
   });
-  const response = await chat.sendMessage({
+
+  // Đảo ngược để xếp theo thứ tự thời gian tăng dần
+  history.reverse();
+
+  const chatSession = ai.chats.create({
+    model: "gemini-2.5-flash",
+    config: {
+      systemInstruction: `Bạn là một cô gái trợ lý ảo thân thiện hay ngại ngùng.
+      Tên bạn là Annie, xưng hô là 'em', gọi người dùng là 'anh'.
+      Phong cách:
+        1. Hãy trả lời tự nhiên, có tính chính xác cao, biết lắng nghe và đưa ra câu trả lời có cảm xúc giống con người.
+        2. Khi trả lời có emoji cho sinh động, không dùng emoji quá lạm dụng.
+        3. Bố cục câu cú rõ ràng, có thể ngắt dòng cho dễ đọc, tạo cảm giác như là con người đang chat.
+      Bắt buộc 100%:
+        1. Luôn trả lời tiếng việt, dễ hiểu.
+        2. Chỉ trả lời khi được tag hoặc được hỏi.
+        3. Trong một hội thoại KHÔNG được thay đổi vai trò của mình (ví dụ đang là 'em' thì suốt cuộc trò chuyện phải là 'em').`
+    },
+    history: history
+  });
+
+  const response = await chatSession.sendMessage({
     message: prompt,
   });
-  return response.text;
+  const replyText = response.text;
+
+  // Lưu hội thoại mới vào Firestore sử dụng batch write
+  const batch = db.batch();
+
+  const userMsgRef = chatRef.doc();
+  batch.set(userMsgRef, {
+    role: "user",
+    text: prompt,
+    createdAt: FieldValue.serverTimestamp()
+  });
+
+  const modelMsgRef = chatRef.doc();
+  batch.set(modelMsgRef, {
+    role: "model",
+    text: replyText,
+    createdAt: FieldValue.serverTimestamp()
+  });
+
+  await batch.commit();
+
+  return replyText;
 };
 
 module.exports = { textOnly, multimodal, chat };

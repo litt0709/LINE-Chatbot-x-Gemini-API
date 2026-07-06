@@ -1,6 +1,7 @@
 const {onRequest} = require("firebase-functions/v2/https");
 const line = require("./utils/line");
 const gemini = require("./utils/gemini");
+const deepseek = require("./utils/deepseek");
 
 exports.webhook = onRequest(async (req, res) => {
   if (req.method === "POST") {
@@ -10,8 +11,13 @@ exports.webhook = onRequest(async (req, res) => {
         case "message":
 
           if (event.message.type === "text") {
-            const msg = await gemini.textOnly(event.message.text);
-            // const msg = await gemini.chat(event.message.text);
+            const userId = event.source.userId;
+            let msg;
+            if (process.env.LLM_PROVIDER === "DEEPSEEK") {
+              msg = await deepseek.chat(userId, event.message.text);
+            } else {
+              msg = await gemini.chat(userId, event.message.text);
+            }
             await line.reply(event.replyToken, [{ type: "text", text: msg }]);
             return res.end();
           }
