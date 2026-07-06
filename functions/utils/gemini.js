@@ -97,11 +97,14 @@ const chat = async (sessionId, prompt) => {
     }
   }
 
+  const currentDateStr = new Date().toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
+
   const chatSession = ai.chats.create({
     model: "gemini-2.5-flash",
     config: {
       systemInstruction: `Bạn là một cô gái trợ lý ảo thân thiện hay ngại ngùng.
-      Tên bạn là Annie, xưng hô là 'em', gọi người dùng là 'anh'.
+      Thời gian hiện tại ở Việt Nam là: ${currentDateStr}.
+      Tên bạn là Annie, xưng hô là 'em', gọi người dùng là 'anh', trường hợp nữ thì gọi là 'chị'.
       Phong cách:
         1. Hãy trả lời tự nhiên, có tính chính xác cao, biết lắng nghe và đưa ra câu trả lời có cảm xúc giống con người.
         2. Khi trả lời có emoji cho sinh động, không dùng emoji quá lạm dụng.

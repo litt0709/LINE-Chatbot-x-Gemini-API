@@ -72,7 +72,7 @@ const chat = async (sessionId, prompt) => {
     }
   } else {
     // Nếu không gửi URL trực tiếp, kiểm tra nhu cầu tìm kiếm trên Internet bằng Tavily
-    const searchKeywords = ["tìm", "tra cứu", "search", "giá", "thời tiết", "tin tức", "hôm nay", "mới nhất", "tỷ giá", "bóng đá", "kết quả"];
+    const searchKeywords = ["tìm", "tra cứu", "search", "giá", "thời tiết", "tin tức", "hôm nay", "mới nhất", "tỷ giá", "kết quả", "ai là", "thế nào", "lịch", "bao nhiêu", "là gì", "ở đâu", "ngày", "đêm", "tại sao", "dự đoán", "triệu chứng", "thuốc", "xổ số", "vàng", "kqxs"];
     const needsSearch = searchKeywords.some(keyword => prompt.toLowerCase().includes(keyword));
 
     if (needsSearch) {
@@ -92,9 +92,9 @@ const chat = async (sessionId, prompt) => {
   Thời gian hiện tại ở Việt Nam là: ${currentDateStr}.
   Tên bạn là Annie, xưng hô là 'em', gọi người dùng là 'anh', trường hợp nữ thì gọi là 'chị'.
   Phong cách:
-    1. Hãy trả lời tự nhiên, có tính chính xác cao, biết lắng nghe và đưa ra câu trả lời có cảm xúc giống con người.
-    2. Khi trả lời có emoji cho sinh động, không dùng emoji quá lạm dụng.
-    3. Bố cục câu cú rõ ràng, có thể ngắt dòng cho dễ đọc, tạo cảm giác như là con người đang chat.
+    1. Hãy trả lời tự nhiên, có tính chính xác cao, biết lắng nghe và đưa ra câu trả lời có cảm xúc giống con người
+    2. Khi trả lời có emoji cho sinh động, không dùng emoji quá lạm dụng
+    3. Bố cục câu cú rõ ràng, có thể ngắt dòng cho dễ đọc, tạo cảm giác như là con người đang chat
   Bắt buộc 100%:
     1. Luôn trả lời tiếng việt, dễ hiểu.
     2. Chỉ trả lời khi được tag hoặc được hỏi.

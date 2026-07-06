@@ -1,8 +1,26 @@
 const { onRequest } = require("firebase-functions/v2/https");
+const admin = require("firebase-admin");
 const line = require("./utils/line");
 const telegram = require("./utils/telegram");
 const gemini = require("./utils/gemini");
 const deepseek = require("./utils/deepseek");
+
+if (admin.apps.length === 0) {
+  admin.initializeApp();
+}
+const db = admin.firestore();
+
+// Hàm xóa lịch sử trò chuyện của một session (phòng chat hoặc cuộc hội thoại 1-1)
+const clearSessionHistory = async (sessionId) => {
+  const chatRef = db.collection("users").doc(sessionId).collection("history");
+  const snapshot = await chatRef.get();
+  const batch = db.batch();
+  snapshot.forEach(doc => {
+    batch.delete(doc.ref);
+  });
+  await batch.commit();
+  console.log(`[Firestore] Đã xóa lịch sử chat của session: ${sessionId}`);
+};
 
 // CẤU HÌNH: Danh sách LINE User ID được phép sử dụng Bot (Đặt "*" để cho phép tất cả mọi người)
 const ALLOWED_LINE_USERS = [
@@ -62,6 +80,14 @@ exports.webhook = onRequest(async (req, res) => {
           if (!isMentioned) {
             return res.end(); // Bỏ qua tin nhắn
           }
+        }
+
+        // Tự động xóa lịch sử hội thoại nếu người dùng gửi tin nhắn đặc biệt
+        const cleanedText = text.replace(/@[^\s]+/g, "").replace(/\s+/g, " ").trim();
+        if (cleanedText.toLowerCase() === "quên hết đi nào") {
+          await clearSessionHistory(String(chatId));
+          await telegram.reply(chatId, "Em mất trí nhớ rồi, huhu!");
+          return res.end();
         }
 
         let msg;
@@ -125,6 +151,14 @@ exports.webhook = onRequest(async (req, res) => {
 
               // 3. Xác định sessionId: Dùng groupId/roomId cho nhóm chat, hoặc userId cho chat 1-1
               const sessionId = event.source.groupId || event.source.roomId || event.source.userId;
+
+              // Tự động xóa lịch sử hội thoại nếu người dùng gửi tin nhắn đặc biệt
+              const cleanedText = event.message.text.replace(/@[^\s]+/g, "").replace(/\s+/g, " ").trim();
+              if (cleanedText.toLowerCase() === "quên hết đi nào") {
+                await clearSessionHistory(sessionId);
+                await line.reply(event.replyToken, [{ type: "text", text: "Em mất trí nhớ rồi, huhu!" }]);
+                return res.end();
+              }
 
               let msg;
               if (process.env.LLM_PROVIDER === "DEEPSEEK") {
