@@ -2,6 +2,7 @@ const { onRequest } = require("firebase-functions/v2/https");
 const { db, FieldValue, pruneHistory } = require("./utils/db");
 const line = require("./utils/line");
 const telegram = require("./utils/telegram");
+const messenger = require("./utils/messenger");
 const llm = require("./utils/llm");
 
 // ─── CẤU HÌNH WHITELIST ──────────────────────────────────────────────────────
@@ -19,10 +20,17 @@ const ALLOWED_TELEGRAM_USERS = [
   "847240155"
 ];
 
+const ALLOWED_MESSENGER_USERS = [
+  "*" // Tạm thời public hoặc điền PSID cụ thể
+];
+
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 
 const isUserAllowed = (userId, platform) => {
-  const list = platform === "TELEGRAM" ? ALLOWED_TELEGRAM_USERS : ALLOWED_LINE_USERS;
+  let list;
+  if (platform === "TELEGRAM") list = ALLOWED_TELEGRAM_USERS;
+  else if (platform === "MESSENGER") list = ALLOWED_MESSENGER_USERS;
+  else list = ALLOWED_LINE_USERS;
   return list.includes("*") || list.includes(userId);
 };
 
@@ -166,9 +174,28 @@ const buildLineMessage = (text, participants, isGroup = true) => {
 // ─── WEBHOOK ─────────────────────────────────────────────────────────────────
 
 exports.webhook = onRequest(async (req, res) => {
-  if (req.method !== "POST") return res.send(req.method);
-
   const platform = (process.env.PLATFORM || "LINE").toUpperCase();
+
+  // ── MESSENGER VERIFICATION ────────────────────────────────────────────────
+  if (req.method === "GET") {
+    if (platform === "MESSENGER") {
+      const mode = req.query["hub.mode"];
+      const token = req.query["hub.verify_token"];
+      const challenge = req.query["hub.challenge"];
+
+      if (mode && token) {
+        if (mode === "subscribe" && token === process.env.MESSENGER_VERIFY_TOKEN) {
+          console.log("[Messenger] Webhook verified!");
+          return res.status(200).send(challenge);
+        } else {
+          return res.status(403).send("Verification failed");
+        }
+      }
+    }
+    return res.status(200).send("OK GET");
+  }
+
+  if (req.method !== "POST") return res.status(405).send("Method Not Allowed");
 
   // ── TELEGRAM ──────────────────────────────────────────────────────────────
   if (platform === "TELEGRAM") {
@@ -254,6 +281,56 @@ exports.webhook = onRequest(async (req, res) => {
     }
 
     return res.end();
+  }
+
+  // ── MESSENGER ─────────────────────────────────────────────────────────────
+  if (platform === "MESSENGER") {
+    const { object, entry } = req.body;
+    if (object !== "page" || !entry) return res.status(404).send("Not Found");
+
+    for (const pageEntry of entry) {
+      if (!pageEntry.messaging || !pageEntry.messaging[0]) continue;
+      const webhookEvent = pageEntry.messaging[0];
+      const senderId = webhookEvent.sender.id;
+
+      console.log(`[Messenger] User: ${senderId}`);
+
+      // Kiểm tra whitelist
+      if (!isUserAllowed(senderId, "MESSENGER")) {
+        console.log(`[Messenger] Từ chối User ${senderId}`);
+        continue;
+      }
+
+      // Xử lý tin nhắn văn bản
+      if (webhookEvent.message && webhookEvent.message.text) {
+        const text = webhookEvent.message.text;
+
+        // Đánh dấu đã xem & đang gõ phím
+        await messenger.sendAction(senderId, "mark_seen");
+        messenger.sendAction(senderId, "typing_on").catch(() => {});
+
+        // Lệnh reset bộ nhớ
+        if (cleanText(text).toLowerCase() === "quên hết đi nào") {
+          await clearSessionHistory(senderId);
+          await messenger.reply(senderId, "Em mất trí nhớ rồi, huhu!");
+          continue;
+        }
+
+        // Lấy tên người gửi
+        const senderName = await messenger.getUserProfile(senderId);
+
+        // Lưu ý: Messenger không cấp sẵn nội dung tin nhắn reply gốc qua webhook,
+        // chỉ cấp reply_to.mid, nên tạm bỏ qua quoteContext.
+        const rawMsg = await llm.chat(senderId, text, senderName, senderId, null, "");
+        
+        // Messenger không hỗ trợ Markdown in đậm dạng **, xóa bỏ để dễ nhìn
+        const msg = rawMsg.replace(/\*\*/g, ""); 
+        
+        await messenger.reply(senderId, msg);
+        messenger.sendAction(senderId, "typing_off").catch(() => {});
+      }
+    }
+    return res.status(200).send("EVENT_RECEIVED");
   }
 
   // ── LINE ──────────────────────────────────────────────────────────────────
