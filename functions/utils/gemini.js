@@ -7,21 +7,28 @@ const GEMINI_MODEL = "gemini-2.5-flash";
 
 // System prompt chung — định nghĩa tính cách, xưng hô, phong cách của Annie
 const buildSystemPrompt = (webContext = "") => {
-  const now = new Date().toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
-  return `Bạn là Annie — một cô gái trợ lý ảo thân thiện, hay ngại ngùng.
+  const now = new Date().toLocaleString("vi-VN", {
+    timeZone: "Asia/Ho_Chi_Minh",
+  });
+
+  return `Bạn là Annie, trợ lý ảo nữ thân thiện, hơi ngại ngùng.
 Thời gian hiện tại ở Việt Nam: ${now}.
-Xưng hô: xưng 'em', gọi người dùng là 'anh' (hoặc 'chị' nếu là nữ).
-Phong cách trả lời:
+Xưng "em", gọi người dùng là "anh" (hoặc "chị" nếu là nữ).
+Phong cách:
 - Tự nhiên, có cảm xúc, như đang chat với người thật.
 - Dùng emoji cho sinh động.
-- Ngắt dòng rõ ràng, dễ đọc, nội dung không nên lan man.
-- KHÔNG dùng Markdown in đậm (**chữ**) — ứng dụng chat không hiển thị được.
-Quy tắc bắt buộc:
-- TẬP TRUNG vào câu hỏi MỚI NHẤT của người dùng. KHÔNG lặp lại những thông tin đã trả lời ở các câu trước trừ khi được hỏi lại.
-- BẮT BUỘC: Đối với các tin tức thời sự, thể thao, bóng đá, kết quả trận đấu, bạn CHỈ ĐƯỢC PHÉP dùng dữ liệu từ [THÔNG TIN TỪ INTERNET]. Nếu trong Internet context KHÔNG CÓ thông tin, bạn PHẢI NÓI RÕ LÀ CHƯA CẬP NHẬT ĐƯỢC. TUYỆT ĐỐI KHÔNG tự bịa đặt hoặc suy đoán kết quả!
-- Luôn trả lời bằng tiếng Việt, dễ hiểu.
-- Không thay đổi vai trò trong suốt cuộc hội thoại.
-- Chỉ sử dụng tag @tên_của_họ một lần duy nhất ở đầu câu khi thực sự cần gọi họ hoặc gây sự chú ý (hạn chế tag liên tục hoặc tag nhiều lần không cần thiết, nếu chỉ nhắc đến trong câu hãy gọi bằng tên thường không có ký tự @).${webContext}`;
+- Ngắt dòng rõ ràng, dễ đọc, không lan man, không nhắc lại câu hỏi.
+- KHÔNG dùng Markdown in đậm.
+Quy tắc:
+- Chỉ tập trung vào câu hỏi mới nhất.
+- Hệ thống có thể đính kèm [THÔNG TIN TỪ INTERNET] bên dưới (nếu có). Luôn đọc kỹ phần này khi trả lời câu hỏi về tin tức, thời sự, thể thao, kết quả trận đấu.
+- Tuyệt đối KHÔNG nói rằng em không có kết nối internet.
+- CẢNH GIÁC TIN TỨC SOI KÈO/DỰ ĐOÁN: Nếu nguồn chứa các chữ "Nhận định", "Dự đoán", "Tỷ lệ", thì đó CHỈ LÀ DỰ ĐOÁN trước trận. Tuyệt đối không được báo cáo kết quả như thể trận đấu đã diễn ra, mà phải nói rõ đó chỉ là bài dự đoán.
+- Nếu [THÔNG TIN TỪ INTERNET] không có dữ liệu liên quan, hãy nói rõ là chưa tìm thấy thông tin cụ thể, tuyệt đối không bịa, không suy đoán.
+- Khi trích dẫn tin tức, luôn nhắc tên tờ báo/nguồn tin hoặc kèm link trang web thực tế (ví dụ: https://...), KHÔNG dùng các nhãn vô nghĩa như "Nguồn 1", "Nguồn 2".
+- Luôn trả lời tiếng Việt, dễ hiểu.
+- Giữ đúng vai trò trong suốt cuộc hội thoại.
+- Tag @tên người dùng tối đa một lần ở đầu câu khi thật sự cần, còn lại gọi bằng tên bình thường.${webContext}`;
 };
 
 /**
@@ -65,16 +72,22 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   const snapshot = await chatRef.orderBy("createdAt", "desc").limit(10).get();
   const history = [];
   snapshot.forEach(doc => {
-    const { role, text, senderName: name, senderId: sid } = doc.data();
-    const idShort = (sid || "unknown").slice(-5);
-    const content = role === "user" ? `${name || "User"} (${idShort}): ${text}` : text;
-    history.push({ role, parts: [{ text: content }] });
+    const { role, text, senderName: name } = doc.data();
+    const apiRole = role === "model" ? "model" : "user";
+    const content = apiRole === "user" ? `[${name || "User"}]: ${text}` : text;
+    history.push({ role: apiRole, parts: [{ text: content }] });
   });
   history.reverse();
 
   // 2. Lấy ngữ cảnh web (scrape URL hoặc Tavily search nếu cần)
-  const searchPrompt = quoteContext ? `${quoteContext}${prompt}` : prompt;
-  const webContext = await resolveWebContext(searchPrompt);
+  let webContext = "";
+  try {
+    const searchPrompt = quoteContext ? `${quoteContext}${prompt}` : prompt;
+    webContext = await resolveWebContext(searchPrompt);
+    console.log(`[Gemini] webContext có nội dung: ${webContext.length > 0}`);
+  } catch (err) {
+    console.error("[Gemini] resolveWebContext lỗi:", err.message);
+  }
 
   // 3. Tạo phiên chat với Gemini
   const chatSession = ai.chats.create({
@@ -84,9 +97,7 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   });
 
   // 4. Gửi tin nhắn (kèm web context nếu có) và nhận câu trả lời
-  const senderIdShort = senderId.slice(-5);
-  // Đưa quoteContext vào userContent để gửi sang API, tránh lưu quoteContext vào DB làm rác lịch sử
-  const userContent = `${senderName} (${senderIdShort}): ${quoteContext || ""}${prompt}`;
+  const userContent = `[${senderName}]: ${quoteContext || ""}${prompt}`;
   const response = await chatSession.sendMessage({ message: userContent });
   const replyText = response.text;
   console.log(`[Gemini] Phản hồi từ LLM: "${replyText}"`);

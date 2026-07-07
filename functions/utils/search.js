@@ -7,12 +7,13 @@ const URL_REGEX = /(https?:\/\/[^\s"'>\]]+)/gi;
 
 // ─── Từ khóa nhận diện câu hỏi cần search ───────────────────────────────────
 const SEARCH_KEYWORDS = [
-  "tìm", "tra cứu", "search", "giá", "thời tiết", "tin tức", "hôm nay", "mới nhất",
+  "tìm", "tra cứu", "search", "giá", "thời tiết", "tin tức", "hôm nay", "hum nay", "nay", "mới nhất",
   "tỷ giá", "kết quả", "lịch", "bao nhiêu", "ngày", "đêm", "triệu chứng", "thuốc",
   "xổ số", "vàng", "kqxs", "cập nhật", "recent", "news", "latest", "bóng đá", "hôm qua",
   "đá lúc mấy giờ", "chiếu kênh nào", "bản đồ", "địa chỉ", "giá xăng", "đăng ký",
   "mua ở đâu", "tại sao", "như thế nào", "là ai", "là cái gì", "là gì",
-  "đội", "trận", "thắng", "thua", "vô địch", "bàn thắng", "ghi bàn", "tỉ số"
+  "đội", "trận", "thắng", "thua", "vô địch", "bàn thắng", "ghi bàn", "tỉ số",
+  "tin hot", "fact check", "kiểm chứng", "sự thật", "tin chuẩn", "tin thật"
 ];
 
 const QUESTION_PATTERNS = [
@@ -23,7 +24,7 @@ const QUESTION_PATTERNS = [
 
 // ─── Từ khóa nhận diện câu hỏi cần kết quả trong ngày hôm nay ───────────────
 const TODAY_KEYWORDS = [
-  "hôm nay", "mới nhất", "latest", "recent",
+  "hôm nay", "hum nay", "nay", "mới nhất", "latest", "recent", "tin hot",
   "tin tức", "thời tiết", "giá vàng", "kqxs", "tỷ giá", "cập nhật", "news"
 ];
 
@@ -131,30 +132,31 @@ const scrapeUrl = async (url) => {
  */
 const resolveWebContext = async (prompt) => {
   const urls = prompt.match(URL_REGEX);
+  let urlText = null;
 
   if (urls && urls.length > 0) {
     const targetUrl = urls[0];
     console.log(`[Scraper] Đọc nội dung từ: ${targetUrl}`);
-    const text = await scrapeUrl(targetUrl);
-    if (text) {
-      return `\n\n[NỘI DUNG TRANG WEB (${targetUrl})]:\n${text}\n(Hãy ưu tiên nội dung trên để tóm tắt/trả lời theo yêu cầu người dùng.)`;
-    }
-    return "";
+    urlText = await scrapeUrl(targetUrl);
   }
 
+  let searchSummary = null;
   if (checkNeedsSearch(prompt)) {
     const cleanQuery = prompt.replace(/@[^\s]+/g, "").replace(/\s+/g, " ").trim();
     console.log(`[Tavily] Tìm kiếm: "${cleanQuery}"`);
-    const result = await searchWeb(cleanQuery);
-    if (result) {
-      return `\n\n[THÔNG TIN TỪ INTERNET]\n${result}\n(Dùng thông tin trên để trả lời chính xác câu hỏi của người dùng.)`;
-    } else {
-      // Safeguard: Ngăn chặn LLM bịa đặt khi API tìm kiếm chết
-      return `\n\n[HỆ THỐNG CẢNH BÁO]: Công cụ tìm kiếm Internet hiện đang bị lỗi hoặc mất kết nối. BẠN HIỆN KHÔNG CÓ BẤT KỲ DỮ LIỆU THỰC TẾ NÀO LÚC NÀY. YÊU CẦU BẮT BUỘC: Hãy xin lỗi người dùng vì không thể truy cập Internet và TUYỆT ĐỐI KHÔNG ĐƯỢC TỰ BỊA ĐẶT KẾT QUẢ, ĐIỂM SỐ HOẶC TIN TỨC THỜI SỰ!`;
-    }
+    searchSummary = await searchWeb(cleanQuery);
   }
 
-  return "";
+  let context = "";
+  if (urlText) context += `\n\n[NỘI DUNG URL NGƯỜI DÙNG GỬI ĐẾN]:\n${urlText}\n`;
+  
+  if (searchSummary) {
+    context += `\n\n[THÔNG TIN TỪ INTERNET]:\n${searchSummary}\n`;
+  } else {
+    context += `\n\n[THÔNG TIN TỪ INTERNET]:\nKhông có dữ liệu tìm kiếm cho câu hỏi này.\n`;
+  }
+  
+  return context;
 };
 
 module.exports = { checkNeedsSearch, searchWeb, scrapeUrl, resolveWebContext };

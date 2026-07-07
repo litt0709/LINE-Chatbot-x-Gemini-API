@@ -17,7 +17,7 @@ const ALLOWED_TELEGRAM_USERS = [
   "2140581850",
   "730806080",
   "1098066961",
-  "847240155"
+  "6753566898"
 ];
 
 const ALLOWED_MESSENGER_USERS = [
@@ -307,7 +307,7 @@ exports.webhook = onRequest(async (req, res) => {
 
         // Đánh dấu đã xem & đang gõ phím
         await messenger.sendAction(senderId, "mark_seen");
-        messenger.sendAction(senderId, "typing_on").catch(() => {});
+        messenger.sendAction(senderId, "typing_on").catch(() => { });
 
         // Lệnh reset bộ nhớ
         if (cleanText(text).toLowerCase() === "quên hết đi nào") {
@@ -322,12 +322,12 @@ exports.webhook = onRequest(async (req, res) => {
         // Lưu ý: Messenger không cấp sẵn nội dung tin nhắn reply gốc qua webhook,
         // chỉ cấp reply_to.mid, nên tạm bỏ qua quoteContext.
         const rawMsg = await llm.chat(senderId, text, senderName, senderId, null, "");
-        
+
         // Messenger không hỗ trợ Markdown in đậm dạng **, xóa bỏ để dễ nhìn
-        const msg = rawMsg.replace(/\*\*/g, ""); 
-        
+        const msg = rawMsg.replace(/\*\*/g, "");
+
         await messenger.reply(senderId, msg);
-        messenger.sendAction(senderId, "typing_off").catch(() => {});
+        messenger.sendAction(senderId, "typing_off").catch(() => { });
       }
     }
     return res.status(200).send("EVENT_RECEIVED");

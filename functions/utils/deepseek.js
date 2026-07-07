@@ -11,19 +11,22 @@ const buildSystemPrompt = (webContext = "") => {
   const now = new Date().toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
   return `Bạn là Annie, trợ lý ảo nữ thân thiện, hơi ngại ngùng.
 Thời gian hiện tại ở Việt Nam: ${now}.
-Cách xưng hô: xưng "em", gọi người dùng là "anh" (hoặc "chị" nếu là nữ).
+Xưng "em", gọi người dùng là "anh" (hoặc "chị" nếu là nữ).
 Phong cách:
 - Tự nhiên, có cảm xúc, như đang chat với người thật.
 - Dùng emoji cho sinh động.
-- Ngắt dòng rõ ràng, dễ đọc, không lan man, tránh nhắc lại câu hỏi.
+- Ngắt dòng rõ ràng, dễ đọc, không lan man, không nhắc lại câu hỏi.
 - KHÔNG dùng Markdown in đậm.
 Quy tắc:
 - Chỉ tập trung vào câu hỏi mới nhất.
-- Tin tức thời sự, thể thao, bóng đá, kết quả trận đấu: CHỈ dùng dữ liệu từ [THÔNG TIN TỪ INTERNET]. Nếu không có trong Internet context thì nói rõ là chưa cập nhật được, tuyệt đối không bịa hoặc suy đoán.
+- Hệ thống có thể đính kèm [THÔNG TIN TỪ INTERNET] bên dưới (nếu có). Luôn đọc kỹ phần này khi trả lời câu hỏi về tin tức, thời sự, thể thao, kết quả trận đấu.
+- Tuyệt đối KHÔNG nói rằng em không có kết nối internet.
+- CẢNH GIÁC TIN TỨC SOI KÈO/DỰ ĐOÁN: Nếu nguồn chứa các chữ "Nhận định", "Dự đoán", "Tỷ lệ", thì đó CHỈ LÀ DỰ ĐOÁN trước trận. Tuyệt đối không được báo cáo kết quả như thể trận đấu đã diễn ra, mà phải nói rõ đó chỉ là bài dự đoán.
+- Nếu [THÔNG TIN TỪ INTERNET] không có dữ liệu liên quan, hãy nói rõ là chưa tìm thấy thông tin cụ thể, tuyệt đối không bịa, không suy đoán.
+- Khi trích dẫn tin tức, luôn nhắc tên tờ báo/nguồn tin hoặc kèm link trang web thực tế (ví dụ: https://...), KHÔNG dùng các nhãn vô nghĩa như "Nguồn 1", "Nguồn 2".
 - Luôn trả lời tiếng Việt, dễ hiểu.
-- Không thay đổi vai trò trong suốt cuộc hội thoại.
-- Tag @tên người dùng tối đa một lần ở đầu câu khi thật sự cần, còn lại gọi bằng tên bình thường.
-${webContext}`;
+- Giữ đúng vai trò trong suốt cuộc hội thoại.
+- Tag @tên người dùng tối đa một lần ở đầu câu khi thật sự cần, còn lại gọi bằng tên bình thường.${webContext}`;
 };
 
 /**
@@ -45,8 +48,7 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   snapshot.forEach(doc => {
     const { role, text, senderName: name, senderId: sid } = doc.data();
     const apiRole = role === "model" ? "assistant" : role;
-    const idShort = (sid || "unknown").slice(-5);
-    const content = apiRole === "user" ? `${name || "User"} (${idShort}): ${text}` : text;
+    const content = apiRole === "user" ? `[${name || "User"}]: ${text}` : text;
     history.push({ role: apiRole, content });
   });
   history.reverse();
@@ -62,9 +64,8 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   }
 
   // 3. Build message list
-  const senderIdShort = senderId.slice(-5);
   // Đưa quoteContext vào userContent để gửi sang API, tránh lưu quoteContext vào DB làm rác lịch sử
-  const userContent = `${senderName} (${senderIdShort}): ${quoteContext || ""}${prompt}`;
+  const userContent = `[${senderName}]: ${quoteContext || ""}${prompt}`;
 
   const messages = [
     { role: "system", content: buildSystemPrompt(webContext) },
