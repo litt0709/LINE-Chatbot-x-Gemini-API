@@ -64,8 +64,8 @@ const searchWeb = async (query) => {
     query,
     search_depth: isTodaySensitive ? "advanced" : "basic",
     include_answer: true,
-    max_results: 5,
-    ...(isTodaySensitive && { time_range: "day" })
+    max_results: 10,
+    ...(isTodaySensitive && { time_range: "week" })
   };
 
   try {
@@ -146,6 +146,9 @@ const resolveWebContext = async (prompt) => {
     const result = await searchWeb(cleanQuery);
     if (result) {
       return `\n\n[THÔNG TIN TỪ INTERNET]\n${result}\n(Dùng thông tin trên để trả lời chính xác câu hỏi của người dùng.)`;
+    } else {
+      // Safeguard: Ngăn chặn LLM bịa đặt khi API tìm kiếm chết
+      return `\n\n[HỆ THỐNG CẢNH BÁO]: Công cụ tìm kiếm Internet hiện đang bị lỗi hoặc mất kết nối. BẠN HIỆN KHÔNG CÓ BẤT KỲ DỮ LIỆU THỰC TẾ NÀO LÚC NÀY. YÊU CẦU BẮT BUỘC: Hãy xin lỗi người dùng vì không thể truy cập Internet và TUYỆT ĐỐI KHÔNG ĐƯỢC TỰ BỊA ĐẶT KẾT QUẢ, ĐIỂM SỐ HOẶC TIN TỨC THỜI SỰ!`;
     }
   }
 

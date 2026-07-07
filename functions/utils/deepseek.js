@@ -7,20 +7,21 @@ const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 
 // System prompt chung — định nghĩa tính cách, xưng hô, phong cách của Annie
-const buildSystemPrompt = () => {
+const buildSystemPrompt = (webContext = "") => {
   const now = new Date().toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
   return `Bạn là Annie — một cô gái trợ lý ảo thân thiện, hay ngại ngùng.
 Thời gian hiện tại ở Việt Nam: ${now}.
 Xưng hô: xưng 'em', gọi người dùng là 'anh' (hoặc 'chị' nếu là nữ).
 Phong cách trả lời:
 - Tự nhiên, có cảm xúc, như đang chat với người thật.
-- Dùng emoji vừa phải cho sinh động.
-- Ngắt dòng rõ ràng, dễ đọc.
+- Dùng emoji cho sinh động.
+- Ngắt dòng rõ ràng, dễ đọc, nội dung không nên lan man, tránh nhắc lại câu hỏi cũng như câu trả lời cũ
 - KHÔNG dùng Markdown in đậm (**chữ**) — ứng dụng chat không hiển thị được.
 Quy tắc bắt buộc:
 - Luôn trả lời bằng tiếng Việt, dễ hiểu.
 - Không bịa đặt thông tin khi không có dữ liệu.
-- Không thay đổi vai trò trong suốt cuộc hội thoại.`;
+- Không thay đổi vai trò trong suốt cuộc hội thoại.
+- Chỉ sử dụng tag @tên_của_họ một lần duy nhất ở đầu câu khi thực sự cần gọi họ hoặc gây sự chú ý (hạn chế tag liên tục hoặc tag nhiều lần không cần thiết, nếu chỉ nhắc đến trong câu hãy gọi bằng tên thường không có ký tự @).${webContext}`;
 };
 
 /**
@@ -30,16 +31,19 @@ Quy tắc bắt buộc:
  * @param {string} senderName - Tên hiển thị của người gửi
  * @param {string} senderId - ID thực của người gửi (để phân biệt trong group)
  * @param {string|null} lineMessageId - ID tin nhắn LINE (để hỗ trợ tính năng reply/quote)
+ * @param {string} quoteContext - Ngữ cảnh trích dẫn (nếu có)
  * @returns {Promise<string>}
  */
-const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown", lineMessageId = null) => {
+const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown", lineMessageId = null, quoteContext = "") => {
   const chatRef = db.collection("users").doc(sessionId).collection("history");
 
   // 1. Tải lịch sử hội thoại (20 tin nhắn gần nhất, đảo ngược về thứ tự thời gian)
   const snapshot = await chatRef.orderBy("createdAt", "desc").limit(20).get();
   const history = [];
+  let lastUserText = "";
   snapshot.forEach(doc => {
     const { role, text, senderName: name, senderId: sid } = doc.data();
+    if (role === "user" && !lastUserText) lastUserText = text;
     const apiRole = role === "model" ? "assistant" : role;
     const idShort = (sid || "unknown").slice(-5);
     const content = apiRole === "user" ? `${name || "User"} (${idShort}): ${text}` : text;
@@ -50,7 +54,9 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   // 2. Lấy ngữ cảnh web (scrape URL hoặc Tavily search nếu cần)
   let webContext = "";
   try {
-    webContext = await resolveWebContext(prompt);
+    // Nếu có quoteContext thì ưu tiên quoteContext, ngược lại ghép thêm tin nhắn user trước đó để giữ mạch hội thoại cho công cụ tìm kiếm
+    const searchPrompt = quoteContext ? `${quoteContext}${prompt}` : (lastUserText ? `${lastUserText} ${prompt}` : prompt);
+    webContext = await resolveWebContext(searchPrompt);
     console.log(`[DeepSeek] webContext có nội dung: ${webContext.length > 0}`);
   } catch (err) {
     console.error("[DeepSeek] resolveWebContext lỗi:", err.message);
@@ -58,10 +64,11 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
 
   // 3. Build message list
   const senderIdShort = senderId.slice(-5);
-  const userContent = `${senderName} (${senderIdShort}): ${prompt}${webContext}`;
+  // Đưa quoteContext vào userContent để gửi sang API, tránh lưu quoteContext vào DB làm rác lịch sử
+  const userContent = `${senderName} (${senderIdShort}): ${quoteContext || ""}${prompt}`;
 
   const messages = [
-    { role: "system", content: buildSystemPrompt() },
+    { role: "system", content: buildSystemPrompt(webContext) },
     ...history,
     { role: "user", content: userContent }
   ];
@@ -74,6 +81,7 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
       { headers: { "Content-Type": "application/json", Authorization: `Bearer ${DEEPSEEK_API_KEY}` } }
     );
     const replyText = data.choices[0].message.content;
+    console.log(`[DeepSeek] Phản hồi từ LLM: "${replyText}"`);
 
     // 5. Lưu lượt hội thoại mới vào Firestore
     const userMsgData = { role: "user", text: prompt, senderName, senderId, createdAt: FieldValue.serverTimestamp() };

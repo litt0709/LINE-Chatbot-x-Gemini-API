@@ -42,68 +42,124 @@ const clearSessionHistory = async (sessionId) => {
   }
 };
 
-/**
- * Làm sạch text: xóa @mention và khoảng trắng thừa.
- * @param {string} text
- * @returns {string}
- */
 const cleanText = (text) => text.replace(/@[^\s]+/g, "").replace(/\s+/g, " ").trim();
+
+const removeAccents = (str) => {
+  if (!str) return "";
+  return str
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D");
+};
 
 /**
  * Chuyển đổi các @tên trong câu trả lời của bot thành Telegram mention thực sự.
  * Dùng format HTML: <a href="tg://user?id=USER_ID">tên</a>
+ * Hỗ trợ khớp không dấu (diacritic-insensitive).
  * @param {string} text - Nội dung câu trả lời của LLM
  * @param {Object} participants - Map {tên_thường: userId}
  * @returns {string}
  */
 const convertTelegramMentions = (text, participants) => {
   if (!Object.keys(participants).length) return text;
-  return text.replace(/@(\S+)/g, (match, name) => {
-    const id = participants[name.toLowerCase()];
-    return id ? `<a href="tg://user?id=${id}">${name}</a>` : match;
-  });
+  
+  let result = text;
+  // Sắp xếp tên giảm dần theo độ dài để match chính xác tên dài trước
+  const sortedNames = Object.keys(participants).sort((a, b) => b.length - a.length);
+
+  for (const name of sortedNames) {
+    const id = participants[name];
+    const normName = removeAccents(name).toLowerCase();
+    
+    // Tạo regex khớp cả tên có dấu lẫn không dấu (ví dụ @Mạc Văn hoặc @mac van)
+    const escapedNorm = normName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const escapedOrig = removeAccents(name).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    
+    // Tìm và thay thế tất cả @name tương ứng
+    const pattern = new RegExp(`@(${escapedNorm}|${escapedOrig}|${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi");
+    result = result.replace(pattern, (match, matchedName) => {
+      return `<a href="tg://user?id=${id}">${matchedName}</a>`;
+    });
+  }
+  return result;
 };
 
 /**
  * Xây dựng message object LINE có mentions thực sự từ câu trả lời của bot.
- * LINE yêu cầu position (character index) của từng @tág trong chuỗi text.
+ * Sử dụng đặc tả tin nhắn "textV2" mới nhất của LINE (Release tháng 10/2024),
+ * tự động thay thế các nhãn @tên thành placeholder {user_N} và map qua substitution.
  * @param {string} text - Nội dung câu trả lời của LLM
  * @param {Object} participants - Map {tên_thường: userId}
- * @returns {{ type: string, text: string, mention?: { mentions: object[] } }}
+ * @param {boolean} isGroup - True nếu chat trong group/room, False nếu 1-on-1
+ * @returns {{ type: string, text: string, substitution?: Object }}
  */
-const buildLineMessage = (text, participants) => {
+const buildLineMessage = (text, participants, isGroup = true) => {
   let cleanedText = text.replace(/\*\*/g, ""); // Strip markdown bold
-  const mentionees = [];
+  
+  // LINE API không hỗ trợ mentions trong chat 1-1, trả về text thường
+  if (!isGroup) {
+    return {
+      type: "text",
+      text: cleanedText
+    };
+  }
 
-  // Sắp xếp tên theo độ dài giảm dần để match tên dài trước (tránh match bộ phận)
   const sortedNames = Object.keys(participants).sort((a, b) => b.length - a.length);
 
-  // Với mỗi tên participant, tìm các xuất hiện @Tên trong text và đánh dấu position
+  const substitution = {};
+  let replacedText = cleanedText;
+  let placeholderCount = 0;
+
+  // Đi qua từng tên participant, tìm các vị trí có @tên (không phân biệt dấu/hoa thường)
   for (const name of sortedNames) {
     const userId = participants[name];
-    // Tìm cả @tên (case-insensitive), có thể nhiều từ có dấu cách
-    const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const normName = removeAccents(name).toLowerCase();
+    
+    // Tạo regex khớp cả tên có dấu lẫn không dấu
+    const escapedName = normName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const pattern = new RegExp(`@${escapedName}`, "gi");
-    let match;
-    while ((match = pattern.exec(cleanedText)) !== null) {
-      mentionees.push({
-        index: match.index,
-        length: match[0].length,
-        type: "user",
-        userId: userId
-      });
+    
+    // Tìm kiếm vị trí khớp trên văn bản đã chuẩn hóa và thay thế
+    while (true) {
+      const normText = removeAccents(replacedText).toLowerCase();
+      // Để tránh lặp vô tận, chúng ta kiểm tra xem pattern còn khớp không
+      const match = pattern.exec(normText);
+      if (!match) break;
+      
+      const placeholderKey = `user_${placeholderCount++}`;
+      
+      // Thực hiện thay thế đoạn match trong chuỗi gốc bằng {placeholderKey}
+      replacedText = 
+        replacedText.substring(0, match.index) + 
+        `{${placeholderKey}}` + 
+        replacedText.substring(match.index + match[0].length);
+        
+      // Đưa thông tin tag vào substitution theo đặc tả textV2
+      substitution[placeholderKey] = {
+        type: "mention",
+        mentionee: {
+          type: "user",
+          userId: userId
+        }
+      };
     }
   }
 
-  // Sắp xếp theo position để LINE nhận đúng thứ tự
-  mentionees.sort((a, b) => a.index - b.index);
-
-  const msg = { type: "text", text: cleanedText };
-  // Đúng chuẩn LINE API: dùng property "mention", bên trong chứa array "mentions"
-  if (mentionees.length > 0) {
-    msg.mention = { mentions: mentionees };
+  // Nếu có mention, trả về dạng textV2
+  if (Object.keys(substitution).length > 0) {
+    return {
+      type: "textV2",
+      text: replacedText,
+      substitution: substitution
+    };
   }
-  return msg;
+
+  // Nếu không có mention, trả về dạng text thường để tối ưu
+  return {
+    type: "text",
+    text: cleanedText
+  };
 };
 
 // ─── WEBHOOK ─────────────────────────────────────────────────────────────────
@@ -150,27 +206,38 @@ exports.webhook = onRequest(async (req, res) => {
 
       const senderName = message.from.first_name || message.from.username || "User";
 
-      // Lưu và cập nhật bản đồ tên → userId (participants) cho session này
+      // Lấy participants lịch sử của session này (nếu có) làm fallback
       const sessionRef = db.collection("users").doc(String(chatId));
       const sessionDoc = await sessionRef.get();
-      const participants = sessionDoc.data()?.participants || {};
+      const sessionParticipants = sessionDoc.data()?.participants || {};
+
+      // Lưu và cập nhật bản đồ tên → userId (participants) TOÀN CỤC cho Telegram
+      const globalRef = db.collection("metadata").doc("tg_participants");
+      const globalDoc = await globalRef.get();
+      const globalParticipants = globalDoc.data() || {};
+
+      // Gộp và cập nhật tên người gửi mới
+      const participants = { ...sessionParticipants, ...globalParticipants };
       participants[senderName.toLowerCase()] = userId;
       if (message.from.username) participants[message.from.username.toLowerCase()] = userId;
-      // Lưu bất đồng bộ, không block response
-      sessionRef.set({ participants }, { merge: true }).catch(e => console.error("[Telegram] Lưu participants lỗi:", e.message));
+
+      // Lưu bất đồng bộ sang global
+      globalRef.set(participants, { merge: true }).catch(e => console.error("[Telegram] Lưu participants lỗi:", e.message));
 
       // Nếu người dùng reply (trích dẫn) một tin nhắn khác, đính kèm nội dung đó vào prompt
-      let promptText = text;
+      let cleanPrompt = text;
+      let quoteContext = "";
       if (message.reply_to_message) {
         const replied = message.reply_to_message;
         const repliedFrom = replied.from?.first_name || replied.from?.username || "ai đó";
         const repliedText = replied.text || replied.caption || "";
         if (repliedText) {
-          promptText = `[Đang trả lời tin nhắn của ${repliedFrom}: "${repliedText}"]\n${text}`;
+          const truncatedText = repliedText.length > 60 ? repliedText.slice(0, 60) + "..." : repliedText;
+          quoteContext = `[Đang trả lời tin nhắn của ${repliedFrom}: "${truncatedText}"]\n`;
         }
       }
 
-      const rawMsg = await llm.chat(String(chatId), promptText, senderName, userId);
+      const rawMsg = await llm.chat(String(chatId), cleanPrompt, senderName, userId, null, quoteContext);
       // Convert @name → Telegram HTML mention thực sự
       const msg = convertTelegramMentions(rawMsg, participants);
       await telegram.reply(chatId, msg);
@@ -245,7 +312,8 @@ exports.webhook = onRequest(async (req, res) => {
       }
 
       // Nếu người dùng reply (trích dẫn) một tin nhắn khác, tìm nội dung trong lịch sử Firestore
-      let promptText = event.message.text;
+      let cleanPrompt = event.message.text;
+      let quoteContext = "";
       const quotedId = event.message.quotedMessageId;
       if (quotedId) {
         try {
@@ -254,23 +322,40 @@ exports.webhook = onRequest(async (req, res) => {
           if (!quotedSnap.empty) {
             const q = quotedSnap.docs[0].data();
             const quotedFrom = q.senderName || (q.role === "model" ? "Annie" : "ai đó");
-            promptText = `[Đang trả lời tin nhắn của ${quotedFrom}: "${q.text}"]\n${event.message.text}`;
+            const truncatedText = q.text.length > 60 ? q.text.slice(0, 60) + "..." : q.text;
+            quoteContext = `[Đang trả lời tin nhắn của ${quotedFrom}: "${truncatedText}"]\n`;
           }
         } catch (err) {
           console.error("[LINE] Lỗi tra cứu quoted message:", err.message);
         }
       }
 
-      // Lưu và cập nhật bản đồ tên → userId cho session LINE (chỉ lưu tên đầy đủ)
+      // Lấy participants lịch sử của session này (nếu có) làm fallback
       const sessionRef = db.collection("users").doc(sessionId);
       const sessionDoc = await sessionRef.get();
-      const participants = sessionDoc.data()?.participants || {};
-      participants[senderName.toLowerCase()] = userId;
-      sessionRef.set({ participants }, { merge: true }).catch(e => console.error("[LINE] Lưu participants lỗi:", e.message));
+      const sessionParticipants = sessionDoc.data()?.participants || {};
 
-      const rawMsg = await llm.chat(sessionId, promptText, senderName, userId, event.message.id);
+      // Lưu và cập nhật bản đồ tên → userId TOÀN CỤC cho LINE (chỉ lưu tên đầy đủ)
+      const globalRef = db.collection("metadata").doc("line_participants");
+      const globalDoc = await globalRef.get();
+      const globalParticipants = globalDoc.data() || {};
+
+      // Gộp và cập nhật tên người gửi mới
+      const participants = { ...sessionParticipants, ...globalParticipants };
+      participants[senderName.toLowerCase()] = userId;
+
+      // Lưu bất đồng bộ sang global
+      globalRef.set(participants, { merge: true }).catch(e => console.error("[LINE] Lưu participants lỗi:", e.message));
+
+      console.log(`[LINE] Participants map cho Session:`, JSON.stringify(participants));
+
+      const rawMsg = await llm.chat(sessionId, cleanPrompt, senderName, userId, event.message.id, quoteContext);
+      
       // Xây dựng LINE message có proper mention tags
-      const lineMsg = buildLineMessage(rawMsg, participants);
+      const isGroup = event.source.type !== "user";
+      const lineMsg = buildLineMessage(rawMsg, participants, isGroup);
+      console.log(`[LINE] Payload gửi đi:`, JSON.stringify(lineMsg));
+      
       const sentMessages = await line.reply(event.replyToken, [lineMsg]);
 
       // Lưu LINE message ID của tin nhắn bot vào Firestore để hỗ trợ reply/quote sau này
