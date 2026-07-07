@@ -73,4 +73,28 @@ const getUserProfile = async (recipientId) => {
   }
 };
 
-module.exports = { reply, sendAction, getUserProfile };
+/**
+ * Gửi tin nhắn chủ động (push) tới Facebook Messenger.
+ * @param {string} recipientId - ID của người dùng trên Messenger (PSID)
+ * @param {string} text - Nội dung phản hồi
+ */
+const push = async (recipientId, text) => {
+  if (!PAGE_ACCESS_TOKEN) return;
+
+  const truncatedText = text.length > 2000 ? text.slice(0, 1997) + "..." : text;
+
+  try {
+    await axios.post(MESSENGER_GRAPH_URL, {
+      recipient: { id: recipientId },
+      message: { text: truncatedText },
+      messaging_type: "MESSAGE_TAG",
+      tag: "POST_PURCHASE_UPDATE"
+    }, {
+      params: { access_token: PAGE_ACCESS_TOKEN }
+    });
+  } catch (error) {
+    console.error("[Messenger] Lỗi gửi push message:", error?.response?.data || error.message);
+  }
+};
+
+module.exports = { reply, sendAction, getUserProfile, push };

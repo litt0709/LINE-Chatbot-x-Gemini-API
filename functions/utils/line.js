@@ -67,4 +67,22 @@ const getUserProfile = async (userId, groupId = null) => {
   }
 };
 
-module.exports = { getImageBinary, reply, getUserProfile };
+/**
+ * Gửi tin nhắn chủ động (push) tới LINE.
+ * @param {string} to - ID người nhận (userId hoặc groupId)
+ * @param {Array} payload - Mảng tin nhắn
+ */
+const push = async (to, payload) => {
+  try {
+    await axios({
+      method: "post",
+      url: "https://api.line.me/v2/bot/message/push",
+      headers: LINE_HEADER,
+      data: { to: to, messages: payload }
+    });
+  } catch (error) {
+    console.error("[LINE] Lỗi gửi push message:", error?.response?.data || error.message);
+  }
+};
+
+module.exports = { getImageBinary, reply, getUserProfile, push };

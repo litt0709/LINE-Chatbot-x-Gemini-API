@@ -1,9 +1,11 @@
 const { onRequest } = require("firebase-functions/v2/https");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { db, FieldValue, pruneHistory } = require("./utils/db");
 const line = require("./utils/line");
 const telegram = require("./utils/telegram");
 const messenger = require("./utils/messenger");
 const llm = require("./utils/llm");
+const { generateDailyNewsDigest } = require("./utils/news");
 
 // ─── CẤU HÌNH WHITELIST ──────────────────────────────────────────────────────
 // Đặt "*" để cho phép tất cả mọi người dùng bot.
@@ -345,6 +347,10 @@ exports.webhook = onRequest(async (req, res) => {
     if (event.type !== "message") continue;
 
     const userId = event.source.userId;
+    const type = event.source.type; // "user", "group", "room"
+    const groupId = event.source.groupId || event.source.roomId || "none";
+
+    console.log(`[LINE] User: ${userId} | Type: ${type} | GroupID: ${groupId}`);
 
     // Kiểm tra whitelist
     if (!isUserAllowed(userId, "LINE")) {
@@ -444,6 +450,7 @@ exports.webhook = onRequest(async (req, res) => {
             console.error("[LINE] Lưu bot lineMessageId lỗi:", e.message)
           );
         }
+
       }
       continue;
     }
@@ -457,4 +464,45 @@ exports.webhook = onRequest(async (req, res) => {
   }
 
   res.end();
+});
+
+// ─── SCHEDULED NOTIFICATIONS ──────────────────────────────────────────────────
+exports.dailyNewsNotification = onSchedule({
+  schedule: process.env.NOTIFICATION_CRON_SCHEDULE || "0 8,13 * * *",
+  timeZone: "Asia/Ho_Chi_Minh",
+  timeoutSeconds: 300,
+  memory: "512MiB"
+}, async (event) => {
+  const targetIdsStr = process.env.NOTIFICATION_TARGET_IDS || "";
+  const targetIds = targetIdsStr.split(",").map(id => id.trim()).filter(Boolean);
+  
+  if (targetIds.length === 0) {
+    console.log("[Schedule] Không có target ID nào được cấu hình. Bỏ qua.");
+    return;
+  }
+
+  console.log(`[Schedule] Bắt đầu tạo bản tin ngày cho ${targetIds.length} mục tiêu...`);
+  const newsDigest = await generateDailyNewsDigest();
+
+  // Kiểm tra platform
+  const isLine = !!process.env.CHANNEL_ACCESS_TOKEN;
+  const isTelegram = !!process.env.TELEGRAM_BOT_TOKEN;
+  const isMessenger = !!process.env.MESSENGER_PAGE_ACCESS_TOKEN;
+
+  for (const id of targetIds) {
+    try {
+      if (isLine) {
+        await line.push(id, [{ type: "text", text: newsDigest.replace(/\*\*/g, "") }]);
+        console.log(`[Schedule] Đã gửi bản tin cho LINE ID: ${id}`);
+      } else if (isTelegram) {
+        await telegram.push(id, newsDigest);
+        console.log(`[Schedule] Đã gửi bản tin cho Telegram ID: ${id}`);
+      } else if (isMessenger) {
+        await messenger.push(id, newsDigest);
+        console.log(`[Schedule] Đã gửi bản tin cho Messenger ID: ${id}`);
+      }
+    } catch (err) {
+      console.error(`[Schedule] Lỗi khi gửi cho ID ${id}:`, err.message);
+    }
+  }
 });

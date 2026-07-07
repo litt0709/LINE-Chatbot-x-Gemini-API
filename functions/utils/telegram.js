@@ -73,4 +73,4 @@ const leaveChat = async (chatId) => {
   }
 };
 
-module.exports = { reply, getImageBinary, leaveChat };
+module.exports = { reply, getImageBinary, leaveChat, push: reply };
