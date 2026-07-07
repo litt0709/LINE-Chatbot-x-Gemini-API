@@ -12,13 +12,14 @@ const SEARCH_KEYWORDS = [
   "đá lúc mấy giờ", "chiếu kênh nào", "bản đồ", "địa chỉ", "giá xăng", "đăng ký",
   "mua ở đâu", "tại sao", "như thế nào", "là ai", "là cái gì", "là gì",
   "đội", "trận", "thắng", "thua", "vô địch", "bàn thắng", "ghi bàn", "tỉ số",
-  "tin hot", "fact check", "kiểm chứng", "sự thật", "tin chuẩn", "tin thật"
+  "tin hot", "fact check", "kiểm chứng", "sự thật", "tin chuẩn", "tin thật",
+  "thông tin", "tổng hợp", "chi tiết", "tiểu sử", "tác giả", "scandal", "drama", "phốt", "hướng dẫn"
 ];
 
 const QUESTION_PATTERNS = [
   /ai là/i, /cái gì/i, /ở đâu/i, /khi nào/i,
   /thế nào/i, /như thế nào/i, /làm sao để/i, /hướng dẫn cách/i,
-  /thì sao/i, /còn.+không/i
+  /thì sao/i, /còn.+không/i, /cho hỏi/i, /biết gì về/i, /kể về/i
 ];
 
 /**
