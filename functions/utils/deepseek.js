@@ -1,5 +1,5 @@
 const axios = require("axios");
-const { db, FieldValue } = require("./db");
+const { db, FieldValue, pruneHistory } = require("./db");
 const { resolveWebContext } = require("./search");
 
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
@@ -29,9 +29,10 @@ Quy tắc bắt buộc:
  * @param {string} prompt - Nội dung tin nhắn của người dùng
  * @param {string} senderName - Tên hiển thị của người gửi
  * @param {string} senderId - ID thực của người gửi (để phân biệt trong group)
+ * @param {string|null} lineMessageId - ID tin nhắn LINE (để hỗ trợ tính năng reply/quote)
  * @returns {Promise<string>}
  */
-const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown") => {
+const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown", lineMessageId = null) => {
   const chatRef = db.collection("users").doc(sessionId).collection("history");
 
   // 1. Tải lịch sử hội thoại (20 tin nhắn gần nhất, đảo ngược về thứ tự thời gian)
@@ -75,10 +76,15 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
     const replyText = data.choices[0].message.content;
 
     // 5. Lưu lượt hội thoại mới vào Firestore
+    const userMsgData = { role: "user", text: prompt, senderName, senderId, createdAt: FieldValue.serverTimestamp() };
+    if (lineMessageId) userMsgData.lineMessageId = lineMessageId; // Lưu để hỗ trợ tính năng reply/quote trên LINE
     const batch = db.batch();
-    batch.set(chatRef.doc(), { role: "user", text: prompt, senderName, senderId, createdAt: FieldValue.serverTimestamp() });
+    batch.set(chatRef.doc(), userMsgData);
     batch.set(chatRef.doc(), { role: "model", text: replyText, createdAt: FieldValue.serverTimestamp() });
     await batch.commit();
+
+    // Dọn dẹp bất đồng bộ
+    pruneHistory(sessionId, 50);
 
     return replyText;
   } catch (error) {

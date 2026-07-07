@@ -15,14 +15,22 @@ const getImageBinary = async (messageId) => {
   return originalImage.data;
 }
 
-const reply = (token, payload) => {
-  return axios({
-    method: "post",
-    url: "https://api.line.me/v2/bot/message/reply",
-    headers: LINE_HEADER,
-    data: { replyToken: token, messages: payload }
-  });
+const reply = async (token, payload) => {
+  try {
+    const response = await axios({
+      method: "post",
+      url: "https://api.line.me/v2/bot/message/reply",
+      headers: LINE_HEADER,
+      data: { replyToken: token, messages: payload }
+    });
+    // Trả về mảng ID tin nhắn đã gửi để có thể lưu vào Firestore (phục vụ tính năng quote/reply)
+    return response.data?.sentMessages || [];
+  } catch (error) {
+    console.error("[LINE] Lỗi gửi reply:", error?.response?.data || error.message);
+    return [];
+  }
 };
+
 
 /**
  * Lấy thông tin cá nhân (Profile) của người dùng từ LINE API.
