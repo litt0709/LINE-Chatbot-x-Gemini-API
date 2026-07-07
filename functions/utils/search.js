@@ -79,13 +79,16 @@ const searchWeb = async (query) => {
     if (!answer && results.length === 0) return "Không tìm thấy kết quả liên quan trên internet.";
 
     let summary = "Thông tin thực tế từ Internet:\n";
+    
     if (answer) summary += `[Tóm tắt]: ${answer}\n\n`;
+    
     if (results.length > 0) {
       summary += "[Nguồn tham khảo]:\n";
       results.forEach((r, i) => {
         summary += `[${i + 1}] ${r.title}\n${r.url}\n${r.content}\n\n`;
       });
     }
+    
     return summary;
   } catch (error) {
     console.error("[Tavily] Lỗi tìm kiếm:", error?.response?.data || error.message);
