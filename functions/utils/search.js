@@ -2,100 +2,154 @@ const axios = require("axios");
 
 const TAVILY_API_KEY = process.env.TAVILY_API_KEY;
 
+// ─── Regex lọc URL ───────────────────────────────────────────────────────────
+const URL_REGEX = /(https?:\/\/[^\s]+)/gi;
+
+// ─── Từ khóa nhận diện câu hỏi cần search ───────────────────────────────────
+const SEARCH_KEYWORDS = [
+  "tìm", "tra cứu", "search", "giá", "thời tiết", "tin tức", "hôm nay", "mới nhất",
+  "tỷ giá", "kết quả", "lịch", "bao nhiêu", "ngày", "đêm", "triệu chứng", "thuốc",
+  "xổ số", "vàng", "kqxs", "cập nhật", "recent", "news", "latest", "bóng đá", "hôm qua",
+  "đá lúc mấy giờ", "chiếu kênh nào", "bản đồ", "địa chỉ", "giá xăng", "đăng ký",
+  "mua ở đâu", "tại sao", "như thế nào", "là ai", "là cái gì", "là gì"
+];
+
+const QUESTION_PATTERNS = [
+  /ai là/i, /cái gì/i, /ở đâu/i, /khi nào/i,
+  /thế nào/i, /như thế nào/i, /làm sao để/i, /hướng dẫn cách/i
+];
+
+// ─── Từ khóa nhận diện câu hỏi cần kết quả trong ngày hôm nay ───────────────
+const TODAY_KEYWORDS = [
+  "hôm nay", "mới nhất", "latest", "recent",
+  "tin tức", "thời tiết", "giá vàng", "kqxs", "tỷ giá", "cập nhật", "news"
+];
+
+/**
+ * Kiểm tra offline xem câu hỏi có cần tìm kiếm Internet không.
+ * Synchronous, phản hồi tức thì — không gọi API nào bên ngoài.
+ * @param {string} prompt
+ * @returns {boolean}
+ */
+const checkNeedsSearch = (prompt) => {
+  const query = prompt.replace(/@[^\s]+/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+  if (!query) return false;
+  if (SEARCH_KEYWORDS.some(kw => query.includes(kw))) {
+    console.log(`[Search Router] Khớp từ khóa → cần search: "${query}"`);
+    return true;
+  }
+  if (QUESTION_PATTERNS.some(p => p.test(query))) {
+    console.log(`[Search Router] Khớp regex → cần search: "${query}"`);
+    return true;
+  }
+  console.log(`[Search Router] Không cần search: "${query}"`);
+  return false;
+};
+
 /**
  * Tìm kiếm thông tin trên internet bằng Tavily API.
- * @param {string} query - Nội dung cần tìm kiếm
- * @returns {Promise<string|null>} Chuỗi thông tin tóm tắt kết quả tìm kiếm
+ * @param {string} query
+ * @returns {Promise<string|null>}
  */
 const searchWeb = async (query) => {
   if (!TAVILY_API_KEY || TAVILY_API_KEY === "YOUR_TAVILY_API_KEY_HERE") {
-    console.log("[Tavily Search] API Key chưa được cấu hình. Bỏ qua tìm kiếm.");
+    console.log("[Tavily] API Key chưa được cấu hình. Bỏ qua tìm kiếm.");
     return null;
   }
 
-  // Nhận diện câu hỏi cần thông tin thời gian thực / mới nhất / bóng đá...
-  const timeSensitiveKeywords = ["hôm nay", "hôm qua", "mới nhất", "tin tức", "bóng đá",
-    "thời tiết", "giá vàng", "kqxs", "tỷ giá", "recent", "news", "latest", "cập nhật"];
-  const isTimeSensitive = timeSensitiveKeywords.some(keyword => query.toLowerCase().includes(keyword));
+  const isTodaySensitive = TODAY_KEYWORDS.some(kw => query.toLowerCase().includes(kw));
 
-  const searchParams = {
+  const params = {
     api_key: TAVILY_API_KEY,
-    query: query,
-    search_depth: "basic",
-    include_answer: false,
-    max_results: 5
+    query,
+    search_depth: isTodaySensitive ? "advanced" : "basic",
+    include_answer: true,
+    max_results: 5,
+    ...(isTodaySensitive && { time_range: "day" })
   };
 
-  // Nếu câu hỏi mang tính thời sự, cấu hình tối ưu để tránh kết quả cũ lỗi thời
-  if (isTimeSensitive) {
-    searchParams.time_range = "day";
-    searchParams.search_depth = "advanced"; // Tăng độ sâu tìm kiếm để lấy kết quả nóng
-    searchParams.include_answer = true;     // Bật Tavily AI tự động trả lời tổng hợp
-  }
-
   try {
-    console.log(`[Tavily Search] Gửi yêu cầu với query: "${query}" | Thời sự: ${isTimeSensitive}`);
-    const response = await axios.post("https://api.tavily.com/search", searchParams);
+    console.log(`[Tavily] Query: "${query}" | Hôm nay: ${isTodaySensitive}`);
+    const { data } = await axios.post("https://api.tavily.com/search", params);
 
-    const answer = response.data.answer;
-    const results = response.data.results || [];
-    if (results.length === 0 && !answer) return "Không tìm thấy kết quả liên quan trên internet.";
+    const { answer, results = [] } = data;
+    if (!answer && results.length === 0) return "Không tìm thấy kết quả liên quan trên internet.";
 
-    let summary = "Thông tin thực tế tìm kiếm được từ Internet:\n";
-    if (answer) {
-      summary += `[Câu trả lời tóm tắt từ hệ thống]: ${answer}\n\n`;
-    }
-
+    let summary = "Thông tin thực tế từ Internet:\n";
+    if (answer) summary += `[Tóm tắt]: ${answer}\n\n`;
     if (results.length > 0) {
-      summary += "[Các bài viết nguồn tham khảo]:\n";
-      results.forEach((res, index) => {
-        summary += `[Nguồn ${index + 1}] Tiêu đề: ${res.title}\nLiên kết: ${res.url}\nNội dung: ${res.content}\n\n`;
+      summary += "[Nguồn tham khảo]:\n";
+      results.forEach((r, i) => {
+        summary += `[${i + 1}] ${r.title}\n${r.url}\n${r.content}\n\n`;
       });
     }
-
     return summary;
   } catch (error) {
-    console.error("[Tavily Search] Lỗi tìm kiếm:", error?.response?.data || error.message);
+    console.error("[Tavily] Lỗi tìm kiếm:", error?.response?.data || error.message);
     return null;
   }
 };
 
 /**
- * Tải và trích xuất nội dung văn bản từ một đường dẫn URL.
- * @param {string} url - Đường dẫn trang web cần đọc
- * @returns {Promise<string|null>} Nội dung văn bản thô trích xuất từ trang web
+ * Tải và trích xuất nội dung văn bản thuần từ một URL.
+ * @param {string} url
+ * @returns {Promise<string|null>}
  */
 const scrapeUrl = async (url) => {
   try {
-    const response = await axios.get(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-      },
+    const { data: html } = await axios.get(url, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1)" },
       timeout: 8000
     });
-    let html = response.data;
     if (typeof html !== "string") return null;
 
-    // Loại bỏ các thẻ script và style
-    html = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "");
-    html = html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "");
+    const bodyMatch = html
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+      .match(/<body[^>]*>([\s\S]*?)<\/body>/i);
 
-    // Lấy nội dung phần body
-    const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-    let content = bodyMatch ? bodyMatch[1] : html;
+    const text = (bodyMatch ? bodyMatch[1] : html)
+      .replace(/<[^>]*>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 4000);
 
-    // Loại bỏ tất cả thẻ HTML
-    content = content.replace(/<[^>]*>/g, " ");
-
-    // Loại bỏ khoảng trắng và xuống dòng thừa
-    content = content.replace(/\s+/g, " ").trim();
-
-    // Giới hạn độ dài nội dung gửi lên AI (khoảng 4000 ký tự đầu tiên để tránh tràn token)
-    return content.slice(0, 4000);
+    return text || null;
   } catch (error) {
     console.error("[Scraper] Lỗi đọc URL:", url, error.message);
     return null;
   }
 };
 
-module.exports = { searchWeb, scrapeUrl };
+/**
+ * Xây dựng ngữ cảnh web cho câu hỏi của người dùng.
+ * Ưu tiên scrape URL nếu có, ngược lại dùng Tavily search nếu cần.
+ * @param {string} prompt - Câu chat gốc của người dùng (có thể chứa URL, @mention)
+ * @returns {Promise<string>} Chuỗi ngữ cảnh web (rỗng nếu không cần search)
+ */
+const resolveWebContext = async (prompt) => {
+  const urls = prompt.match(URL_REGEX);
+
+  if (urls && urls.length > 0) {
+    const targetUrl = urls[0];
+    console.log(`[Scraper] Đọc nội dung từ: ${targetUrl}`);
+    const text = await scrapeUrl(targetUrl);
+    if (text) {
+      return `\n\n[NỘI DUNG TRANG WEB (${targetUrl})]:\n${text}\n(Hãy ưu tiên nội dung trên để tóm tắt/trả lời theo yêu cầu người dùng.)`;
+    }
+    return "";
+  }
+
+  if (checkNeedsSearch(prompt)) {
+    const cleanQuery = prompt.replace(/@[^\s]+/g, "").replace(/\s+/g, " ").trim();
+    console.log(`[Tavily] Tìm kiếm: "${cleanQuery}"`);
+    const result = await searchWeb(cleanQuery);
+    if (result) {
+      return `\n\n[THÔNG TIN TỪ INTERNET]\n${result}\n(Dùng thông tin trên để trả lời chính xác câu hỏi của người dùng.)`;
+    }
+  }
+
+  return "";
+};
+
+module.exports = { checkNeedsSearch, searchWeb, scrapeUrl, resolveWebContext };

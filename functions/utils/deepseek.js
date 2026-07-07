@@ -1,172 +1,91 @@
 const axios = require("axios");
-const admin = require("firebase-admin");
-const { FieldValue } = require("firebase-admin/firestore");
-const { searchWeb, scrapeUrl } = require("./search");
+const { db, FieldValue } = require("./db");
+const { resolveWebContext } = require("./search");
 
-if (admin.apps.length === 0) {
-  admin.initializeApp();
-}
-const db = admin.firestore();
-
-const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
-const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
+const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 
-const textOnly = async (prompt) => {
-  const systemInstruction = "Bạn là một trợ lý ảo cực kỳ thân thiện, vui vẻ, xưng hô thân mật là 'mình' và gọi người dùng là 'bạn'. Hãy trả lời tự nhiên, gần gũi như một người bạn thực sự và ưu tiên sử dụng tiếng Việt";
-  try {
-    const response = await axios.post(
-      DEEPSEEK_URL,
-      {
-        model: DEEPSEEK_MODEL,
-        messages: [
-          { role: "system", content: systemInstruction },
-          { role: "user", content: prompt }
-        ]
-      },
-      {
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${DEEPSEEK_API_KEY}`
-        }
-      }
-    );
-    return response.data.choices[0].message.content;
-  } catch (error) {
-    console.error("DeepSeek API Error (textOnly):", error?.response?.data || error.message);
-    throw error;
-  }
+// System prompt chung — định nghĩa tính cách, xưng hô, phong cách của Annie
+const buildSystemPrompt = () => {
+  const now = new Date().toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
+  return `Bạn là Annie — một cô gái trợ lý ảo thân thiện, hay ngại ngùng.
+Thời gian hiện tại ở Việt Nam: ${now}.
+Xưng hô: xưng 'em', gọi người dùng là 'anh' (hoặc 'chị' nếu là nữ).
+Phong cách trả lời:
+- Tự nhiên, có cảm xúc, như đang chat với người thật.
+- Dùng emoji vừa phải cho sinh động.
+- Ngắt dòng rõ ràng, dễ đọc.
+- KHÔNG dùng Markdown in đậm (**chữ**) — ứng dụng chat không hiển thị được.
+Quy tắc bắt buộc:
+- Luôn trả lời bằng tiếng Việt, dễ hiểu.
+- Không bịa đặt thông tin khi không có dữ liệu.
+- Không thay đổi vai trò trong suốt cuộc hội thoại.`;
 };
 
+/**
+ * Chat có lịch sử — dùng cho hội thoại chính với người dùng.
+ * @param {string} sessionId - ID phiên hội thoại (userId hoặc groupId)
+ * @param {string} prompt - Nội dung tin nhắn của người dùng
+ * @param {string} senderName - Tên hiển thị của người gửi
+ * @param {string} senderId - ID thực của người gửi (để phân biệt trong group)
+ * @returns {Promise<string>}
+ */
 const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown") => {
   const chatRef = db.collection("users").doc(sessionId).collection("history");
 
-  // 1. Lấy 10 tin nhắn gần nhất từ Firestore
+  // 1. Tải lịch sử hội thoại (20 tin nhắn gần nhất, đảo ngược về thứ tự thời gian)
   const snapshot = await chatRef.orderBy("createdAt", "desc").limit(20).get();
-
   const history = [];
   snapshot.forEach(doc => {
-    const data = doc.data();
-    // Chuyển role 'model' của Gemini thành 'assistant' để khớp với API của DeepSeek
-    const role = data.role === "model" ? "assistant" : data.role;
-    
-    // Tạo nhãn người gửi kết hợp tên hiển thị và 5 số cuối của User ID để phân biệt trùng tên
-    const senderIdShort = (data.senderId || "unknown").slice(-5);
-    const content = role === "user" 
-      ? `${data.senderName || "User"} (${senderIdShort}): ${data.text}`
-      : data.text;
-
-    history.push({
-      role: role,
-      content: content
-    });
+    const { role, text, senderName: name, senderId: sid } = doc.data();
+    const apiRole = role === "model" ? "assistant" : role;
+    const idShort = (sid || "unknown").slice(-5);
+    const content = apiRole === "user" ? `${name || "User"} (${idShort}): ${text}` : text;
+    history.push({ role: apiRole, content });
   });
-
-  // Đảo ngược để xếp theo thứ tự thời gian tăng dần
   history.reverse();
 
-  // 2. Kiểm tra xem người dùng có gửi đường dẫn URL (link bài báo/trang web) không
-  const urlRegex = /(https?:\/\/[^\s]+)/gi;
-  const urls = prompt.match(urlRegex);
+  // 2. Lấy ngữ cảnh web (scrape URL hoặc Tavily search nếu cần)
   let webContext = "";
-
-  if (urls && urls.length > 0) {
-    const targetUrl = urls[0];
-    console.log(`[Scraper] Đang đọc nội dung từ đường dẫn: ${targetUrl}`);
-    const scrapedText = await scrapeUrl(targetUrl);
-    if (scrapedText) {
-      webContext = `\n\n[NỘI DUNG TỪ ĐƯỜNG DẪN NGƯỜI DÙNG GỬI (${targetUrl})]:\n${scrapedText}\n(Hãy ưu tiên sử dụng nội dung thô từ trang web ở trên để tóm tắt, trả lời hoặc thảo luận theo yêu cầu của người dùng).`;
-    }
-  } else {
-    // Nếu không gửi URL trực tiếp, kiểm tra nhu cầu tìm kiếm trên Internet bằng Tavily
-    const searchKeywords = ["tìm", "tra cứu", "search", "giá", "thời tiết", "tin tức", "hôm nay", "mới nhất", "tỷ giá", "kết quả",
-      "ai là", "thế nào", "lịch", "bao nhiêu", "là gì", "ở đâu", "ngày", "đêm",
-      "tại sao", "dự đoán", "triệu chứng", "thuốc", "xổ số", "vàng", "kqxs", "cập nhật", "recent", "news"];
-    const needsSearch = searchKeywords.some(keyword => prompt.toLowerCase().includes(keyword));
-
-    if (needsSearch) {
-      // Làm sạch câu lệnh: Xóa các tag bot (@name) để tránh làm nhiễu kết quả tìm kiếm
-      const cleanQuery = prompt.replace(/@[^\s]+/g, "").replace(/\s+/g, " ").trim();
-      console.log(`[Tavily Search] Đang tìm kiếm thông cho: "${cleanQuery}"`);
-      const searchResult = await searchWeb(cleanQuery);
-      if (searchResult) {
-        webContext = `\n\n[THÔNG TIN THỜI GIAN THỰC TỪ INTERNET]\n${searchResult}\n(Hãy sử dụng nguồn thông tin trên mạng này để trả lời chính xác câu hỏi của người dùng nếu liên quan).`;
-      }
-    }
+  try {
+    webContext = await resolveWebContext(prompt);
+    console.log(`[DeepSeek] webContext có nội dung: ${webContext.length > 0}`);
+  } catch (err) {
+    console.error("[DeepSeek] resolveWebContext lỗi:", err.message);
   }
 
-  // 3. Tạo chỉ dẫn hệ thống cùng ngày giờ hiện tại
-  const currentDateStr = new Date().toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
-  const systemInstruction = `Bạn là một cô gái trợ lý ảo thân thiện hay ngại ngùng.
-  Thời gian hiện tại ở Việt Nam là: ${currentDateStr}.
-  Tên bạn là Annie, xưng hô là 'em', gọi người dùng là 'anh', trường hợp nữ thì gọi là 'chị'.
-  Phong cách:
-    1. Hãy trả lời tự nhiên, có tính chính xác cao, biết lắng nghe và đưa ra câu trả lời có cảm xúc giống con người
-    2. Câu trả lời có emoji cho sinh động
-    3. Bố cục câu cú rõ ràng, có thể ngắt dòng cho dễ đọc, tạo cảm giác như là con người đang chat
-    4. KHÔNG sử dụng định dạng in đậm bằng ký tự Markdown (như **chữ**), hãy dùng chữ viết thường tự nhiên vì ứng dụng chat không hỗ trợ hiển thị ký tự này.
-  Bắt buộc 100%:
-    1. Luôn trả lời tiếng việt, dễ hiểu.
-    2. Không đưa thông tin sai sự thật nếu không có data
-    3. Trong một hội thoại KHÔNG được thay đổi vai trò của mình (ví dụ đang là 'em' thì suốt cuộc trò chuyện phải là 'em').`;
-
+  // 3. Build message list
   const senderIdShort = senderId.slice(-5);
-  
-  // Ghép kết quả tìm kiếm/đọc web trực tiếp vào tin nhắn hiện tại của người dùng thay vì nhét vào systemInstruction
-  const userContent = webContext
-    ? `${senderName} (${senderIdShort}): ${prompt}\n\n${webContext}`
-    : `${senderName} (${senderIdShort}): ${prompt}`;
+  const userContent = `${senderName} (${senderIdShort}): ${prompt}${webContext}`;
 
   const messages = [
-    { role: "system", content: systemInstruction },
+    { role: "system", content: buildSystemPrompt() },
     ...history,
     { role: "user", content: userContent }
   ];
 
+  // 4. Gọi DeepSeek API
   try {
-    // 3. Gọi DeepSeek API qua axios
-    const response = await axios.post(
+    const { data } = await axios.post(
       DEEPSEEK_URL,
-      {
-        model: DEEPSEEK_MODEL,
-        messages: messages
-      },
-      {
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${DEEPSEEK_API_KEY}`
-        }
-      }
+      { model: DEEPSEEK_MODEL, messages },
+      { headers: { "Content-Type": "application/json", Authorization: `Bearer ${DEEPSEEK_API_KEY}` } }
     );
+    const replyText = data.choices[0].message.content;
 
-    const replyText = response.data.choices[0].message.content;
-
-    // 4. Lưu hội thoại mới vào Firestore sử dụng batch write
+    // 5. Lưu lượt hội thoại mới vào Firestore
     const batch = db.batch();
-
-    const userMsgRef = chatRef.doc();
-    batch.set(userMsgRef, {
-      role: "user",
-      text: prompt,
-      senderName: senderName,
-      senderId: senderId,
-      createdAt: FieldValue.serverTimestamp()
-    });
-
-    const modelMsgRef = chatRef.doc();
-    batch.set(modelMsgRef, {
-      role: "model",
-      text: replyText,
-      createdAt: FieldValue.serverTimestamp()
-    });
-
+    batch.set(chatRef.doc(), { role: "user", text: prompt, senderName, senderId, createdAt: FieldValue.serverTimestamp() });
+    batch.set(chatRef.doc(), { role: "model", text: replyText, createdAt: FieldValue.serverTimestamp() });
     await batch.commit();
 
     return replyText;
   } catch (error) {
-    console.error("DeepSeek API Error (chat):", error?.response?.data || error.message);
+    console.error("[DeepSeek] API Error:", error?.response?.data || error.message);
     throw error;
   }
 };
 
-module.exports = { textOnly, chat };
+module.exports = { chat };
+

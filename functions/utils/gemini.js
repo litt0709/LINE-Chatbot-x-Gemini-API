@@ -1,162 +1,102 @@
 const { GoogleGenAI } = require("@google/genai");
-const ai = new GoogleGenAI({ apiKey: `${process.env.API_KEY}` });
+const { db, FieldValue } = require("./db");
+const { resolveWebContext } = require("./search");
 
-const admin = require("firebase-admin");
-const { FieldValue } = require("firebase-admin/firestore");
-const { scrapeUrl } = require("./search");
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const GEMINI_MODEL = "gemini-2.5-flash";
 
-if (admin.apps.length === 0) {
-  admin.initializeApp();
-}
-const db = admin.firestore();
-
-const textOnly = async (prompt) => {
-  // For text-only input
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
-    contents: prompt,
-    config: {
-      systemInstruction: "Bạn là một trợ lý ảo cực kỳ thân thiện, vui vẻ, xưng hô thân mật là 'mình' và gọi người dùng là 'bạn'. Hãy trả lời tự nhiên, gần gũi như một người bạn thực sự và ưu tiên sử dụng tiếng Việt",
-    }
-  });
-  return response.text;
+// System prompt chung — định nghĩa tính cách, xưng hô, phong cách của Annie
+const buildSystemPrompt = () => {
+  const now = new Date().toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
+  return `Bạn là Annie — một cô gái trợ lý ảo thân thiện, hay ngại ngùng.
+Thời gian hiện tại ở Việt Nam: ${now}.
+Xưng hô: xưng 'em', gọi người dùng là 'anh' (hoặc 'chị' nếu là nữ).
+Phong cách trả lời:
+- Tự nhiên, có cảm xúc, như đang chat với người thật.
+- Dùng emoji vừa phải cho sinh động.
+- Ngắt dòng rõ ràng, dễ đọc.
+- KHÔNG dùng Markdown in đậm (**chữ**) — ứng dụng chat không hiển thị được.
+Quy tắc bắt buộc:
+- Luôn trả lời bằng tiếng Việt, dễ hiểu.
+- Không bịa đặt thông tin khi không có dữ liệu.
+- Không thay đổi vai trò trong suốt cuộc hội thoại.`;
 };
 
+/**
+ * Phân tích và mô tả một bức ảnh (multimodal).
+ * @param {Buffer} imageBinary - Dữ liệu ảnh nhị phân
+ * @returns {Promise<string>}
+ */
 const multimodal = async (imageBinary) => {
-  // For text-and-image input (multimodal)
-  const contents = [
-    {
-      inlineData: {
-        data: Buffer.from(imageBinary, "binary").toString("base64"),
-        mimeType: "image/png"
-      }
-    },
-    { text: "Hãy mô tả chi tiết bức ảnh này giúp tôi." }
-  ];
-
-  const safetySettings = [
-    {
-      category: "HARM_CATEGORY_HARASSMENT",
-      threshold: "BLOCK_ONLY_HIGH"
-    },
-    {
-      category: "HARM_CATEGORY_HATE_SPEECH",
-      threshold: "BLOCK_ONLY_HIGH"
-    },
-    {
-      category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-      threshold: "BLOCK_ONLY_HIGH"
-    },
-    {
-      category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-      threshold: "BLOCK_ONLY_HIGH"
-    }
-  ];
-
   const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
-    contents: contents,
+    model: GEMINI_MODEL,
+    contents: [
+      {
+        inlineData: {
+          data: Buffer.from(imageBinary, "binary").toString("base64"),
+          mimeType: "image/png"
+        }
+      },
+      { text: "Hãy mô tả chi tiết bức ảnh này giúp tôi." }
+    ],
     config: {
-      safetySettings: safetySettings,
-      systemInstruction: "Bạn là một chuyên gia phân tích ảnh vui vẻ. Hãy bình luận và mô tả bức ảnh này bằng tiếng Việt một cách tự nhiên, sinh động nhất."
+      systemInstruction: "Bạn là một chuyên gia phân tích ảnh. Hãy bình luận và mô tả bức ảnh bằng tiếng Việt một cách tự nhiên, sinh động.",
+      safetySettings: [
+        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
+        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
+        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" },
+        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" }
+      ]
     }
   });
-
   return response.text;
 };
 
+/**
+ * Chat có lịch sử — dùng cho hội thoại chính với người dùng.
+ * @param {string} sessionId - ID phiên hội thoại (userId hoặc groupId)
+ * @param {string} prompt - Nội dung tin nhắn của người dùng
+ * @param {string} senderName - Tên hiển thị của người gửi
+ * @param {string} senderId - ID thực của người gửi (để phân biệt trong group)
+ * @returns {Promise<string>}
+ */
 const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown") => {
   const chatRef = db.collection("users").doc(sessionId).collection("history");
 
-  // Lấy 10 tin nhắn gần nhất từ Firestore
+  // 1. Tải lịch sử hội thoại (10 tin nhắn gần nhất, đảo ngược về thứ tự thời gian)
   const snapshot = await chatRef.orderBy("createdAt", "desc").limit(10).get();
-
   const history = [];
   snapshot.forEach(doc => {
-    const data = doc.data();
-    // Tạo nhãn người gửi kết hợp tên hiển thị và 5 số cuối của User ID để phân biệt trùng tên
-    const senderIdShort = (data.senderId || "unknown").slice(-5);
-    const content = data.role === "user"
-      ? `${data.senderName || "User"} (${senderIdShort}): ${data.text}`
-      : data.text;
-    history.push({
-      role: data.role,
-      parts: [{ text: content }]
-    });
+    const { role, text, senderName: name, senderId: sid } = doc.data();
+    const idShort = (sid || "unknown").slice(-5);
+    const content = role === "user" ? `${name || "User"} (${idShort}): ${text}` : text;
+    history.push({ role, parts: [{ text: content }] });
   });
-
-  // Đảo ngược để xếp theo thứ tự thời gian tăng dần
   history.reverse();
 
-  // Kiểm tra xem người dùng có gửi đường dẫn URL (link bài báo/trang web) không
-  const urlRegex = /(https?:\/\/[^\s]+)/gi;
-  const urls = prompt.match(urlRegex);
-  let webContext = "";
+  // 2. Lấy ngữ cảnh web (scrape URL hoặc Tavily search nếu cần)
+  const webContext = await resolveWebContext(prompt);
 
-  if (urls && urls.length > 0) {
-    const targetUrl = urls[0];
-    console.log(`[Scraper] Đang đọc nội dung từ đường dẫn: ${targetUrl}`);
-    const scrapedText = await scrapeUrl(targetUrl);
-    if (scrapedText) {
-      webContext = `\n\n[NỘI DUNG TỪ ĐƯỜNG DẪN NGƯỜI DÙNG GỬI (${targetUrl})]:\n${scrapedText}\n(Hãy ưu tiên sử dụng nội dung thô từ trang web ở trên để tóm tắt, trả lời hoặc thảo luận theo yêu cầu của người dùng).`;
-    }
-  }
-
-  const currentDateStr = new Date().toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
-
+  // 3. Tạo phiên chat với Gemini
   const chatSession = ai.chats.create({
-    model: "gemini-2.5-flash",
-    config: {
-      systemInstruction: `Bạn là một cô gái trợ lý ảo thân thiện hay ngại ngùng.
-      Thời gian hiện tại ở Việt Nam là: ${currentDateStr}.
-      Tên bạn là Annie, xưng hô là 'em', gọi người dùng là 'anh', trường hợp nữ thì gọi là 'chị'.
-      Phong cách:
-        1. Hãy trả lời tự nhiên, có tính chính xác cao, biết lắng nghe và đưa ra câu trả lời có cảm xúc giống con người.
-        2. Khi trả lời có emoji cho sinh động, không dùng emoji quá lạm dụng.
-        3. Bố cục câu cú rõ ràng, có thể ngắt dòng cho dễ đọc, tạo cảm giác như là con người đang chat.
-        4. KHÔNG sử dụng định dạng in đậm bằng ký tự Markdown (như **chữ**), hãy dùng chữ viết thường tự nhiên vì ứng dụng chat không hỗ trợ hiển thị ký tự này.
-      Bắt buộc 100%:
-        1. Luôn trả lời tiếng việt, dễ hiểu.
-        2. Chỉ trả lời khi được tag hoặc được hỏi.
-        3. Trong một hội thoại KHÔNG được thay đổi vai trò của mình (ví dụ đang là 'em' thì suốt cuộc trò chuyện phải là 'em').`
-    },
-    history: history
+    model: GEMINI_MODEL,
+    config: { systemInstruction: buildSystemPrompt() },
+    history
   });
 
+  // 4. Gửi tin nhắn (kèm web context nếu có) và nhận câu trả lời
   const senderIdShort = senderId.slice(-5);
-  
-  // Ghép kết quả tìm kiếm/đọc web trực tiếp vào tin nhắn hiện tại của người dùng thay vì nhét vào systemInstruction
-  const userContent = webContext
-    ? `${senderName} (${senderIdShort}): ${prompt}\n\n${webContext}`
-    : `${senderName} (${senderIdShort}): ${prompt}`;
-
-  const response = await chatSession.sendMessage({
-    message: userContent,
-  });
+  const userContent = `${senderName} (${senderIdShort}): ${prompt}${webContext}`;
+  const response = await chatSession.sendMessage({ message: userContent });
   const replyText = response.text;
 
-  // Lưu hội thoại mới vào Firestore sử dụng batch write
+  // 5. Lưu lượt hội thoại mới vào Firestore
   const batch = db.batch();
-
-  const userMsgRef = chatRef.doc();
-  batch.set(userMsgRef, {
-    role: "user",
-    text: prompt,
-    senderName: senderName,
-    senderId: senderId,
-    createdAt: FieldValue.serverTimestamp()
-  });
-
-  const modelMsgRef = chatRef.doc();
-  batch.set(modelMsgRef, {
-    role: "model",
-    text: replyText,
-    createdAt: FieldValue.serverTimestamp()
-  });
-
+  batch.set(chatRef.doc(), { role: "user", text: prompt, senderName, senderId, createdAt: FieldValue.serverTimestamp() });
+  batch.set(chatRef.doc(), { role: "model", text: replyText, createdAt: FieldValue.serverTimestamp() });
   await batch.commit();
 
   return replyText;
 };
 
-module.exports = { textOnly, multimodal, chat };
+module.exports = { multimodal, chat };
