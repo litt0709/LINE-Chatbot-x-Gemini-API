@@ -15,7 +15,8 @@ const ALLOWED_LINE_USERS = [
 const ALLOWED_TELEGRAM_USERS = [
   "2140581850",
   "730806080",
-  "1098066961"
+  "1098066961",
+  "847240155"
 ];
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
@@ -63,7 +64,7 @@ const removeAccents = (str) => {
  */
 const convertTelegramMentions = (text, participants) => {
   if (!Object.keys(participants).length) return text;
-  
+
   let result = text;
   // Sắp xếp tên giảm dần theo độ dài để match chính xác tên dài trước
   const sortedNames = Object.keys(participants).sort((a, b) => b.length - a.length);
@@ -71,11 +72,11 @@ const convertTelegramMentions = (text, participants) => {
   for (const name of sortedNames) {
     const id = participants[name];
     const normName = removeAccents(name).toLowerCase();
-    
+
     // Tạo regex khớp cả tên có dấu lẫn không dấu (ví dụ @Mạc Văn hoặc @mac van)
     const escapedNorm = normName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const escapedOrig = removeAccents(name).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    
+
     // Tìm và thay thế tất cả @name tương ứng
     const pattern = new RegExp(`@(${escapedNorm}|${escapedOrig}|${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi");
     result = result.replace(pattern, (match, matchedName) => {
@@ -96,7 +97,7 @@ const convertTelegramMentions = (text, participants) => {
  */
 const buildLineMessage = (text, participants, isGroup = true) => {
   let cleanedText = text.replace(/\*\*/g, ""); // Strip markdown bold
-  
+
   // LINE API không hỗ trợ mentions trong chat 1-1, trả về text thường
   if (!isGroup) {
     return {
@@ -115,26 +116,26 @@ const buildLineMessage = (text, participants, isGroup = true) => {
   for (const name of sortedNames) {
     const userId = participants[name];
     const normName = removeAccents(name).toLowerCase();
-    
+
     // Tạo regex khớp cả tên có dấu lẫn không dấu
     const escapedName = normName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const pattern = new RegExp(`@${escapedName}`, "gi");
-    
+
     // Tìm kiếm vị trí khớp trên văn bản đã chuẩn hóa và thay thế
     while (true) {
       const normText = removeAccents(replacedText).toLowerCase();
       // Để tránh lặp vô tận, chúng ta kiểm tra xem pattern còn khớp không
       const match = pattern.exec(normText);
       if (!match) break;
-      
+
       const placeholderKey = `user_${placeholderCount++}`;
-      
+
       // Thực hiện thay thế đoạn match trong chuỗi gốc bằng {placeholderKey}
-      replacedText = 
-        replacedText.substring(0, match.index) + 
-        `{${placeholderKey}}` + 
+      replacedText =
+        replacedText.substring(0, match.index) +
+        `{${placeholderKey}}` +
         replacedText.substring(match.index + match[0].length);
-        
+
       // Đưa thông tin tag vào substitution theo đặc tả textV2
       substitution[placeholderKey] = {
         type: "mention",
@@ -232,8 +233,7 @@ exports.webhook = onRequest(async (req, res) => {
         const repliedFrom = replied.from?.first_name || replied.from?.username || "ai đó";
         const repliedText = replied.text || replied.caption || "";
         if (repliedText) {
-          const truncatedText = repliedText.length > 60 ? repliedText.slice(0, 60) + "..." : repliedText;
-          quoteContext = `[Đang trả lời tin nhắn của ${repliedFrom}: "${truncatedText}"]\n`;
+          quoteContext = `[Đang trả lời tin nhắn của ${repliedFrom}: "${repliedText}"]\n`;
         }
       }
 
@@ -322,8 +322,8 @@ exports.webhook = onRequest(async (req, res) => {
           if (!quotedSnap.empty) {
             const q = quotedSnap.docs[0].data();
             const quotedFrom = q.senderName || (q.role === "model" ? "Annie" : "ai đó");
-            const truncatedText = q.text.length > 60 ? q.text.slice(0, 60) + "..." : q.text;
-            quoteContext = `[Đang trả lời tin nhắn của ${quotedFrom}: "${truncatedText}"]\n`;
+            const fullText = q.text;
+            quoteContext = `[Đang trả lời tin nhắn của ${quotedFrom}: "${fullText}"]\n`;
           }
         } catch (err) {
           console.error("[LINE] Lỗi tra cứu quoted message:", err.message);
@@ -350,12 +350,12 @@ exports.webhook = onRequest(async (req, res) => {
       console.log(`[LINE] Participants map cho Session:`, JSON.stringify(participants));
 
       const rawMsg = await llm.chat(sessionId, cleanPrompt, senderName, userId, event.message.id, quoteContext);
-      
+
       // Xây dựng LINE message có proper mention tags
       const isGroup = event.source.type !== "user";
       const lineMsg = buildLineMessage(rawMsg, participants, isGroup);
       console.log(`[LINE] Payload gửi đi:`, JSON.stringify(lineMsg));
-      
+
       const sentMessages = await line.reply(event.replyToken, [lineMsg]);
 
       // Lưu LINE message ID của tin nhắn bot vào Firestore để hỗ trợ reply/quote sau này

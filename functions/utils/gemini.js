@@ -14,11 +14,12 @@ Xưng hô: xưng 'em', gọi người dùng là 'anh' (hoặc 'chị' nếu là 
 Phong cách trả lời:
 - Tự nhiên, có cảm xúc, như đang chat với người thật.
 - Dùng emoji cho sinh động.
-- Ngắt dòng rõ ràng, dễ đọc, nội dung không nên lan man
+- Ngắt dòng rõ ràng, dễ đọc, nội dung không nên lan man.
 - KHÔNG dùng Markdown in đậm (**chữ**) — ứng dụng chat không hiển thị được.
 Quy tắc bắt buộc:
+- TẬP TRUNG vào câu hỏi MỚI NHẤT của người dùng. KHÔNG lặp lại những thông tin đã trả lời ở các câu trước trừ khi được hỏi lại.
+- BẮT BUỘC: Đối với các tin tức thời sự, thể thao, bóng đá, kết quả trận đấu, bạn CHỈ ĐƯỢC PHÉP dùng dữ liệu từ [THÔNG TIN TỪ INTERNET]. Nếu trong Internet context KHÔNG CÓ thông tin, bạn PHẢI NÓI RÕ LÀ CHƯA CẬP NHẬT ĐƯỢC. TUYỆT ĐỐI KHÔNG tự bịa đặt hoặc suy đoán kết quả!
 - Luôn trả lời bằng tiếng Việt, dễ hiểu.
-- Không bịa đặt thông tin khi không có dữ liệu.
 - Không thay đổi vai trò trong suốt cuộc hội thoại.
 - Chỉ sử dụng tag @tên_của_họ một lần duy nhất ở đầu câu khi thực sự cần gọi họ hoặc gây sự chú ý (hạn chế tag liên tục hoặc tag nhiều lần không cần thiết, nếu chỉ nhắc đến trong câu hãy gọi bằng tên thường không có ký tự @).${webContext}`;
 };
@@ -63,10 +64,8 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   // 1. Tải lịch sử hội thoại (10 tin nhắn gần nhất, đảo ngược về thứ tự thời gian)
   const snapshot = await chatRef.orderBy("createdAt", "desc").limit(10).get();
   const history = [];
-  let lastUserText = "";
   snapshot.forEach(doc => {
     const { role, text, senderName: name, senderId: sid } = doc.data();
-    if (role === "user" && !lastUserText) lastUserText = text;
     const idShort = (sid || "unknown").slice(-5);
     const content = role === "user" ? `${name || "User"} (${idShort}): ${text}` : text;
     history.push({ role, parts: [{ text: content }] });
@@ -74,8 +73,7 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   history.reverse();
 
   // 2. Lấy ngữ cảnh web (scrape URL hoặc Tavily search nếu cần)
-  // Nếu có quoteContext thì ưu tiên quoteContext, ngược lại ghép thêm tin nhắn user trước đó để giữ mạch hội thoại cho công cụ tìm kiếm
-  const searchPrompt = quoteContext ? `${quoteContext}${prompt}` : (lastUserText ? `${lastUserText} ${prompt}` : prompt);
+  const searchPrompt = quoteContext ? `${quoteContext}${prompt}` : prompt;
   const webContext = await resolveWebContext(searchPrompt);
 
   // 3. Tạo phiên chat với Gemini

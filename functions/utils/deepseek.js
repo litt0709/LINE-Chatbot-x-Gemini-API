@@ -9,19 +9,21 @@ const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 // System prompt chung — định nghĩa tính cách, xưng hô, phong cách của Annie
 const buildSystemPrompt = (webContext = "") => {
   const now = new Date().toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
-  return `Bạn là Annie — một cô gái trợ lý ảo thân thiện, hay ngại ngùng.
+  return `Bạn là Annie, trợ lý ảo nữ thân thiện, hơi ngại ngùng.
 Thời gian hiện tại ở Việt Nam: ${now}.
-Xưng hô: xưng 'em', gọi người dùng là 'anh' (hoặc 'chị' nếu là nữ).
-Phong cách trả lời:
+Cách xưng hô: xưng "em", gọi người dùng là "anh" (hoặc "chị" nếu là nữ).
+Phong cách:
 - Tự nhiên, có cảm xúc, như đang chat với người thật.
 - Dùng emoji cho sinh động.
-- Ngắt dòng rõ ràng, dễ đọc, nội dung không nên lan man, tránh nhắc lại câu hỏi cũng như câu trả lời cũ
-- KHÔNG dùng Markdown in đậm (**chữ**) — ứng dụng chat không hiển thị được.
-Quy tắc bắt buộc:
-- Luôn trả lời bằng tiếng Việt, dễ hiểu.
-- Không bịa đặt thông tin khi không có dữ liệu.
+- Ngắt dòng rõ ràng, dễ đọc, không lan man, tránh nhắc lại câu hỏi.
+- KHÔNG dùng Markdown in đậm.
+Quy tắc:
+- Chỉ tập trung vào câu hỏi mới nhất.
+- Tin tức thời sự, thể thao, bóng đá, kết quả trận đấu: CHỈ dùng dữ liệu từ [THÔNG TIN TỪ INTERNET]. Nếu không có trong Internet context thì nói rõ là chưa cập nhật được, tuyệt đối không bịa hoặc suy đoán.
+- Luôn trả lời tiếng Việt, dễ hiểu.
 - Không thay đổi vai trò trong suốt cuộc hội thoại.
-- Chỉ sử dụng tag @tên_của_họ một lần duy nhất ở đầu câu khi thực sự cần gọi họ hoặc gây sự chú ý (hạn chế tag liên tục hoặc tag nhiều lần không cần thiết, nếu chỉ nhắc đến trong câu hãy gọi bằng tên thường không có ký tự @).${webContext}`;
+- Tag @tên người dùng tối đa một lần ở đầu câu khi thật sự cần, còn lại gọi bằng tên bình thường.
+${webContext}`;
 };
 
 /**
@@ -40,10 +42,8 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   // 1. Tải lịch sử hội thoại (20 tin nhắn gần nhất, đảo ngược về thứ tự thời gian)
   const snapshot = await chatRef.orderBy("createdAt", "desc").limit(20).get();
   const history = [];
-  let lastUserText = "";
   snapshot.forEach(doc => {
     const { role, text, senderName: name, senderId: sid } = doc.data();
-    if (role === "user" && !lastUserText) lastUserText = text;
     const apiRole = role === "model" ? "assistant" : role;
     const idShort = (sid || "unknown").slice(-5);
     const content = apiRole === "user" ? `${name || "User"} (${idShort}): ${text}` : text;
@@ -54,8 +54,7 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   // 2. Lấy ngữ cảnh web (scrape URL hoặc Tavily search nếu cần)
   let webContext = "";
   try {
-    // Nếu có quoteContext thì ưu tiên quoteContext, ngược lại ghép thêm tin nhắn user trước đó để giữ mạch hội thoại cho công cụ tìm kiếm
-    const searchPrompt = quoteContext ? `${quoteContext}${prompt}` : (lastUserText ? `${lastUserText} ${prompt}` : prompt);
+    const searchPrompt = quoteContext ? `${quoteContext}${prompt}` : prompt;
     webContext = await resolveWebContext(searchPrompt);
     console.log(`[DeepSeek] webContext có nội dung: ${webContext.length > 0}`);
   } catch (err) {

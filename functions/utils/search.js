@@ -3,7 +3,7 @@ const axios = require("axios");
 const TAVILY_API_KEY = process.env.TAVILY_API_KEY;
 
 // ─── Regex lọc URL ───────────────────────────────────────────────────────────
-const URL_REGEX = /(https?:\/\/[^\s]+)/gi;
+const URL_REGEX = /(https?:\/\/[^\s"'>\]]+)/gi;
 
 // ─── Từ khóa nhận diện câu hỏi cần search ───────────────────────────────────
 const SEARCH_KEYWORDS = [
@@ -11,12 +11,14 @@ const SEARCH_KEYWORDS = [
   "tỷ giá", "kết quả", "lịch", "bao nhiêu", "ngày", "đêm", "triệu chứng", "thuốc",
   "xổ số", "vàng", "kqxs", "cập nhật", "recent", "news", "latest", "bóng đá", "hôm qua",
   "đá lúc mấy giờ", "chiếu kênh nào", "bản đồ", "địa chỉ", "giá xăng", "đăng ký",
-  "mua ở đâu", "tại sao", "như thế nào", "là ai", "là cái gì", "là gì"
+  "mua ở đâu", "tại sao", "như thế nào", "là ai", "là cái gì", "là gì",
+  "đội", "trận", "thắng", "thua", "vô địch", "bàn thắng", "ghi bàn", "tỉ số"
 ];
 
 const QUESTION_PATTERNS = [
   /ai là/i, /cái gì/i, /ở đâu/i, /khi nào/i,
-  /thế nào/i, /như thế nào/i, /làm sao để/i, /hướng dẫn cách/i
+  /thế nào/i, /như thế nào/i, /làm sao để/i, /hướng dẫn cách/i,
+  /thì sao/i, /còn.+không/i
 ];
 
 // ─── Từ khóa nhận diện câu hỏi cần kết quả trong ngày hôm nay ───────────────
