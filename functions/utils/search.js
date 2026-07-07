@@ -1,6 +1,5 @@
-const axios = require("axios");
-
-const TAVILY_API_KEY = process.env.TAVILY_API_KEY;
+const { searchTavily, TODAY_KEYWORDS } = require("./tavily");
+const { searchExa } = require("./exa");
 
 // ─── Regex lọc URL ───────────────────────────────────────────────────────────
 const URL_REGEX = /(https?:\/\/[^\s"'>\]]+)/gi;
@@ -20,12 +19,6 @@ const QUESTION_PATTERNS = [
   /ai là/i, /cái gì/i, /ở đâu/i, /khi nào/i,
   /thế nào/i, /như thế nào/i, /làm sao để/i, /hướng dẫn cách/i,
   /thì sao/i, /còn.+không/i
-];
-
-// ─── Từ khóa nhận diện câu hỏi cần kết quả trong ngày hôm nay ───────────────
-const TODAY_KEYWORDS = [
-  "hôm nay", "hum nay", "nay", "mới nhất", "latest", "recent", "tin hot",
-  "tin tức", "thời tiết", "giá vàng", "kqxs", "tỷ giá", "cập nhật", "news"
 ];
 
 /**
@@ -50,58 +43,12 @@ const checkNeedsSearch = (prompt) => {
 };
 
 /**
- * Tìm kiếm thông tin trên internet bằng Tavily API.
- * @param {string} query
- * @returns {Promise<string|null>}
- */
-const searchWeb = async (query) => {
-  if (!TAVILY_API_KEY || TAVILY_API_KEY === "YOUR_TAVILY_API_KEY_HERE") {
-    console.log("[Tavily] API Key chưa được cấu hình. Bỏ qua tìm kiếm.");
-    return null;
-  }
-
-  const isTodaySensitive = TODAY_KEYWORDS.some(kw => query.toLowerCase().includes(kw));
-
-  const params = {
-    api_key: TAVILY_API_KEY,
-    query,
-    search_depth: isTodaySensitive ? "advanced" : "basic",
-    include_answer: true,
-    max_results: 10,
-    ...(isTodaySensitive && { time_range: "week" })
-  };
-
-  try {
-    console.log(`[Tavily] Query: "${query}" | Hôm nay: ${isTodaySensitive}`);
-    const { data } = await axios.post("https://api.tavily.com/search", params);
-
-    const { answer, results = [] } = data;
-    if (!answer && results.length === 0) return "Không tìm thấy kết quả liên quan trên internet.";
-
-    let summary = "Thông tin thực tế từ Internet:\n";
-    
-    if (answer) summary += `[Tóm tắt]: ${answer}\n\n`;
-    
-    if (results.length > 0) {
-      summary += "[Nguồn tham khảo]:\n";
-      results.forEach((r, i) => {
-        summary += `[${i + 1}] ${r.title}\n${r.url}\n${r.content}\n\n`;
-      });
-    }
-    
-    return summary;
-  } catch (error) {
-    console.error("[Tavily] Lỗi tìm kiếm:", error?.response?.data || error.message);
-    return null;
-  }
-};
-
-/**
  * Tải và trích xuất nội dung văn bản thuần từ một URL.
  * @param {string} url
  * @returns {Promise<string|null>}
  */
 const scrapeUrl = async (url) => {
+  const axios = require("axios");
   try {
     const { data: html } = await axios.get(url, {
       headers: { "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1)" },
@@ -127,7 +74,7 @@ const scrapeUrl = async (url) => {
   }
 };
 
-/**
+
  * Xây dựng ngữ cảnh web cho câu hỏi của người dùng.
  * Ưu tiên scrape URL nếu có, ngược lại dùng Tavily search nếu cần.
  * @param {string} prompt - Câu chat gốc của người dùng (có thể chứa URL, @mention)
@@ -143,11 +90,24 @@ const resolveWebContext = async (prompt) => {
     urlText = await scrapeUrl(targetUrl);
   }
 
-  let searchSummary = null;
+  let searchSummary = "";
   if (checkNeedsSearch(prompt)) {
     const cleanQuery = prompt.replace(/@[^\s]+/g, "").replace(/\s+/g, " ").trim();
-    console.log(`[Tavily] Tìm kiếm: "${cleanQuery}"`);
-    searchSummary = await searchWeb(cleanQuery);
+    console.log(`[Search Router] Kích hoạt tìm kiếm song song: "${cleanQuery}"`);
+    
+    const [tavilyRes, exaRes] = await Promise.allSettled([
+      searchTavily(cleanQuery),
+      searchExa(cleanQuery)
+    ]);
+
+    if (tavilyRes.status === "fulfilled" && tavilyRes.value) {
+      searchSummary += tavilyRes.value + "\n";
+    }
+    if (exaRes.status === "fulfilled" && exaRes.value) {
+      searchSummary += exaRes.value + "\n";
+    }
+    
+    searchSummary = searchSummary.trim();
   }
 
   let context = "";
@@ -162,4 +122,4 @@ const resolveWebContext = async (prompt) => {
   return context;
 };
 
-module.exports = { checkNeedsSearch, searchWeb, scrapeUrl, resolveWebContext };
+module.exports = { checkNeedsSearch, scrapeUrl, resolveWebContext };
