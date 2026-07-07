@@ -74,7 +74,7 @@ const scrapeUrl = async (url) => {
   }
 };
 
-
+/**
  * Xây dựng ngữ cảnh web cho câu hỏi của người dùng.
  * Ưu tiên scrape URL nếu có, ngược lại dùng Tavily search nếu cần.
  * @param {string} prompt - Câu chat gốc của người dùng (có thể chứa URL, @mention)
@@ -93,11 +93,20 @@ const resolveWebContext = async (prompt) => {
   let searchSummary = "";
   if (checkNeedsSearch(prompt)) {
     const cleanQuery = prompt.replace(/@[^\s]+/g, "").replace(/\s+/g, " ").trim();
-    console.log(`[Search Router] Kích hoạt tìm kiếm song song: "${cleanQuery}"`);
+    
+    let finalQuery = cleanQuery;
+    const { TODAY_KEYWORDS } = require("./tavily");
+    const isTodaySensitive = TODAY_KEYWORDS.some(kw => cleanQuery.toLowerCase().includes(kw));
+    if (isTodaySensitive) {
+      const todayStr = new Date().toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
+      finalQuery = `${cleanQuery} ngày ${todayStr}`;
+    }
+
+    console.log(`[Search Router] Kích hoạt tìm kiếm song song: "${finalQuery}"`);
     
     const [tavilyRes, exaRes] = await Promise.allSettled([
-      searchTavily(cleanQuery),
-      searchExa(cleanQuery)
+      searchTavily(finalQuery),
+      searchExa(finalQuery)
     ]);
 
     if (tavilyRes.status === "fulfilled" && tavilyRes.value) {

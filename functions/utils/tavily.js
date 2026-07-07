@@ -5,7 +5,9 @@ const TAVILY_API_KEY = process.env.TAVILY_API_KEY;
 // Từ khóa nhận diện câu hỏi cần kết quả trong ngày hôm nay
 const TODAY_KEYWORDS = [
   "hôm nay", "hum nay", "nay", "mới nhất", "latest", "recent", "tin hot",
-  "tin tức", "thời tiết", "giá vàng", "kqxs", "tỷ giá", "cập nhật", "news"
+  "tin tức", "thời tiết", "giá vàng", "kqxs", "tỷ giá", "cập nhật", "news",
+  "tối nay", "đêm nay", "sáng nay", "chiều nay",
+  "ngày mai", "tối mai", "đêm mai", "sáng mai", "chiều mai"
 ];
 
 /**
