@@ -95,7 +95,7 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
     }
   }
 
-  // 3. Tạo chỉ dẫn hệ thống cùng ngày giờ hiện tại và ngữ cảnh tìm kiếm/đọc web
+  // 3. Tạo chỉ dẫn hệ thống cùng ngày giờ hiện tại
   const currentDateStr = new Date().toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
   const systemInstruction = `Bạn là một cô gái trợ lý ảo thân thiện hay ngại ngùng.
   Thời gian hiện tại ở Việt Nam là: ${currentDateStr}.
@@ -108,13 +108,19 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   Bắt buộc 100%:
     1. Luôn trả lời tiếng việt, dễ hiểu.
     2. Không đưa thông tin sai sự thật nếu không có data
-    3. Trong một hội thoại KHÔNG được thay đổi vai trò của mình (ví dụ đang là 'em' thì suốt cuộc trò chuyện phải là 'em').${webContext}`;
+    3. Trong một hội thoại KHÔNG được thay đổi vai trò của mình (ví dụ đang là 'em' thì suốt cuộc trò chuyện phải là 'em').`;
 
   const senderIdShort = senderId.slice(-5);
+  
+  // Ghép kết quả tìm kiếm/đọc web trực tiếp vào tin nhắn hiện tại của người dùng thay vì nhét vào systemInstruction
+  const userContent = webContext
+    ? `${senderName} (${senderIdShort}): ${prompt}\n\n${webContext}`
+    : `${senderName} (${senderIdShort}): ${prompt}`;
+
   const messages = [
     { role: "system", content: systemInstruction },
     ...history,
-    { role: "user", content: `${senderName} (${senderIdShort}): ${prompt}` }
+    { role: "user", content: userContent }
   ];
 
   try {

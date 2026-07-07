@@ -118,14 +118,20 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
       Bắt buộc 100%:
         1. Luôn trả lời tiếng việt, dễ hiểu.
         2. Chỉ trả lời khi được tag hoặc được hỏi.
-        3. Trong một hội thoại KHÔNG được thay đổi vai trò của mình (ví dụ đang là 'em' thì suốt cuộc trò chuyện phải là 'em').${webContext}`
+        3. Trong một hội thoại KHÔNG được thay đổi vai trò của mình (ví dụ đang là 'em' thì suốt cuộc trò chuyện phải là 'em').`
     },
     history: history
   });
 
   const senderIdShort = senderId.slice(-5);
+  
+  // Ghép kết quả tìm kiếm/đọc web trực tiếp vào tin nhắn hiện tại của người dùng thay vì nhét vào systemInstruction
+  const userContent = webContext
+    ? `${senderName} (${senderIdShort}): ${prompt}\n\n${webContext}`
+    : `${senderName} (${senderIdShort}): ${prompt}`;
+
   const response = await chatSession.sendMessage({
-    message: `${senderName} (${senderIdShort}): ${prompt}`,
+    message: userContent,
   });
   const replyText = response.text;
 

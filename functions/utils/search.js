@@ -28,7 +28,7 @@ const searchWeb = async (query) => {
 
   // Nếu câu hỏi mang tính thời sự, cấu hình tối ưu để tránh kết quả cũ lỗi thời
   if (isTimeSensitive) {
-    searchParams.time_range = "week";   // Chỉ lấy kết quả xuất hiện trong 7 ngày qua
+    searchParams.time_range = "day";
     searchParams.search_depth = "advanced"; // Tăng độ sâu tìm kiếm để lấy kết quả nóng
     searchParams.include_answer = true;     // Bật Tavily AI tự động trả lời tổng hợp
   }
