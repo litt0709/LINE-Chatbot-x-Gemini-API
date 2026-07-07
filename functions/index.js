@@ -90,11 +90,13 @@ exports.webhook = onRequest(async (req, res) => {
           return res.end();
         }
 
+        const senderName = message.from.first_name || message.from.username || "User";
+
         let msg;
         if (process.env.LLM_PROVIDER === "DEEPSEEK") {
-          msg = await deepseek.chat(String(chatId), text);
+          msg = await deepseek.chat(String(chatId), text, senderName, userId);
         } else {
-          msg = await gemini.chat(String(chatId), text);
+          msg = await gemini.chat(String(chatId), text, senderName, userId);
         }
         await telegram.reply(chatId, msg);
         return res.end();
@@ -152,6 +154,13 @@ exports.webhook = onRequest(async (req, res) => {
               // 3. Xác định sessionId: Dùng groupId/roomId cho nhóm chat, hoặc userId cho chat 1-1
               const sessionId = event.source.groupId || event.source.roomId || event.source.userId;
 
+              // Lấy tên hiển thị của người gửi từ LINE API
+              let senderName = "User";
+              const profile = await line.getUserProfile(userId, event.source.groupId || event.source.roomId);
+              if (profile && profile.displayName) {
+                senderName = profile.displayName;
+              }
+
               // Tự động xóa lịch sử hội thoại nếu người dùng gửi tin nhắn đặc biệt
               const cleanedText = event.message.text.replace(/@[^\s]+/g, "").replace(/\s+/g, " ").trim();
               if (cleanedText.toLowerCase() === "quên hết đi nào") {
@@ -162,9 +171,9 @@ exports.webhook = onRequest(async (req, res) => {
 
               let msg;
               if (process.env.LLM_PROVIDER === "DEEPSEEK") {
-                msg = await deepseek.chat(sessionId, event.message.text);
+                msg = await deepseek.chat(sessionId, event.message.text, senderName, userId);
               } else {
-                msg = await gemini.chat(sessionId, event.message.text);
+                msg = await gemini.chat(sessionId, event.message.text, senderName, userId);
               }
               await line.reply(event.replyToken, [{ type: "text", text: msg.replace(/\*\*/g, "") }]);
               return res.end();

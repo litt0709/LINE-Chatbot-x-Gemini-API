@@ -38,7 +38,7 @@ const textOnly = async (prompt) => {
   }
 };
 
-const chat = async (sessionId, prompt) => {
+const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown") => {
   const chatRef = db.collection("users").doc(sessionId).collection("history");
 
   // 1. Lấy 10 tin nhắn gần nhất từ Firestore
@@ -49,9 +49,16 @@ const chat = async (sessionId, prompt) => {
     const data = doc.data();
     // Chuyển role 'model' của Gemini thành 'assistant' để khớp với API của DeepSeek
     const role = data.role === "model" ? "assistant" : data.role;
+    
+    // Tạo nhãn người gửi kết hợp tên hiển thị và 5 số cuối của User ID để phân biệt trùng tên
+    const senderIdShort = (data.senderId || "unknown").slice(-5);
+    const content = role === "user" 
+      ? `${data.senderName || "User"} (${senderIdShort}): ${data.text}`
+      : data.text;
+
     history.push({
       role: role,
-      content: data.text
+      content: content
     });
   });
 
@@ -72,7 +79,9 @@ const chat = async (sessionId, prompt) => {
     }
   } else {
     // Nếu không gửi URL trực tiếp, kiểm tra nhu cầu tìm kiếm trên Internet bằng Tavily
-    const searchKeywords = ["tìm", "tra cứu", "search", "giá", "thời tiết", "tin tức", "hôm nay", "mới nhất", "tỷ giá", "kết quả", "ai là", "thế nào", "lịch", "bao nhiêu", "là gì", "ở đâu", "ngày", "đêm", "tại sao", "dự đoán", "triệu chứng", "thuốc", "xổ số", "vàng", "kqxs"];
+    const searchKeywords = ["tìm", "tra cứu", "search", "giá", "thời tiết", "tin tức", "hôm nay", "mới nhất", "tỷ giá", "kết quả",
+      "ai là", "thế nào", "lịch", "bao nhiêu", "là gì", "ở đâu", "ngày", "đêm",
+      "tại sao", "dự đoán", "triệu chứng", "thuốc", "xổ số", "vàng", "kqxs", "cập nhật", "recent", "news"];
     const needsSearch = searchKeywords.some(keyword => prompt.toLowerCase().includes(keyword));
 
     if (needsSearch) {
@@ -101,10 +110,11 @@ const chat = async (sessionId, prompt) => {
     2. Không đưa thông tin sai sự thật nếu không có data
     3. Trong một hội thoại KHÔNG được thay đổi vai trò của mình (ví dụ đang là 'em' thì suốt cuộc trò chuyện phải là 'em').${webContext}`;
 
+  const senderIdShort = senderId.slice(-5);
   const messages = [
     { role: "system", content: systemInstruction },
     ...history,
-    { role: "user", content: prompt }
+    { role: "user", content: `${senderName} (${senderIdShort}): ${prompt}` }
   ];
 
   try {
@@ -132,6 +142,8 @@ const chat = async (sessionId, prompt) => {
     batch.set(userMsgRef, {
       role: "user",
       text: prompt,
+      senderName: senderName,
+      senderId: senderId,
       createdAt: FieldValue.serverTimestamp()
     });
 

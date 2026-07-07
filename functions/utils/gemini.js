@@ -65,7 +65,7 @@ const multimodal = async (imageBinary) => {
   return response.text;
 };
 
-const chat = async (sessionId, prompt) => {
+const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown") => {
   const chatRef = db.collection("users").doc(sessionId).collection("history");
 
   // Lấy 10 tin nhắn gần nhất từ Firestore
@@ -74,9 +74,14 @@ const chat = async (sessionId, prompt) => {
   const history = [];
   snapshot.forEach(doc => {
     const data = doc.data();
+    // Tạo nhãn người gửi kết hợp tên hiển thị và 5 số cuối của User ID để phân biệt trùng tên
+    const senderIdShort = (data.senderId || "unknown").slice(-5);
+    const content = data.role === "user"
+      ? `${data.senderName || "User"} (${senderIdShort}): ${data.text}`
+      : data.text;
     history.push({
       role: data.role,
-      parts: [{ text: data.text }]
+      parts: [{ text: content }]
     });
   });
 
@@ -118,8 +123,9 @@ const chat = async (sessionId, prompt) => {
     history: history
   });
 
+  const senderIdShort = senderId.slice(-5);
   const response = await chatSession.sendMessage({
-    message: prompt,
+    message: `${senderName} (${senderIdShort}): ${prompt}`,
   });
   const replyText = response.text;
 
@@ -130,6 +136,8 @@ const chat = async (sessionId, prompt) => {
   batch.set(userMsgRef, {
     role: "user",
     text: prompt,
+    senderName: senderName,
+    senderId: senderId,
     createdAt: FieldValue.serverTimestamp()
   });
 

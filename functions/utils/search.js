@@ -13,14 +13,29 @@ const searchWeb = async (query) => {
     return null;
   }
 
+  // Nhận diện câu hỏi cần thông tin thời gian thực / mới nhất / bóng đá...
+  const timeSensitiveKeywords = ["hôm nay", "hôm qua", "mới nhất", "tin tức", "bóng đá",
+    "thời tiết", "giá vàng", "kqxs", "tỷ giá", "recent", "news", "latest", "cập nhật"];
+  const isTimeSensitive = timeSensitiveKeywords.some(keyword => query.toLowerCase().includes(keyword));
+
+  const searchParams = {
+    api_key: TAVILY_API_KEY,
+    query: query,
+    search_depth: "basic",
+    include_answer: false,
+    max_results: 5
+  };
+
+  // Nếu câu hỏi mang tính thời sự, cấu hình tối ưu để tránh kết quả cũ lỗi thời
+  if (isTimeSensitive) {
+    searchParams.time_range = "week";   // Chỉ lấy kết quả xuất hiện trong 7 ngày qua
+    searchParams.search_depth = "advanced"; // Tăng độ sâu tìm kiếm để lấy kết quả nóng
+    searchParams.include_answer = true;     // Bật Tavily AI tự động trả lời tổng hợp
+  }
+
   try {
-    const response = await axios.post("https://api.tavily.com/search", {
-      api_key: TAVILY_API_KEY,
-      query: query,
-      search_depth: "basic",
-      include_answer: false,
-      max_results: 5
-    });
+    console.log(`[Tavily Search] Gửi yêu cầu với query: "${query}" | Thời sự: ${isTimeSensitive}`);
+    const response = await axios.post("https://api.tavily.com/search", searchParams);
 
     const answer = response.data.answer;
     const results = response.data.results || [];

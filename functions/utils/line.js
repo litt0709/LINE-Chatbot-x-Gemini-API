@@ -24,4 +24,39 @@ const reply = (token, payload) => {
   });
 };
 
-module.exports = { getImageBinary, reply };
+/**
+ * Lấy thông tin cá nhân (Profile) của người dùng từ LINE API.
+ * @param {string} userId - ID người dùng LINE
+ * @param {string|null} groupId - ID nhóm chat (nếu có) để gọi API lấy thành viên nhóm
+ * @returns {Promise<{displayName: string, userId: string}|null>}
+ */
+const getUserProfile = async (userId, groupId = null) => {
+  try {
+    const url = groupId 
+      ? `https://api.line.me/v2/bot/group/${groupId}/member/${userId}`
+      : `https://api.line.me/v2/bot/profile/${userId}`;
+    const response = await axios({
+      method: "get",
+      url: url,
+      headers: LINE_HEADER
+    });
+    return response.data;
+  } catch (error) {
+    console.error("[LINE Profile] Lỗi lấy profile:", error?.response?.data || error.message);
+    if (groupId) {
+      try {
+        const response = await axios({
+          method: "get",
+          url: `https://api.line.me/v2/bot/profile/${userId}`,
+          headers: LINE_HEADER
+        });
+        return response.data;
+      } catch (err) {
+        console.error("[LINE Profile] Lỗi lấy profile thường:", err?.response?.data || err.message);
+      }
+    }
+    return null;
+  }
+};
+
+module.exports = { getImageBinary, reply, getUserProfile };
