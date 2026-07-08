@@ -23,5 +23,24 @@ const appendMessageToArray = async (sessionId, messageObj) => {
   }
 };
 
-module.exports = { db, FieldValue, appendMessageToArray };
+const getUserProfile = async (userId) => {
+  try {
+    const doc = await db.collection("user_profiles").doc(String(userId)).get();
+    return doc.exists ? doc.data() : null;
+  } catch (error) {
+    console.error(`[Firestore] Lỗi đọc profile User ${userId}:`, error.message);
+    return null;
+  }
+};
+
+const saveUserProfile = async (userId, data) => {
+  try {
+    await db.collection("user_profiles").doc(String(userId)).set(data, { merge: true });
+    console.log(`[Firestore] Đã lưu profile User ${userId}:`, data);
+  } catch (error) {
+    console.error(`[Firestore] Lỗi lưu profile User ${userId}:`, error.message);
+  }
+};
+
+module.exports = { db, FieldValue, appendMessageToArray, getUserProfile, saveUserProfile };
 

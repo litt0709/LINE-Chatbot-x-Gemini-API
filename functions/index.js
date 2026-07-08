@@ -1,6 +1,6 @@
 const { onRequest } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
-const { db, FieldValue, pruneHistory } = require("./utils/db");
+const { db, FieldValue, pruneHistory, getUserProfile, saveUserProfile } = require("./utils/db");
 const line = require("./utils/line");
 const telegram = require("./utils/telegram");
 
@@ -9,6 +9,7 @@ const { generateDailyNewsDigest } = require("./utils/news");
 
 let cachedTgParticipants = null;
 let cachedLineParticipants = null;
+const userProfileCache = new Map();
 
 // ─── CẤU HÌNH WHITELIST ──────────────────────────────────────────────────────
 // Đặt "*" để cho phép tất cả mọi người dùng bot.
@@ -37,6 +38,66 @@ const isUserAllowed = (userId, platform) => {
 
   else list = ALLOWED_LINE_USERS;
   return list.includes("*") || list.includes(userId);
+};
+const buildGroupProfileContext = async (participantsMap, promptText = "", senderId = "") => {
+  let ctx = "";
+  const uniqueIds = [...new Set(Object.values(participantsMap))];
+  const lowerPrompt = promptText.toLowerCase();
+
+  for (const uid of uniqueIds) {
+    if (!uid) continue;
+    
+    const name = Object.keys(participantsMap).find(k => participantsMap[k] === uid) || uid;
+    
+    // Thuật toán Smart Injection: Chỉ đưa Profile vào LLM nếu:
+    // 1. Là người đang trực tiếp chat (senderId)
+    // 2. Tên của họ được nhắc đến trong câu chat hoặc trong tin nhắn được Quote
+    const isSender = (uid === senderId);
+    const isMentioned = lowerPrompt.includes(name.toLowerCase());
+    
+    if (!isSender && !isMentioned) continue;
+
+    let profile = userProfileCache.get(uid);
+    if (!profile) {
+      profile = await getUserProfile(uid);
+      if (profile) userProfileCache.set(uid, profile);
+    }
+    
+    if (profile) {
+      const p = [];
+      if (profile.gender) p.push(`Giới tính: ${profile.gender}`);
+      if (profile.traits) p.push(`Đặc tính: ${profile.traits}`);
+      if (p.length > 0) {
+        ctx += `[${name}: ${p.join(", ")}] `;
+      }
+    }
+  }
+  return ctx ? `\n\nThông tin tập thể: ${ctx.trim()}` : "";
+};
+
+const processAndExtractProfile = (text, senderId) => {
+  let cleanedText = text;
+  const regex = /<PROFILE(?: userId="([^"]*)")?(?: gender="([^"]*)")?(?: traits="([^"]*)")?[^>]*>/gi;
+  let match;
+  
+  while ((match = regex.exec(text)) !== null) {
+    const uid = match[1] || senderId; 
+    const gender = match[2];
+    const traits = match[3];
+    
+    if (gender || traits) {
+      const updateData = {};
+      if (gender) updateData.gender = gender;
+      if (traits) updateData.traits = traits;
+      
+      saveUserProfile(uid, updateData); 
+      
+      const existing = userProfileCache.get(uid) || {};
+      userProfileCache.set(uid, { ...existing, ...updateData });
+    }
+  }
+  
+  return cleanedText.replace(/<PROFILE[^>]*>/gi, "").trim();
 };
 
 /**
@@ -290,7 +351,8 @@ exports.webhook = onRequest(async (req, res) => {
       }
 
       const forceIgnoreCheck = (!isDirectlyTargeted && isImplicitlyTargeted);
-      const rawMsg = await llm.chat(String(chatId), cleanPrompt, senderName, userId, null, quoteContext, forceIgnoreCheck);
+      const groupContext = await buildGroupProfileContext(participants);
+      const rawMsg = await llm.chat(String(chatId), cleanPrompt, senderName, userId, null, quoteContext, forceIgnoreCheck, groupContext);
       
       const userMsgData = { role: "user", text, senderName, senderId: userId, createdAt: new Date().toISOString() };
       
@@ -299,11 +361,13 @@ exports.webhook = onRequest(async (req, res) => {
         return res.end();
       }
 
+      const botMsgText = processAndExtractProfile(rawMsg, userId);
+
       // Convert @name → Telegram HTML mention thực sự
-      const msg = convertTelegramMentions(rawMsg, participants);
+      const msg = convertTelegramMentions(botMsgText, participants);
       await telegram.reply(chatId, msg);
       
-      const botMsgData = { role: "model", text: rawMsg, createdAt: new Date().toISOString() };
+      const botMsgData = { role: "model", text: botMsgText, createdAt: new Date().toISOString() };
       db.collection("users").doc(String(chatId)).set({ messages: FieldValue.arrayUnion(userMsgData, botMsgData) }, { merge: true });
 
       return res.end();
@@ -439,7 +503,8 @@ exports.webhook = onRequest(async (req, res) => {
       console.log(`[LINE] Participants map cho Session:`, JSON.stringify(participants));
 
       const forceIgnoreCheck = (!isDirectlyTargeted && isImplicitlyTargeted);
-      const rawMsg = await llm.chat(sessionId, cleanPrompt, senderName, userId, event.message.id, quoteContext, forceIgnoreCheck);
+      const groupContext = await buildGroupProfileContext(participants);
+      const rawMsg = await llm.chat(sessionId, cleanPrompt, senderName, userId, event.message.id, quoteContext, forceIgnoreCheck, groupContext);
 
       const userMsgData = { role: "user", text: event.message.text, senderName, senderId: userId, lineMessageId: event.message.id, createdAt: new Date().toISOString() };
       
@@ -448,14 +513,16 @@ exports.webhook = onRequest(async (req, res) => {
         continue;
       }
 
+      const botMsgText = processAndExtractProfile(rawMsg, userId);
+
       // Xây dựng LINE message có proper mention tags
       const isGroup = event.source.type !== "user";
-      const lineMsg = buildLineMessage(rawMsg, participants, isGroup);
+      const lineMsg = buildLineMessage(botMsgText, participants, isGroup);
       console.log(`[LINE] Payload gửi đi:`, JSON.stringify(lineMsg));
 
       const sentMessages = await line.reply(event.replyToken, [lineMsg]);
 
-      const botMsgData = { role: "model", text: rawMsg, createdAt: new Date().toISOString() };
+      const botMsgData = { role: "model", text: botMsgText, createdAt: new Date().toISOString() };
       if (sentMessages.length > 0) {
         botMsgData.lineMessageId = sentMessages[0].id;
       }

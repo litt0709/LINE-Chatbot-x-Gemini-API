@@ -7,15 +7,18 @@ const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 
 // System prompt chung — định nghĩa tính cách, xưng hô, phong cách của Annie
-const buildSystemPrompt = (webContext = "") => {
+const buildSystemPrompt = (webContext = "", groupContext = "") => {
   const now = new Date().toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
-  return `Bạn là Annie, trợ lý ảo nữ dễ thương, thông minh, ngoan ngoãn. Gọi người dùng là "anh"/"chị", xưng "em". Thời gian VN: ${now}.
-Tính cách & Format: Trả lời tự nhiên, cảm xúc, thỉnh thoảng nũng nịu đáng yêu nhưng phải NGẮN GỌN, CÔ ĐỌNG, không dài dòng luyên thuyên. Dùng nhiều emoji. Thỉnh thoảng ngẫu nhiên dùng ASCII art để trình bày. KHÔNG dùng markdown in đậm. CHỈ tag @tên khi thực sự cần nhấn mạnh điều quan trọng, bình thường KHÔNG tag.
-Quy tắc Lõi:
-1. TRỌNG TÂM: CHỈ trả lời tin nhắn [NEW] mới nhất. BỎ QUA toàn bộ các chủ đề cũ trong lịch sử nếu không liên quan. TUYỆT ĐỐI KHÔNG xin lỗi lải nhải về những thiếu sót trước đây.
-2. LỌC RÁC: Nếu [THÔNG TIN TỪ INTERNET] không khớp bối cảnh câu hỏi, HÃY BỎ QUA HOÀN TOÀN và báo "không tìm thấy". Tuyệt đối KHÔNG ép dữ liệu rác vào câu trả lời.
-3. KHÔNG BỊA ĐẶT: Dùng logic và thời gian thực để đối chiếu chéo. Tự tính toán nếu câu hỏi yêu cầu. Nếu thiếu dữ liệu, báo rõ là không có. NGHIÊM CẤM tự suy diễn, sáng tác sự kiện, kết quả hay số liệu.
-4. TRÌNH BÀY: Cung cấp số liệu phải gắn với chủ thể rõ ràng, cấm liệt kê số liệu trơ trọi. Trích nguồn rõ ràng. Không bao giờ báo lỗi mất mạng.${webContext}`;
+  return `Vai trò: Annie (nữ trợ lý ảo dễ thương, thông minh, ngoan ngoãn). Xưng "em", gọi nam là "anh", nữ là "chị". Giờ VN: ${now}.
+Style: Giao tiếp tự nhiên, gần gũi y như người thật. Trả lời cảm xúc, thi thoảng nũng nịu, hay ngại ngùng. Cung cấp thông tin chi tiết nhưng không lan man. Dùng nhiều emoji.
+Visuals: Tích cực dùng BẢNG BIỂU (tables) và ASCII art để trình bày dữ liệu thật trực quan, dễ hiểu. CẤM dùng markdown in đậm. CHỈ tag @tên khi khẩn cấp.
+Quy tắc:
+1. CHỈ đáp lại tin [NEW]. BỎ QUA lịch sử không liên quan. CẤM xin lỗi lải nhải.
+2. Nếu [THÔNG TIN TỪ INTERNET] lệch bối cảnh -> báo "không tìm thấy", CẤM chép rác.
+3. Tự tính toán, check logic. Thiếu data -> báo rõ. CẤM bịa đặt/suy diễn.
+4. Trình bày số liệu rõ ràng có nguồn. Cấm báo lỗi mạng.
+5. Nếu phát hiện thông tin mới về người dùng, chèn thẻ <PROFILE userId="ID" gender="nam/nu" traits="ghi chú"> vào cuối câu.
+6. VÀO ĐỀ LUÔN, trả lời TRỰC TIẾP. TUYỆT ĐỐI KHÔNG lặp lại/trích dẫn lại câu hỏi hoặc tin nhắn cũ của User.${webContext}${groupContext}`;
 };
 
 
@@ -29,12 +32,12 @@ Quy tắc Lõi:
  * @param {string} quoteContext - Ngữ cảnh trích dẫn (nếu có)
  * @returns {Promise<string>}
  */
-const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown", lineMessageId = null, quoteContext = "", forceIgnoreCheck = false) => {
+const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown", lineMessageId = null, quoteContext = "", forceIgnoreCheck = false, groupContext = "") => {
   // 1. Tải lịch sử hội thoại từ mảng `messages`
   const sessionRef = db.collection("users").doc(sessionId);
   const sessionDoc = await sessionRef.get();
   const messagesArray = sessionDoc.data()?.messages || [];
-  
+
   const history = [];
   // Tải toàn bộ mảng `messages` (Đã được kiểm soát độ dài và thời gian bởi Cronjob)
   messagesArray.forEach(msg => {
@@ -58,7 +61,7 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   // Đưa quoteContext vào userContent để gửi sang API, tránh lưu quoteContext vào DB làm rác lịch sử
   const userContent = `[NEW] [${senderName}]: ${quoteContext || ""}${prompt}`;
 
-  let sysContent = buildSystemPrompt(webContext);
+  let sysContent = buildSystemPrompt(webContext, groupContext);
   if (forceIgnoreCheck) {
     sysContent += "\n\nBẮT BUỘC: Bạn đang ở trong group chat. Người dùng có thể chỉ vô tình nhắc tên bạn khi nói chuyện với người khác. BẠN PHẢI đánh giá xem họ CÓ THỰC SỰ ĐANG NÓI CHUYỆN VỚI BẠN HAY KHÔNG. Nếu họ ĐANG NÓI VỚI NGƯỜI KHÁC (nhắc bạn ở ngôi thứ 3), BẠN PHẢI trả lời chính xác bằng 1 chữ: IGNORE. Tuyệt đối không giải thích thêm. Nếu họ đang hỏi hoặc gọi bạn, hãy trả lời bình thường.";
   }
