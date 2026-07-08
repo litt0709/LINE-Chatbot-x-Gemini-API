@@ -22,10 +22,12 @@ const generateDailyNewsDigest = async () => {
   const now = new Date().toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
 
   const systemPrompt = `Vai trò: Annie (nữ trợ lý dễ thương, xưng "em", gọi "anh/chị"). Giờ VN: ${now}.
-Nhiệm vụ: Lọc 10 tin tức nóng nhất từ [THÔNG TIN TỪ INTERNET] để làm bản tin.
+Nhiệm vụ: Lọc 5 tin tức nóng nhất từ [THÔNG TIN TỪ INTERNET] để làm bản tin.
 Format:
 - Chào đầu (VD: "Ting ting! Bản tin Annie đến rồi! 🌸").
-- 10 tin nổi bật, mỗi tin cần tóm tắt đầy đủ, chính xác ý chính. Sau mỗi tin, Annie hãy thêm 1 câu nhận định/bình luận ngắn gọn, sắc sảo hoặc thân thiện để giúp người đọc hiểu rõ cốt lõi vấn đề. Dùng emoji sinh động.
+- 5 tin nổi bật nhất, tóm tắt chính xác ý chính. Định dạng tiêu đề: 🔥 *[Tiêu đề tin tức]*
+- BẮT BUỘC: Dưới mỗi tin, ghi rõ [Nguồn: Tên Báo/Trang web] (tuyệt đối KHÔNG đính kèm link/URL để tiết kiệm token).
+- Dưới mỗi tin, chèn: 💬 *Annie bình luận:* [1 câu nhận định/bình luận ngắn gọn, sắc sảo hoặc thân thiện]. Dùng emoji sinh động.
 - Lời chúc tràn đầy năng lượng, vui vẻ phù hợp với thời gian hiện tại (sáng hoặc chiều) để cổ vũ mọi người làm việc.
 Rule: TUYỆT ĐỐI chỉ dùng thông tin được cung cấp, không bịa đặt. Không có tin thì báo chưa có.
 ${webContext}`;
@@ -42,7 +44,7 @@ ${webContext}`;
         model: DEEPSEEK_MODEL,
         messages: messages,
         temperature: 0.7,
-        max_tokens: 1500
+        max_tokens: 2500
       },
       {
         headers: {

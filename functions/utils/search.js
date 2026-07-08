@@ -111,6 +111,7 @@ const resolveWebContext = async (prompt) => {
       searchSummary = tavilyResult;
     } else {
       console.log(`[Search Router] Tavily không có kết quả hoặc bị lỗi, chuyển sang Exa...`);
+      const { searchExa } = require("./exa");
       let exaResult = await searchExa(finalQuery);
       if (exaResult) {
         searchSummary = exaResult;
