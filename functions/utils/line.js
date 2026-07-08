@@ -9,14 +9,19 @@ const LINE_HEADER = {
 };
 
 const getImageBinary = async (messageId) => {
-  const originalImage = await axios({
-    method: "get",
-    headers: LINE_HEADER,
-    url: `https://api-data.line.me/v2/bot/message/${messageId}/content`,
-    responseType: "arraybuffer"
-  })
-  return originalImage.data;
-}
+  try {
+    const originalImage = await axios({
+      method: "get",
+      headers: LINE_HEADER,
+      url: `https://api-data.line.me/v2/bot/message/${messageId}/content`,
+      responseType: "arraybuffer"
+    });
+    return originalImage.data;
+  } catch (error) {
+    console.error(`[LINE] Lỗi tải nội dung file/ảnh cho message ${messageId}:`, error.message);
+    return null;
+  }
+};
 
 const reply = async (token, payload) => {
   try {
@@ -90,7 +95,19 @@ const push = async (to, payload) => {
 
 const downloadMessageFile = async (messageId, fileName) => {
   const fileData = await getImageBinary(messageId);
-  const localPath = path.join(os.tmpdir(), `${messageId}_${fileName}`);
+  if (!fileData) return null;
+  
+  let ext = "";
+  if (!fileName.includes(".")) {
+    const bytes = new Uint8Array(fileData.slice(0, 4));
+    if (bytes[0] === 0xFF && bytes[1] === 0xD8) ext = ".jpg";
+    else if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) ext = ".png";
+    else if (bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46) ext = ".pdf";
+    else if (bytes[0] === 0x50 && bytes[1] === 0x4B && bytes[2] === 0x03 && bytes[3] === 0x04) ext = ".xlsx"; // XLSX/DOCX/ZIP
+  }
+
+  const finalFileName = ext ? `${fileName}${ext}` : fileName;
+  const localPath = path.join(os.tmpdir(), `${messageId}_${finalFileName}`);
   fs.writeFileSync(localPath, fileData);
   return localPath;
 };

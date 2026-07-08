@@ -78,7 +78,19 @@ const leaveChat = async (chatId) => {
 
 const downloadMessageFile = async (fileId, fileName) => {
   const fileData = await getImageBinary(fileId);
-  const localPath = path.join(os.tmpdir(), `${fileId}_${fileName}`);
+  if (!fileData) return null;
+
+  let ext = "";
+  if (!fileName.includes(".")) {
+    const bytes = new Uint8Array(fileData.slice(0, 4));
+    if (bytes[0] === 0xFF && bytes[1] === 0xD8) ext = ".jpg";
+    else if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) ext = ".png";
+    else if (bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46) ext = ".pdf";
+    else if (bytes[0] === 0x50 && bytes[1] === 0x4B && bytes[2] === 0x03 && bytes[3] === 0x04) ext = ".xlsx"; // XLSX/DOCX/ZIP
+  }
+
+  const finalFileName = ext ? `${fileName}${ext}` : fileName;
+  const localPath = path.join(os.tmpdir(), `${fileId}_${finalFileName}`);
   fs.writeFileSync(localPath, fileData);
   return localPath;
 };

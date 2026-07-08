@@ -34,13 +34,25 @@ Quy tắc:
  * @returns {Promise<string>}
  */
 const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown", lineMessageId = null, quoteContext = "", forceIgnoreCheck = false, groupContext = "") => {
-  // 1. Tải lịch sử hội thoại từ mảng `messages`
+  // 1. Tải lịch sử hội thoại từ mảng `messages` và `summaries`
   const sessionRef = db.collection("users").doc(sessionId);
   const sessionDoc = await sessionRef.get();
-  const messagesArray = sessionDoc.data()?.messages || [];
+  const sessionData = sessionDoc.data() || {};
+  const messagesArray = sessionData.messages || [];
+  const summariesArray = sessionData.summaries || [];
 
   const history = [];
-  // Tải toàn bộ mảng `messages` (Đã được kiểm soát độ dài và thời gian bởi Cronjob)
+  
+  // Nạp các bản tóm tắt quá khứ vào đầu lịch sử
+  if (summariesArray.length > 0) {
+    const combinedSummaries = summariesArray.map(s => s.text).join("\n\n");
+    history.push({
+      role: "system",
+      content: `[BỘ NHỚ DÀI HẠN (TÓM TẮT CÁC SỰ KIỆN TRƯỚC ĐÓ)]:\n${combinedSummaries}`
+    });
+  }
+
+  // Tải các tin nhắn thô chưa được tóm tắt
   messagesArray.forEach(msg => {
     const { role, text, senderName: name } = msg;
     const apiRole = role === "model" ? "assistant" : role;
@@ -90,7 +102,7 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   }
 };
 
-const { multimodal, analyzeDocument } = require("./gemini");
+const { multimodal, analyzeDocument, summarizeHistory } = require("./gemini");
 
-module.exports = { chat, multimodal, analyzeDocument };
+module.exports = { chat, multimodal, analyzeDocument, summarizeHistory };
 

@@ -64,4 +64,34 @@ const analyzeDocument = async (localFilePath) => {
   }
 };
 
-module.exports = { multimodal, analyzeDocument };
+/**
+ * Nén ký ức (Memory Compression).
+ * @param {Array} messages - Mảng các tin nhắn thô
+ * @returns {Promise<string>}
+ */
+const summarizeHistory = async (messages) => {
+  if (!messages || messages.length === 0) return "";
+  
+  const formattedChat = messages.map(m => `[${m.senderName || m.role}]: ${m.text}`).join("\n");
+  
+  const prompt = `Đây là lịch sử chat của nhóm trong thời gian qua. Dữ liệu này sẽ được dùng làm bộ nhớ dài hạn cho AI.
+Hãy tóm tắt ngắn gọn các sự kiện chính và thông tin quan trọng. Cú pháp bắt buộc: [Tên người dùng] đã nói/làm gì.
+Chú ý giữ lại các sở thích cá nhân, quan điểm, file được gửi hoặc thông tin gắn liền với từng người dùng.
+Không dài dòng, phải cực kỳ súc tích (dưới 300 chữ).
+
+Lịch sử chat thô:
+${formattedChat}`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: GEMINI_MODEL,
+      contents: [{ role: "user", parts: [{ text: prompt }] }]
+    });
+    return response.text.trim();
+  } catch (error) {
+    console.error("[Gemini] Lỗi nén trí nhớ:", error.message);
+    return "";
+  }
+};
+
+module.exports = { multimodal, analyzeDocument, summarizeHistory };

@@ -279,51 +279,59 @@ exports.webhook = onRequest(async (req, res) => {
     }
 
     // Xử lý tin nhắn (Text, Ảnh, Document)
-    let messageContent = null;
+    let messageContent = message.text || message.caption || null;
     let isImage = false;
 
-    if (message.text) {
-      messageContent = message.text;
-    } else if (message.photo && chatType === "private") {
-      console.log(`[Telegram] Đang xử lý ảnh từ User ${userId}...`);
-      const fileId = message.photo[message.photo.length - 1].file_id;
-      const imageBinary = await telegram.getImageBinary(fileId);
-      const imgDesc = await llm.multimodal(imageBinary);
-      messageContent = `[BỨC ẢNH NGƯỜI DÙNG VỪA GỬI ĐẾN]: "${imgDesc.trim()}". Hãy phản hồi tự nhiên dựa trên mô tả bức ảnh này.`;
-      isImage = true;
-    } else if (message.document && chatType === "private") {
-      const fileName = message.document.file_name || "document";
-      console.log(`[Telegram] Đang xử lý file ${fileName} từ User ${userId}...`);
-      const localPath = await telegram.downloadMessageFile(message.document.file_id, fileName);
-      const fileDesc = await llm.analyzeDocument(localPath);
-      messageContent = `[TÀI LIỆU NGƯỜI DÙNG VỪA GỬI ĐẾN: ${fileName}]:\n"${fileDesc.trim()}"\n\nHãy phân tích và trả lời người dùng dựa trên thông tin tóm tắt này.`;
-      isImage = true;
+    const botUsername = process.env.TELEGRAM_BOT_USERNAME || "";
+    let isDirectlyTargeted = chatType === "private" ||
+      (messageContent && messageContent.includes(`@${botUsername}`)) ||
+      (message.reply_to_message?.from?.username === botUsername);
+    let isImplicitlyTargeted = !isDirectlyTargeted && messageContent && /\bannie\b/i.test(messageContent);
+
+    const shouldProcessMedia = chatType === "private" || isDirectlyTargeted || isImplicitlyTargeted;
+
+    if (shouldProcessMedia) {
+      if (message.photo) {
+        console.log(`[Telegram] Đang xử lý ảnh từ User ${userId}...`);
+        const fileId = message.photo[message.photo.length - 1].file_id;
+        const imageBinary = await telegram.getImageBinary(fileId);
+        const imgDesc = await llm.multimodal(imageBinary);
+        messageContent = (messageContent ? messageContent + "\n" : "") + `[BỨC ẢNH NGƯỜI DÙNG VỪA GỬI ĐẾN]: "${imgDesc.trim()}"`;
+        isImage = true;
+      } else if (message.document) {
+        const fileName = message.document.file_name || "document";
+        console.log(`[Telegram] Đang xử lý file ${fileName} từ User ${userId}...`);
+        const localPath = await telegram.downloadMessageFile(message.document.file_id, fileName);
+        const fileDesc = await llm.analyzeDocument(localPath);
+        messageContent = (messageContent ? messageContent + "\n" : "") + `[TÀI LIỆU NGƯỜI DÙNG VỪA GỬI ĐẾN: ${fileName}]:\n"${fileDesc.trim()}"`;
+        isImage = true;
+      } else if (message.reply_to_message?.photo) {
+        console.log(`[Telegram] Đang xử lý ảnh được trích dẫn từ User ${userId}...`);
+        const fileId = message.reply_to_message.photo[message.reply_to_message.photo.length - 1].file_id;
+        const imageBinary = await telegram.getImageBinary(fileId);
+        const imgDesc = await llm.multimodal(imageBinary);
+        messageContent = (messageContent ? messageContent + "\n" : "") + `[BỨC ẢNH ĐƯỢC TRÍCH DẪN]: "${imgDesc.trim()}"`;
+        isImage = true;
+      } else if (message.reply_to_message?.document) {
+        const fileName = message.reply_to_message.document.file_name || "document";
+        console.log(`[Telegram] Đang xử lý file được trích dẫn ${fileName} từ User ${userId}...`);
+        const localPath = await telegram.downloadMessageFile(message.reply_to_message.document.file_id, fileName);
+        const fileDesc = await llm.analyzeDocument(localPath);
+        messageContent = (messageContent ? messageContent + "\n" : "") + `[TÀI LIỆU ĐƯỢC TRÍCH DẪN: ${fileName}]:\n"${fileDesc.trim()}"`;
+        isImage = true;
+      }
     }
 
     if (!messageContent) return res.end();
 
-    let isDirectlyTargeted = false;
-    let isImplicitlyTargeted = false;
-
-      if (chatType === "private") {
-        isDirectlyTargeted = true;
-      } else {
-        const botUsername = process.env.TELEGRAM_BOT_USERNAME || "";
-        if (botUsername && messageContent.includes(`@${botUsername}`)) {
-          isDirectlyTargeted = true;
-        } else if (message.reply_to_message?.from?.username === botUsername) {
-          isDirectlyTargeted = true;
-        } else if (/\bannie\b/i.test(messageContent)) {
-          isImplicitlyTargeted = true;
-        }
-
-        if (!isDirectlyTargeted && !isImplicitlyTargeted) {
-          // Lưu background history và thoát
-          const userMsg = { role: "user", text: messageContent, senderId: userId, createdAt: new Date().toISOString() };
-          db.collection("users").doc(String(chatId)).set({ messages: FieldValue.arrayUnion(userMsg) }, { merge: true }).catch(e => console.error("Lưu bg lỗi:", e.message));
-          return res.end();
-        }
+    if (chatType !== "private") {
+      if (!isDirectlyTargeted && !isImplicitlyTargeted) {
+        // Lưu background history và thoát
+        const userMsg = { role: "user", text: messageContent, senderId: userId, createdAt: new Date().toISOString() };
+        db.collection("users").doc(String(chatId)).set({ messages: FieldValue.arrayUnion(userMsg) }, { merge: true }).catch(e => console.error("Lưu bg lỗi:", e.message));
+        return res.end();
       }
+    }
 
       // Lệnh reset bộ nhớ
       if (!isImage && cleanText(messageContent).toLowerCase() === "quên hết đi nào") {
@@ -449,7 +457,7 @@ exports.webhook = onRequest(async (req, res) => {
       const localPath = await line.downloadMessageFile(event.message.id, fileName);
       const fileDesc = await llm.analyzeDocument(localPath);
       messageContent = `[TÀI LIỆU NGƯỜI DÙNG VỪA GỬI ĐẾN: ${fileName}]:\n"${fileDesc.trim()}"\n\nHãy phân tích và trả lời người dùng dựa trên thông tin tóm tắt này.`;
-      isImage = true; // Use isImage=true to prevent "quên hết đi nào" reset for files
+      isImage = true;
     }
 
     if (!messageContent) continue;
@@ -515,6 +523,13 @@ exports.webhook = onRequest(async (req, res) => {
             const quotedFrom = q.senderName || (q.role === "model" ? "Annie" : "ai đó");
             const fullText = q.text;
             quoteContext = `[Đang trả lời tin nhắn của ${quotedFrom}: "${fullText}"]\n`;
+          } else if (isDirectlyTargeted || isImplicitlyTargeted) {
+            console.log(`[LINE] Quoted message không có trong history, thử tải on-demand file/ảnh (ID: ${quotedId})...`);
+            const localPath = await line.downloadMessageFile(quotedId, "quoted_media");
+            if (localPath) {
+              const fileDesc = await llm.analyzeDocument(localPath);
+              quoteContext = `[NỘI DUNG FILE/ẢNH ĐƯỢC TRÍCH DẪN]:\n"${fileDesc.trim()}"\n`;
+            }
           }
         } catch (err) {
           console.error("[LINE] Lỗi tra cứu quoted message:", err.message);
@@ -636,49 +651,60 @@ exports.dailyHistoryCleanup = onSchedule({
   timeoutSeconds: 300,
   memory: "256MiB"
 }, async (event) => {
-  console.log("[Cleanup] Bắt đầu dọn dẹp mảng lịch sử (giữ 4 giờ qua, max 1000 tin)...");
+  console.log("[Cleanup] Bắt đầu Nén Ký Ức (Memory Compression) và dọn dẹp lịch sử...");
   try {
     const usersSnap = await db.collection("users").get();
     let cleanedCount = 0;
-    
-    // Sử dụng batch để tối ưu số lần commit
     const batch = db.batch();
-    const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000);
+    const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
     
-    usersSnap.forEach(doc => {
+    for (const doc of usersSnap.docs) {
       const data = doc.data();
-      if (data && data.messages && data.messages.length > 0) {
-        let needsUpdate = false;
-        
-        // 1. Lọc bỏ tin cũ hơn 4 giờ
-        let recentMessages = data.messages.filter(msg => {
-          if (!msg.createdAt) return true;
-          return new Date(msg.createdAt) >= fourHoursAgo;
-        });
+      let needsUpdate = false;
+      let updateData = {};
 
-        if (recentMessages.length !== data.messages.length) {
-          needsUpdate = true;
-        }
-
-        // 2. Chặn trần 1000 tin nhắn
-        if (recentMessages.length > 1000) {
-          recentMessages = recentMessages.slice(-1000);
-          needsUpdate = true;
-        }
-
-        if (needsUpdate) {
-          batch.update(doc.ref, { messages: recentMessages });
-          cleanedCount++;
-        }
+      // 1. Xóa các bản tóm tắt cũ hơn 24h
+      let summaries = data.summaries || [];
+      const oldSummariesLength = summaries.length;
+      summaries = summaries.filter(s => new Date(s.createdAt).getTime() >= twentyFourHoursAgo);
+      if (summaries.length !== oldSummariesLength) {
+        updateData.summaries = summaries;
+        needsUpdate = true;
       }
-    });
+
+      // 2. Tóm tắt các tin nhắn thô hiện tại
+      if (data.messages && data.messages.length > 0) {
+        console.log(`[Cleanup] Đang tóm tắt ${data.messages.length} tin nhắn thô cho session: ${doc.id}`);
+        const summaryText = await llm.summarizeHistory(data.messages);
+        
+        if (summaryText) {
+          summaries.push({
+            text: summaryText,
+            createdAt: new Date().toISOString()
+          });
+          updateData.summaries = summaries;
+        }
+        
+        // Xóa sạch mảng messages thô vì đã tóm tắt xong
+        updateData.messages = [];
+        needsUpdate = true;
+        
+        // Tránh bị Rate Limit của Gemini (15 RPM) nếu có quá nhiều Group
+        await new Promise(r => setTimeout(r, 4000));
+      }
+
+      if (needsUpdate) {
+        batch.update(doc.ref, updateData);
+        cleanedCount++;
+      }
+    }
 
     if (cleanedCount > 0) {
       await batch.commit();
     }
     
-    console.log(`[Cleanup] Đã dọn dẹp lịch sử thành công cho ${cleanedCount} sessions.`);
+    console.log(`[Cleanup] Đã nén và dọn dẹp lịch sử thành công cho ${cleanedCount} sessions.`);
   } catch (error) {
-    console.error("[Cleanup] Lỗi khi dọn dẹp lịch sử:", error);
+    console.error("[Cleanup] Lỗi khi Nén Ký Ức:", error);
   }
 });
