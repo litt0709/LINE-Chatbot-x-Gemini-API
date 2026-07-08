@@ -103,18 +103,18 @@ const resolveWebContext = async (prompt) => {
       finalQuery = `${cleanQuery} ngày ${todayStr}`;
     }
 
-    console.log(`[Search Router] Kích hoạt tìm kiếm song song: "${finalQuery}"`);
+    console.log(`[Search Router] Kích hoạt tìm kiếm (Tavily ưu tiên, Exa dự phòng): "${finalQuery}"`);
     
-    const [tavilyRes, exaRes] = await Promise.allSettled([
-      searchTavily(finalQuery),
-      searchExa(finalQuery)
-    ]);
-
-    if (tavilyRes.status === "fulfilled" && tavilyRes.value) {
-      searchSummary += tavilyRes.value + "\n";
-    }
-    if (exaRes.status === "fulfilled" && exaRes.value) {
-      searchSummary += exaRes.value + "\n";
+    let tavilyResult = await searchTavily(finalQuery);
+    
+    if (tavilyResult) {
+      searchSummary = tavilyResult;
+    } else {
+      console.log(`[Search Router] Tavily không có kết quả hoặc bị lỗi, chuyển sang Exa...`);
+      let exaResult = await searchExa(finalQuery);
+      if (exaResult) {
+        searchSummary = exaResult;
+      }
     }
     
     searchSummary = searchSummary.trim();

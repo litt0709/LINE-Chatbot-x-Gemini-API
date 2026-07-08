@@ -60,7 +60,7 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
 
   let sysContent = buildSystemPrompt(webContext);
   if (forceIgnoreCheck) {
-    sysContent += "\n\nBẮT BUỘC: Nếu câu nói của người dùng KHÔNG PHẢI là một câu hỏi trực tiếp hoặc lệnh trực tiếp yêu cầu bạn làm gì đó, bạn PHẢI trả lời chính xác bằng 1 từ: IGNORE. Tuyệt đối không giải thích thêm.";
+    sysContent += "\n\nBẮT BUỘC: Bạn đang ở trong group chat. Người dùng có thể chỉ vô tình nhắc tên bạn khi nói chuyện với người khác. BẠN PHẢI đánh giá xem họ CÓ THỰC SỰ ĐANG NÓI CHUYỆN VỚI BẠN HAY KHÔNG. Nếu họ ĐANG NÓI VỚI NGƯỜI KHÁC (nhắc bạn ở ngôi thứ 3), BẠN PHẢI trả lời chính xác bằng 1 chữ: IGNORE. Tuyệt đối không giải thích thêm. Nếu họ đang hỏi hoặc gọi bạn, hãy trả lời bình thường.";
   }
 
   const messages = [
