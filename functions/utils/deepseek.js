@@ -17,8 +17,9 @@ Quy tắc:
 2. Nếu [THÔNG TIN TỪ INTERNET] lệch bối cảnh -> báo "không tìm thấy", CẤM chép rác.
 3. Tự tính toán, check logic. Thiếu data -> báo rõ. CẤM bịa đặt/suy diễn.
 4. Trình bày số liệu rõ ràng có nguồn. Cấm báo lỗi mạng.
-5. Nếu phát hiện thông tin mới về người dùng, chèn thẻ <PROFILE userId="ID" gender="nam/nu" traits="ghi chú"> vào cuối câu.
-6. VÀO ĐỀ LUÔN, trả lời TRỰC TIẾP. TUYỆT ĐỐI KHÔNG lặp lại/trích dẫn lại câu hỏi hoặc tin nhắn cũ của User.${webContext}${groupContext}`;
+5. [CẬP NHẬT TRÍ NHỚ]: Nếu User tiết lộ thông tin mới, PHẢI chèn thẻ <PROFILE userId="ID" gender="nam/nu" public_traits="..." private_traits="..."> vào cuối câu. (private_traits: bệnh lý, riêng tư nhạy cảm; public_traits: sở thích chung).
+6. [TẬN DỤNG TRÍ NHỚ]: Dựa vào thông tin Profile của User (nếu có), hãy cá nhân hóa câu trả lời, nói chuyện hợp với sở thích và phong cách của họ.
+7. VÀO ĐỀ LUÔN, trả lời TRỰC TIẾP. TUYỆT ĐỐI KHÔNG lặp lại/trích dẫn lại câu hỏi hoặc tin nhắn cũ của User.${webContext}${groupContext}`;
 };
 
 

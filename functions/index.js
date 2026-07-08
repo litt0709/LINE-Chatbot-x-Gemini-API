@@ -39,7 +39,7 @@ const isUserAllowed = (userId, platform) => {
   else list = ALLOWED_LINE_USERS;
   return list.includes("*") || list.includes(userId);
 };
-const buildGroupProfileContext = async (participantsMap, promptText = "", senderId = "") => {
+const buildGroupProfileContext = async (participantsMap, promptText = "", senderId = "", isGroup = false) => {
   let ctx = "";
   const uniqueIds = [...new Set(Object.values(participantsMap))];
   const lowerPrompt = promptText.toLowerCase();
@@ -66,7 +66,12 @@ const buildGroupProfileContext = async (participantsMap, promptText = "", sender
     if (profile) {
       const p = [];
       if (profile.gender) p.push(`Giới tính: ${profile.gender}`);
+      if (profile.public_traits) p.push(`Đặc điểm chung: ${profile.public_traits}`);
+      if (!isGroup && profile.private_traits) p.push(`Thông tin riêng tư: ${profile.private_traits}`);
+      
+      // Fallback for old data format
       if (profile.traits) p.push(`Đặc tính: ${profile.traits}`);
+      
       if (p.length > 0) {
         ctx += `[${name}: ${p.join(", ")}] `;
       }
@@ -77,22 +82,29 @@ const buildGroupProfileContext = async (participantsMap, promptText = "", sender
 
 const processAndExtractProfile = (text, senderId) => {
   let cleanedText = text;
-  const regex = /<PROFILE(?: userId="([^"]*)")?(?: gender="([^"]*)")?(?: traits="([^"]*)")?[^>]*>/gi;
+  const regex = /<PROFILE(?: userId="([^"]*)")?(?: gender="([^"]*)")?(?: public_traits="([^"]*)")?(?: private_traits="([^"]*)")?[^>]*>/gi;
   let match;
   
   while ((match = regex.exec(text)) !== null) {
     const uid = match[1] || senderId; 
     const gender = match[2];
-    const traits = match[3];
+    const public_traits = match[3];
+    const private_traits = match[4];
     
-    if (gender || traits) {
+    if (gender || public_traits || private_traits) {
+      const existing = userProfileCache.get(uid) || {};
       const updateData = {};
+      
       if (gender) updateData.gender = gender;
-      if (traits) updateData.traits = traits;
+      
+      if (public_traits) {
+        updateData.public_traits = existing.public_traits ? existing.public_traits + ", " + public_traits : public_traits;
+      }
+      if (private_traits) {
+        updateData.private_traits = existing.private_traits ? existing.private_traits + ", " + private_traits : private_traits;
+      }
       
       saveUserProfile(uid, updateData); 
-      
-      const existing = userProfileCache.get(uid) || {};
       userProfileCache.set(uid, { ...existing, ...updateData });
     }
   }
@@ -351,7 +363,8 @@ exports.webhook = onRequest(async (req, res) => {
       }
 
       const forceIgnoreCheck = (!isDirectlyTargeted && isImplicitlyTargeted);
-      const groupContext = await buildGroupProfileContext(participants);
+      const isGroup = chatType !== "private";
+      const groupContext = await buildGroupProfileContext(participants, cleanPrompt, userId, isGroup);
       const rawMsg = await llm.chat(String(chatId), cleanPrompt, senderName, userId, null, quoteContext, forceIgnoreCheck, groupContext);
       
       const userMsgData = { role: "user", text, senderName, senderId: userId, createdAt: new Date().toISOString() };
@@ -503,7 +516,8 @@ exports.webhook = onRequest(async (req, res) => {
       console.log(`[LINE] Participants map cho Session:`, JSON.stringify(participants));
 
       const forceIgnoreCheck = (!isDirectlyTargeted && isImplicitlyTargeted);
-      const groupContext = await buildGroupProfileContext(participants);
+      const isGroup = event.source.type !== "user";
+      const groupContext = await buildGroupProfileContext(participants, cleanPrompt, userId, isGroup);
       const rawMsg = await llm.chat(sessionId, cleanPrompt, senderName, userId, event.message.id, quoteContext, forceIgnoreCheck, groupContext);
 
       const userMsgData = { role: "user", text: event.message.text, senderName, senderId: userId, lineMessageId: event.message.id, createdAt: new Date().toISOString() };
@@ -516,7 +530,6 @@ exports.webhook = onRequest(async (req, res) => {
       const botMsgText = processAndExtractProfile(rawMsg, userId);
 
       // Xây dựng LINE message có proper mention tags
-      const isGroup = event.source.type !== "user";
       const lineMsg = buildLineMessage(botMsgText, participants, isGroup);
       console.log(`[LINE] Payload gửi đi:`, JSON.stringify(lineMsg));
 
