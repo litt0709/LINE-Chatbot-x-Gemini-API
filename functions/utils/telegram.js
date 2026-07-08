@@ -1,4 +1,7 @@
 const axios = require("axios");
+const fs = require("fs");
+const path = require("path");
+const os = require("os");
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_BASE_URL = `https://api.telegram.org/bot${TELEGRAM_TOKEN}`;
@@ -73,4 +76,11 @@ const leaveChat = async (chatId) => {
   }
 };
 
-module.exports = { reply, getImageBinary, leaveChat, push: reply };
+const downloadMessageFile = async (fileId, fileName) => {
+  const fileData = await getImageBinary(fileId);
+  const localPath = path.join(os.tmpdir(), `${fileId}_${fileName}`);
+  fs.writeFileSync(localPath, fileData);
+  return localPath;
+};
+
+module.exports = { reply, getImageBinary, downloadMessageFile, leaveChat, push: reply };

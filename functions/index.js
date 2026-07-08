@@ -278,35 +278,55 @@ exports.webhook = onRequest(async (req, res) => {
       return res.end();
     }
 
-    // Xử lý tin nhắn văn bản
-    if (message.text) {
-      const text = message.text;
+    // Xử lý tin nhắn (Text, Ảnh, Document)
+    let messageContent = null;
+    let isImage = false;
 
-      let isDirectlyTargeted = false;
-      let isImplicitlyTargeted = false;
+    if (message.text) {
+      messageContent = message.text;
+    } else if (message.photo && chatType === "private") {
+      console.log(`[Telegram] Đang xử lý ảnh từ User ${userId}...`);
+      const fileId = message.photo[message.photo.length - 1].file_id;
+      const imageBinary = await telegram.getImageBinary(fileId);
+      const imgDesc = await llm.multimodal(imageBinary);
+      messageContent = `[BỨC ẢNH NGƯỜI DÙNG VỪA GỬI ĐẾN]: "${imgDesc.trim()}". Hãy phản hồi tự nhiên dựa trên mô tả bức ảnh này.`;
+      isImage = true;
+    } else if (message.document && chatType === "private") {
+      const fileName = message.document.file_name || "document";
+      console.log(`[Telegram] Đang xử lý file ${fileName} từ User ${userId}...`);
+      const localPath = await telegram.downloadMessageFile(message.document.file_id, fileName);
+      const fileDesc = await llm.analyzeDocument(localPath);
+      messageContent = `[TÀI LIỆU NGƯỜI DÙNG VỪA GỬI ĐẾN: ${fileName}]:\n"${fileDesc.trim()}"\n\nHãy phân tích và trả lời người dùng dựa trên thông tin tóm tắt này.`;
+      isImage = true;
+    }
+
+    if (!messageContent) return res.end();
+
+    let isDirectlyTargeted = false;
+    let isImplicitlyTargeted = false;
 
       if (chatType === "private") {
         isDirectlyTargeted = true;
       } else {
         const botUsername = process.env.TELEGRAM_BOT_USERNAME || "";
-        if (botUsername && text.includes(`@${botUsername}`)) {
+        if (botUsername && messageContent.includes(`@${botUsername}`)) {
           isDirectlyTargeted = true;
         } else if (message.reply_to_message?.from?.username === botUsername) {
           isDirectlyTargeted = true;
-        } else if (/\bannie\b/i.test(text)) {
+        } else if (/\bannie\b/i.test(messageContent)) {
           isImplicitlyTargeted = true;
         }
 
         if (!isDirectlyTargeted && !isImplicitlyTargeted) {
           // Lưu background history và thoát
-          const userMsg = { role: "user", text, senderId: userId, createdAt: new Date().toISOString() };
+          const userMsg = { role: "user", text: messageContent, senderId: userId, createdAt: new Date().toISOString() };
           db.collection("users").doc(String(chatId)).set({ messages: FieldValue.arrayUnion(userMsg) }, { merge: true }).catch(e => console.error("Lưu bg lỗi:", e.message));
           return res.end();
         }
       }
 
       // Lệnh reset bộ nhớ
-      if (cleanText(text).toLowerCase() === "quên hết đi nào") {
+      if (!isImage && cleanText(messageContent).toLowerCase() === "quên hết đi nào") {
         await clearSessionHistory(String(chatId));
         await telegram.reply(chatId, "Em mất trí nhớ rồi, huhu!");
         return res.end();
@@ -351,7 +371,7 @@ exports.webhook = onRequest(async (req, res) => {
       }
 
       // Nếu người dùng reply (trích dẫn) một tin nhắn khác, đính kèm nội dung đó vào prompt
-      let cleanPrompt = text;
+      let cleanPrompt = messageContent;
       let quoteContext = "";
       if (message.reply_to_message) {
         const replied = message.reply_to_message;
@@ -367,7 +387,7 @@ exports.webhook = onRequest(async (req, res) => {
       const groupContext = await buildGroupProfileContext(participants, cleanPrompt, userId, isGroup);
       const rawMsg = await llm.chat(String(chatId), cleanPrompt, senderName, userId, null, quoteContext, forceIgnoreCheck, groupContext);
       
-      const userMsgData = { role: "user", text, senderName, senderId: userId, createdAt: new Date().toISOString() };
+      const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, createdAt: new Date().toISOString() };
       
       if (rawMsg.trim() === "IGNORE") {
         db.collection("users").doc(String(chatId)).set({ messages: FieldValue.arrayUnion(userMsgData) }, { merge: true });
@@ -384,16 +404,6 @@ exports.webhook = onRequest(async (req, res) => {
       db.collection("users").doc(String(chatId)).set({ messages: FieldValue.arrayUnion(userMsgData, botMsgData) }, { merge: true });
 
       return res.end();
-    }
-
-    // Xử lý ảnh (chỉ trong chat 1-1)
-    if (message.photo && chatType === "private") {
-      const fileId = message.photo[message.photo.length - 1].file_id;
-      const imageBinary = await telegram.getImageBinary(fileId);
-      const msg = await llm.multimodal(imageBinary);
-      await telegram.reply(chatId, msg);
-      return res.end();
-    }
 
     return res.end();
   }
@@ -421,27 +431,48 @@ exports.webhook = onRequest(async (req, res) => {
       continue;
     }
 
-    // ── Tin nhắn văn bản
-    if (event.message.type === "text") {
-      let isDirectlyTargeted = false;
-      let isImplicitlyTargeted = false;
+    // ── Xử lý tin nhắn (Text hoặc Image trong 1-1)
+    let messageContent = null;
+    let isImage = false;
 
-      if (event.source.type === "user") {
+    if (event.message.type === "text") {
+      messageContent = event.message.text;
+    } else if (event.message.type === "image" && event.source.type === "user") {
+      console.log(`[LINE] Đang xử lý ảnh từ User ${userId}...`);
+      const imageBinary = await line.getImageBinary(event.message.id);
+      const imgDesc = await llm.multimodal(imageBinary);
+      messageContent = `[BỨC ẢNH NGƯỜI DÙNG VỪA GỬI ĐẾN]: "${imgDesc.trim()}". Hãy phản hồi tự nhiên dựa trên mô tả bức ảnh này.`;
+      isImage = true;
+    } else if (event.message.type === "file" && event.source.type === "user") {
+      const fileName = event.message.fileName || "document";
+      console.log(`[LINE] Đang xử lý file ${fileName} từ User ${userId}...`);
+      const localPath = await line.downloadMessageFile(event.message.id, fileName);
+      const fileDesc = await llm.analyzeDocument(localPath);
+      messageContent = `[TÀI LIỆU NGƯỜI DÙNG VỪA GỬI ĐẾN: ${fileName}]:\n"${fileDesc.trim()}"\n\nHãy phân tích và trả lời người dùng dựa trên thông tin tóm tắt này.`;
+      isImage = true; // Use isImage=true to prevent "quên hết đi nào" reset for files
+    }
+
+    if (!messageContent) continue;
+
+    let isDirectlyTargeted = false;
+    let isImplicitlyTargeted = false;
+
+    if (event.source.type === "user") {
+      isDirectlyTargeted = true;
+    } else {
+      const isMentioned = event.message.mention?.mentionees?.some(m => m.isSelf === true);
+      if (isMentioned) {
         isDirectlyTargeted = true;
-      } else {
-        const isMentioned = event.message.mention?.mentionees?.some(m => m.isSelf === true);
-        if (isMentioned) {
-          isDirectlyTargeted = true;
-        } else if (/\bannie\b/i.test(event.message.text)) {
-          isImplicitlyTargeted = true;
-        }
+      } else if (/\bannie\b/i.test(messageContent)) {
+        isImplicitlyTargeted = true;
+      }
 
         if (!isDirectlyTargeted && !isImplicitlyTargeted) {
           const groupSessionId = event.source.groupId || event.source.roomId;
           db.collection("users").doc(groupSessionId).set({
             messages: FieldValue.arrayUnion({
               role: "user",
-              text: event.message.text,
+              text: messageContent,
               senderId: userId,
               lineMessageId: event.message.id,
               createdAt: new Date().toISOString()
@@ -454,12 +485,12 @@ exports.webhook = onRequest(async (req, res) => {
       const sessionId = event.source.groupId || event.source.roomId || userId;
 
       // Lấy tên hiển thị của người gửi
-      const groupId = event.source.groupId || event.source.roomId;
-      const profile = await line.getUserProfile(userId, groupId);
+      const profileGroupId = event.source.groupId || event.source.roomId;
+      const profile = await line.getUserProfile(userId, profileGroupId);
       const senderName = profile?.displayName || "User";
 
       // Lệnh reset bộ nhớ
-      if (cleanText(event.message.text).toLowerCase() === "quên hết đi nào") {
+      if (!isImage && cleanText(messageContent).toLowerCase() === "quên hết đi nào") {
         await clearSessionHistory(sessionId);
         await line.reply(event.replyToken, [{ type: "text", text: "Em mất trí nhớ rồi, huhu!" }]);
         continue;
@@ -474,7 +505,7 @@ exports.webhook = onRequest(async (req, res) => {
       const messagesArray = sessionData.messages || [];
 
       // Nếu người dùng reply (trích dẫn) một tin nhắn khác, tìm nội dung trong mảng history
-      let cleanPrompt = event.message.text;
+      let cleanPrompt = messageContent;
       let quoteContext = "";
       const quotedId = event.message.quotedMessageId;
       if (quotedId) {
@@ -520,7 +551,7 @@ exports.webhook = onRequest(async (req, res) => {
       const groupContext = await buildGroupProfileContext(participants, cleanPrompt, userId, isGroup);
       const rawMsg = await llm.chat(sessionId, cleanPrompt, senderName, userId, event.message.id, quoteContext, forceIgnoreCheck, groupContext);
 
-      const userMsgData = { role: "user", text: event.message.text, senderName, senderId: userId, lineMessageId: event.message.id, createdAt: new Date().toISOString() };
+      const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, lineMessageId: event.message.id, createdAt: new Date().toISOString() };
       
       if (rawMsg.trim() === "IGNORE") {
         db.collection("users").doc(sessionId).set({ messages: FieldValue.arrayUnion(userMsgData) }, { merge: true });
@@ -543,14 +574,6 @@ exports.webhook = onRequest(async (req, res) => {
       db.collection("users").doc(sessionId).set({ messages: FieldValue.arrayUnion(userMsgData, botMsgData) }, { merge: true }).catch(e => console.error("[LINE] DB save error:", e.message));
 
       continue;
-    }
-
-    // ── Tin nhắn ảnh (chỉ trong chat 1-1)
-    if (event.message.type === "image" && event.source.type === "user") {
-      const imageBinary = await line.getImageBinary(event.message.id);
-      const msg = await llm.multimodal(imageBinary);
-      await line.reply(event.replyToken, [{ type: "text", text: msg.replace(/\*\*/g, "") }]);
-    }
   }
 
   res.end();

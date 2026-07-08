@@ -1,4 +1,7 @@
 const axios = require("axios");
+const fs = require("fs");
+const path = require("path");
+const os = require("os");
 
 const LINE_HEADER = {
   "Content-Type": "application/json",
@@ -85,4 +88,11 @@ const push = async (to, payload) => {
   }
 };
 
-module.exports = { getImageBinary, reply, getUserProfile, push };
+const downloadMessageFile = async (messageId, fileName) => {
+  const fileData = await getImageBinary(messageId);
+  const localPath = path.join(os.tmpdir(), `${messageId}_${fileName}`);
+  fs.writeFileSync(localPath, fileData);
+  return localPath;
+};
+
+module.exports = { getImageBinary, downloadMessageFile, reply, getUserProfile, push };

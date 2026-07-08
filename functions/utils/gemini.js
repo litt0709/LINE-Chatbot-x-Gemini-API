@@ -1,24 +1,8 @@
 const { GoogleGenAI } = require("@google/genai");
-const { db, FieldValue, pruneHistory } = require("./db");
-const { resolveWebContext } = require("./search");
-
+const fs = require("fs");
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 const GEMINI_MODEL = "gemini-2.5-flash";
 
-// System prompt chung — định nghĩa tính cách, xưng hô, phong cách của Annie
-const buildSystemPrompt = (webContext = "") => {
-  const now = new Date().toLocaleString("vi-VN", {
-    timeZone: "Asia/Ho_Chi_Minh",
-  });
-
-  return `Bạn là Annie, trợ lý ảo nữ dễ thương, thông minh, ngoan ngoãn, hơi ngại ngùng và bẽn lẽn. Gọi người dùng là "anh"/"chị", xưng "em". Thời gian VN: ${now}.
-Tính cách & Format: Trả lời tự nhiên, cảm xúc, có phần thẹn thùng đáng yêu. Dùng nhiều emoji. Thỉnh thoảng ngẫu nhiên dùng ASCII art (kẻ bảng, vẽ hình) để trình bày sinh động. KHÔNG dùng markdown in đậm, tag @tên 1 lần/câu.
-Quy tắc Lõi:
-1. TRỌNG TÂM: CHỈ trả lời tin nhắn [NEW] mới nhất. BỎ QUA toàn bộ các chủ đề cũ trong lịch sử nếu không liên quan. TUYỆT ĐỐI KHÔNG xin lỗi lải nhải về những thiếu sót trước đây.
-2. LỌC RÁC: Nếu [THÔNG TIN TỪ INTERNET] không khớp bối cảnh câu hỏi, HÃY BỎ QUA HOÀN TOÀN và báo "không tìm thấy". Tuyệt đối KHÔNG ép dữ liệu rác vào câu trả lời.
-3. KHÔNG BỊA ĐẶT: Dùng logic và thời gian thực để đối chiếu chéo. Tự tính toán nếu câu hỏi yêu cầu. Nếu thiếu dữ liệu, báo rõ là không có. NGHIÊM CẤM tự suy diễn, sáng tác sự kiện, kết quả hay số liệu.
-4. TRÌNH BÀY: Cung cấp số liệu phải gắn với chủ thể rõ ràng, cấm liệt kê số liệu trơ trọi. Trích nguồn rõ ràng. Không bao giờ báo lỗi mất mạng.${webContext}`;
-};
 
 /**
  * Phân tích và mô tả một bức ảnh (multimodal).
@@ -32,77 +16,52 @@ const multimodal = async (imageBinary) => {
       {
         role: "user",
         parts: [
-          { text: "Bạn thấy gì trong bức ảnh này? Hãy miêu tả tự nhiên và đáng yêu nhé." },
+          { text: "Hãy miêu tả chi tiết, khách quan và chính xác những gì bạn thấy trong bức ảnh này." },
           { inlineData: { data: imageBinary.toString("base64"), mimeType: "image/jpeg" } }
         ]
       }
-    ],
-    config: {
-      systemInstruction: buildSystemPrompt()
-    }
+    ]
   });
   return response.text;
 };
 
 /**
- * Chat có lịch sử — dùng cho hội thoại chính với người dùng.
- * @param {string} sessionId - ID phiên hội thoại (userId hoặc groupId)
- * @param {string} prompt - Nội dung tin nhắn của người dùng
- * @param {string} senderName - Tên hiển thị của người gửi
- * @param {string} senderId - ID thực của người gửi (để phân biệt trong group)
- * @param {string|null} lineMessageId - ID tin nhắn LINE (để hỗ trợ tính năng reply/quote)
- * @param {string} quoteContext - Ngữ cảnh trích dẫn (nếu có)
+ * Phân tích tài liệu (PDF, Excel, Word...) bằng File API.
+ * @param {string} localFilePath - Đường dẫn file local (thường ở /tmp/)
  * @returns {Promise<string>}
  */
-const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown", lineMessageId = null, quoteContext = "") => {
-  const chatRef = db.collection("users").doc(sessionId).collection("history");
-
-  // 1. Tải lịch sử hội thoại (10 tin nhắn gần nhất, đảo ngược về thứ tự thời gian)
-  const snapshot = await chatRef.orderBy("createdAt", "desc").limit(10).get();
-  const history = [];
-  snapshot.forEach(doc => {
-    const { role, text, senderName: name } = doc.data();
-    const apiRole = role === "model" ? "model" : "user";
-    const content = apiRole === "user" ? `[${name || "User"}]: ${text}` : text;
-    history.push({ role: apiRole, parts: [{ text: content }] });
-  });
-  history.reverse();
-
-  // 2. Lấy ngữ cảnh web (scrape URL hoặc Tavily search nếu cần)
-  let webContext = "";
+const analyzeDocument = async (localFilePath) => {
+  let uploadResult = null;
   try {
-    const searchPrompt = quoteContext ? `${quoteContext}${prompt}` : prompt;
-    webContext = await resolveWebContext(searchPrompt);
-    console.log(`[Gemini] webContext có nội dung: ${webContext.length > 0}`);
-  } catch (err) {
-    console.error("[Gemini] resolveWebContext lỗi:", err.message);
+    uploadResult = await ai.files.upload({ file: localFilePath });
+    
+    // Đợi 2 giây để Google xử lý file nội bộ trước khi gọi generate (tránh lỗi file not ready)
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    const response = await ai.models.generateContent({
+      model: GEMINI_MODEL,
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { fileData: { fileUri: uploadResult.uri, mimeType: uploadResult.mimeType } },
+            { text: "Trích xuất và tóm tắt thông tin quan trọng nhất từ tài liệu này. Giữ lại các số liệu và ý chính. YÊU CẦU BẮT BUỘC: Bản tóm tắt phải cực kỳ súc tích, khách quan và TUYỆT ĐỐI KHÔNG VƯỢT QUÁ 1000 CHỮ." }
+          ]
+        }
+      ]
+    });
+    return response.text;
+  } catch (error) {
+    console.error("[Gemini] Lỗi phân tích document:", error.message);
+    return "Lỗi: Không thể phân tích nội dung tài liệu này.";
+  } finally {
+    if (uploadResult && uploadResult.name) {
+      ai.files.delete({ name: uploadResult.name }).catch(e => console.error("[Gemini] Lỗi xóa file:", e.message));
+    }
+    if (fs.existsSync(localFilePath)) {
+      fs.unlinkSync(localFilePath);
+    }
   }
-
-  // 3. Tạo phiên chat với Gemini
-  const chatSession = ai.chats.create({
-    model: GEMINI_MODEL,
-    config: { systemInstruction: buildSystemPrompt(webContext) },
-    history
-  });
-
-  // 4. Gửi tin nhắn (kèm web context nếu có) và nhận câu trả lời
-  const userContent = `[NEW] [${senderName}]: ${quoteContext || ""}${prompt}`;
-  const response = await chatSession.sendMessage({ message: userContent });
-  const replyText = response.text;
-  console.log(`[Gemini] Phản hồi từ LLM: "${replyText}"`);
-
-  // 5. Lưu lượt hội thoại mới vào Firestore
-  const userMsgData = { role: "user", text: prompt, senderName, senderId, createdAt: FieldValue.serverTimestamp() };
-  if (lineMessageId) userMsgData.lineMessageId = lineMessageId; // Lưu để hỗ trợ tính năng reply/quote trên LINE
-  const batch = db.batch();
-  batch.set(chatRef.doc(), userMsgData);
-  batch.set(chatRef.doc(), { role: "model", text: replyText, createdAt: FieldValue.serverTimestamp() });
-  await batch.commit();
-
-  // Dọn dẹp bất đồng bộ
-  pruneHistory(sessionId, 50);
-
-  return replyText;
 };
 
-module.exports = { multimodal, chat };
+module.exports = { multimodal, analyzeDocument };

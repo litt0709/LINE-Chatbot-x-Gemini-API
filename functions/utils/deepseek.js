@@ -90,5 +90,7 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   }
 };
 
-module.exports = { chat };
+const { multimodal, analyzeDocument } = require("./gemini");
+
+module.exports = { chat, multimodal, analyzeDocument };
 
