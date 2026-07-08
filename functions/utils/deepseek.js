@@ -1,5 +1,5 @@
 const axios = require("axios");
-const { db, FieldValue, pruneHistory } = require("./db");
+const { db, FieldValue } = require("./db");
 const { resolveWebContext } = require("./search");
 
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
@@ -30,18 +30,20 @@ Quy tắc Lõi:
  * @returns {Promise<string>}
  */
 const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown", lineMessageId = null, quoteContext = "") => {
-  const chatRef = db.collection("users").doc(sessionId).collection("history");
-
-  // 1. Tải lịch sử hội thoại (20 tin nhắn gần nhất, đảo ngược về thứ tự thời gian)
-  const snapshot = await chatRef.orderBy("createdAt", "desc").limit(20).get();
+  // 1. Tải lịch sử hội thoại từ mảng `messages`
+  const sessionRef = db.collection("users").doc(sessionId);
+  const sessionDoc = await sessionRef.get();
+  const messagesArray = sessionDoc.data()?.messages || [];
+  
   const history = [];
-  snapshot.forEach(doc => {
-    const { role, text, senderName: name, senderId: sid } = doc.data();
+  // LLM chỉ cần tối đa 20 tin nhắn gần nhất để hiểu bối cảnh
+  const recentMessages = messagesArray.slice(-20);
+  recentMessages.forEach(msg => {
+    const { role, text, senderName: name } = msg;
     const apiRole = role === "model" ? "assistant" : role;
     const content = apiRole === "user" ? `[${name || "User"}]: ${text}` : text;
     history.push({ role: apiRole, content });
   });
-  history.reverse();
 
   // 2. Lấy ngữ cảnh web (scrape URL hoặc Tavily search nếu cần)
   let webContext = "";
@@ -73,16 +75,15 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
     const replyText = data.choices[0].message.content;
     console.log(`[DeepSeek] Phản hồi từ LLM: "${replyText}"`);
 
-    // 5. Lưu lượt hội thoại mới vào Firestore
-    const userMsgData = { role: "user", text: prompt, senderName, senderId, createdAt: FieldValue.serverTimestamp() };
+    // 5. Lưu lượt hội thoại mới vào Firestore (Gộp chung vào mảng)
+    const userMsgData = { role: "user", text: prompt, senderName, senderId, createdAt: new Date().toISOString() };
     if (lineMessageId) userMsgData.lineMessageId = lineMessageId; // Lưu để hỗ trợ tính năng reply/quote trên LINE
-    const batch = db.batch();
-    batch.set(chatRef.doc(), userMsgData);
-    batch.set(chatRef.doc(), { role: "model", text: replyText, createdAt: FieldValue.serverTimestamp() });
-    await batch.commit();
-
-    // Dọn dẹp bất đồng bộ
-    pruneHistory(sessionId, 50);
+    
+    const botMsgData = { role: "model", text: replyText, createdAt: new Date().toISOString() };
+    
+    await db.collection("users").doc(sessionId).set({
+      messages: FieldValue.arrayUnion(userMsgData, botMsgData)
+    }, { merge: true });
 
     return replyText;
   } catch (error) {

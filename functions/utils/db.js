@@ -8,28 +8,20 @@ if (admin.apps.length === 0) {
 const db = admin.firestore();
 
 /**
- * Dọn dẹp lịch sử chat, chỉ giữ lại N tin nhắn mới nhất để tối ưu dung lượng và chi phí Firestore.
+ * Thêm một tin nhắn vào mảng lịch sử của phiên (session).
  * @param {string} sessionId
- * @param {number} limit
+ * @param {Object} messageObj
  */
-const pruneHistory = async (sessionId, limit = 50) => {
+const appendMessageToArray = async (sessionId, messageObj) => {
   try {
-    const chatRef = db.collection("users").doc(sessionId).collection("history");
-    const snapshot = await chatRef.orderBy("createdAt", "desc").get();
-    
-    if (snapshot.size <= limit) return;
-    
-    const batch = db.batch();
-    const docsToDelete = snapshot.docs.slice(limit);
-    docsToDelete.forEach(doc => {
-      batch.delete(doc.ref);
-    });
-    await batch.commit();
-    console.log(`[Firestore] Đã tự động xóa ${docsToDelete.length} tin nhắn cũ của session: ${sessionId}`);
+    const sessionRef = db.collection("users").doc(sessionId);
+    await sessionRef.set({
+      messages: FieldValue.arrayUnion(messageObj)
+    }, { merge: true });
   } catch (error) {
-    console.error(`[Firestore] Lỗi tự động dọn dẹp lịch sử ${sessionId}:`, error.message);
+    console.error(`[Firestore] Lỗi thêm tin nhắn vào mảng ${sessionId}:`, error.message);
   }
 };
 
-module.exports = { db, FieldValue, pruneHistory };
+module.exports = { db, FieldValue, appendMessageToArray };
 

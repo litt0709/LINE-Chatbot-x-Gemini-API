@@ -7,6 +7,9 @@ const telegram = require("./utils/telegram");
 const llm = require("./utils/llm");
 const { generateDailyNewsDigest } = require("./utils/news");
 
+let cachedTgParticipants = null;
+let cachedLineParticipants = null;
+
 // ─── CẤU HÌNH WHITELIST ──────────────────────────────────────────────────────
 // Đặt "*" để cho phép tất cả mọi người dùng bot.
 
@@ -226,18 +229,36 @@ exports.webhook = onRequest(async (req, res) => {
       const sessionDoc = await sessionRef.get();
       const sessionParticipants = sessionDoc.data()?.participants || {};
 
-      // Lưu và cập nhật bản đồ tên → userId (participants) TOÀN CỤC cho Telegram
-      const globalRef = db.collection("metadata").doc("tg_participants");
-      const globalDoc = await globalRef.get();
-      const globalParticipants = globalDoc.data() || {};
+      // Cập nhật bản đồ tên → userId (participants) TOÀN CỤC cho Telegram (với cache RAM)
+      if (!cachedTgParticipants) {
+        const globalRef = db.collection("metadata").doc("tg_participants");
+        const globalDoc = await globalRef.get();
+        cachedTgParticipants = globalDoc.data() || {};
+      }
 
       // Gộp và cập nhật tên người gửi mới
-      const participants = { ...sessionParticipants, ...globalParticipants };
-      participants[senderName.toLowerCase()] = userId;
-      if (message.from.username) participants[message.from.username.toLowerCase()] = userId;
+      const participants = { ...sessionParticipants, ...cachedTgParticipants };
+      
+      let hasNewData = false;
+      const lowerName = senderName.toLowerCase();
+      if (participants[lowerName] !== userId) {
+        participants[lowerName] = userId;
+        cachedTgParticipants[lowerName] = userId;
+        hasNewData = true;
+      }
+      if (message.from.username) {
+        const lowerUsername = message.from.username.toLowerCase();
+        if (participants[lowerUsername] !== userId) {
+          participants[lowerUsername] = userId;
+          cachedTgParticipants[lowerUsername] = userId;
+          hasNewData = true;
+        }
+      }
 
-      // Lưu bất đồng bộ sang global
-      globalRef.set(participants, { merge: true }).catch(e => console.error("[Telegram] Lưu participants lỗi:", e.message));
+      // Lưu bất đồng bộ sang global nếu có dữ liệu mới
+      if (hasNewData) {
+        db.collection("metadata").doc("tg_participants").set(cachedTgParticipants, { merge: true }).catch(e => console.error("[Telegram] Lưu participants lỗi:", e.message));
+      }
 
       // Nếu người dùng reply (trích dẫn) một tin nhắn khác, đính kèm nội dung đó vào prompt
       let cleanPrompt = text;
@@ -301,16 +322,15 @@ exports.webhook = onRequest(async (req, res) => {
         if (!isMentioned) {
           const groupSessionId = event.source.groupId || event.source.roomId;
           // Chỉ lưu tin nhắn nhẹ nếu bot KHÔNG được đề cập (để phục vụ lookup sau này)
-          db.collection("users").doc(groupSessionId).collection("history").doc().set({
-            role: "user",
-            text: event.message.text,
-            senderId: userId,
-            lineMessageId: event.message.id,
-            createdAt: FieldValue.serverTimestamp()
-          }).then(() => {
-            // Dọn dẹp bất đồng bộ, giữ lịch sử 50 tin nhắn gần nhất
-            pruneHistory(groupSessionId, 50);
-          }).catch(e => console.error("[LINE] Lỗi lưu group message:", e.message));
+          db.collection("users").doc(groupSessionId).set({
+            messages: FieldValue.arrayUnion({
+              role: "user",
+              text: event.message.text,
+              senderId: userId,
+              lineMessageId: event.message.id,
+              createdAt: new Date().toISOString()
+            })
+          }, { merge: true }).catch(e => console.error("[LINE] Lỗi lưu group message:", e.message));
           continue; // Bot không được tag → dừng xử lý, không gọi LLM
         }
       }
@@ -329,16 +349,22 @@ exports.webhook = onRequest(async (req, res) => {
         continue;
       }
 
-      // Nếu người dùng reply (trích dẫn) một tin nhắn khác, tìm nội dung trong lịch sử Firestore
+      // 1. Tải toàn bộ dữ liệu session (participants và messages) 1 lần duy nhất
+      const sessionRef = db.collection("users").doc(sessionId);
+      const sessionDoc = await sessionRef.get();
+      const sessionData = sessionDoc.data() || {};
+      
+      const sessionParticipants = sessionData.participants || {};
+      const messagesArray = sessionData.messages || [];
+
+      // Nếu người dùng reply (trích dẫn) một tin nhắn khác, tìm nội dung trong mảng history
       let cleanPrompt = event.message.text;
       let quoteContext = "";
       const quotedId = event.message.quotedMessageId;
       if (quotedId) {
         try {
-          const chatRef = db.collection("users").doc(sessionId).collection("history");
-          const quotedSnap = await chatRef.where("lineMessageId", "==", quotedId).limit(1).get();
-          if (!quotedSnap.empty) {
-            const q = quotedSnap.docs[0].data();
+          const q = messagesArray.find(m => m.lineMessageId === quotedId);
+          if (q) {
             const quotedFrom = q.senderName || (q.role === "model" ? "Annie" : "ai đó");
             const fullText = q.text;
             quoteContext = `[Đang trả lời tin nhắn của ${quotedFrom}: "${fullText}"]\n`;
@@ -348,22 +374,28 @@ exports.webhook = onRequest(async (req, res) => {
         }
       }
 
-      // Lấy participants lịch sử của session này (nếu có) làm fallback
-      const sessionRef = db.collection("users").doc(sessionId);
-      const sessionDoc = await sessionRef.get();
-      const sessionParticipants = sessionDoc.data()?.participants || {};
-
-      // Lưu và cập nhật bản đồ tên → userId TOÀN CỤC cho LINE (chỉ lưu tên đầy đủ)
-      const globalRef = db.collection("metadata").doc("line_participants");
-      const globalDoc = await globalRef.get();
-      const globalParticipants = globalDoc.data() || {};
+      // Cập nhật bản đồ tên → userId TOÀN CỤC cho LINE (với cache RAM)
+      if (!cachedLineParticipants) {
+        const globalRef = db.collection("metadata").doc("line_participants");
+        const globalDoc = await globalRef.get();
+        cachedLineParticipants = globalDoc.data() || {};
+      }
 
       // Gộp và cập nhật tên người gửi mới
-      const participants = { ...sessionParticipants, ...globalParticipants };
-      participants[senderName.toLowerCase()] = userId;
+      const participants = { ...sessionParticipants, ...cachedLineParticipants };
+      const lowerName = senderName.toLowerCase();
+      
+      let hasNewData = false;
+      if (participants[lowerName] !== userId) {
+        participants[lowerName] = userId;
+        cachedLineParticipants[lowerName] = userId;
+        hasNewData = true;
+      }
 
-      // Lưu bất đồng bộ sang global
-      globalRef.set(participants, { merge: true }).catch(e => console.error("[LINE] Lưu participants lỗi:", e.message));
+      // Lưu bất đồng bộ sang global nếu có dữ liệu mới
+      if (hasNewData) {
+        db.collection("metadata").doc("line_participants").set(cachedLineParticipants, { merge: true }).catch(e => console.error("[LINE] Lưu participants lỗi:", e.message));
+      }
 
       console.log(`[LINE] Participants map cho Session:`, JSON.stringify(participants));
 
@@ -376,16 +408,22 @@ exports.webhook = onRequest(async (req, res) => {
 
       const sentMessages = await line.reply(event.replyToken, [lineMsg]);
 
-      // Lưu LINE message ID của tin nhắn bot vào Firestore để hỗ trợ reply/quote sau này
+      // Lưu LINE message ID của tin nhắn bot vào mảng để hỗ trợ reply/quote sau này
       if (sentMessages.length > 0) {
-        const chatRef = db.collection("users").doc(sessionId).collection("history");
-        const botMsgSnap = await chatRef.orderBy("createdAt", "desc").limit(1).get();
-        if (!botMsgSnap.empty && botMsgSnap.docs[0].data().role === "model") {
-          botMsgSnap.docs[0].ref.update({ lineMessageId: sentMessages[0].id }).catch(e =>
-            console.error("[LINE] Lưu bot lineMessageId lỗi:", e.message)
-          );
-        }
-
+        db.runTransaction(async t => {
+          const doc = await t.get(sessionRef);
+          const data = doc.data();
+          if (data && data.messages) {
+            const messages = data.messages;
+            for (let i = messages.length - 1; i >= 0; i--) {
+              if (messages[i].role === "model") {
+                messages[i].lineMessageId = sentMessages[0].id;
+                t.update(sessionRef, { messages });
+                break;
+              }
+            }
+          }
+        }).catch(e => console.error("[LINE] Lỗi update bot lineMessageId:", e));
       }
       continue;
     }
@@ -449,4 +487,38 @@ exports.afternoonNewsNotification = onSchedule({
   memory: "512MiB"
 }, async (event) => {
   await sendNotifications();
+});
+
+// ─── HISTORY CLEANUP CRONJOB ──────────────────────────────────────────────────
+exports.dailyHistoryCleanup = onSchedule({
+  schedule: "0 2 * * *", // Chạy lúc 2h sáng mỗi ngày
+  timeZone: "Asia/Ho_Chi_Minh",
+  timeoutSeconds: 300,
+  memory: "256MiB"
+}, async (event) => {
+  console.log("[Cleanup] Bắt đầu dọn dẹp mảng lịch sử (giữ 20 tin nhắn mới nhất)...");
+  try {
+    const usersSnap = await db.collection("users").get();
+    let cleanedCount = 0;
+    
+    // Sử dụng batch để tối ưu số lần commit
+    const batch = db.batch();
+    
+    usersSnap.forEach(doc => {
+      const data = doc.data();
+      if (data && data.messages && data.messages.length > 20) {
+        const recentMessages = data.messages.slice(-20);
+        batch.update(doc.ref, { messages: recentMessages });
+        cleanedCount++;
+      }
+    });
+
+    if (cleanedCount > 0) {
+      await batch.commit();
+    }
+    
+    console.log(`[Cleanup] Đã dọn dẹp lịch sử thành công cho ${cleanedCount} sessions.`);
+  } catch (error) {
+    console.error("[Cleanup] Lỗi khi dọn dẹp lịch sử:", error);
+  }
 });

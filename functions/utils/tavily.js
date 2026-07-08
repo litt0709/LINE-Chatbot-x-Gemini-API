@@ -29,7 +29,7 @@ const searchTavily = async (query) => {
     search_depth: isTodaySensitive ? "advanced" : "basic",
     include_answer: true,
     max_results: 5,
-    ...(isTodaySensitive && { time_range: "week" })
+    ...(isTodaySensitive && { time_range: "day" })
   };
 
   try {

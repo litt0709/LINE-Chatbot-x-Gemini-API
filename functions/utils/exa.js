@@ -13,6 +13,9 @@ const searchExa = async (query) => {
     return null;
   }
 
+  const { TODAY_KEYWORDS } = require("./tavily");
+  const isTodaySensitive = TODAY_KEYWORDS.some(kw => query.toLowerCase().includes(kw));
+
   const params = {
     query,
     type: "magic",
@@ -22,6 +25,12 @@ const searchExa = async (query) => {
       text: { maxCharacters: 1500 }
     }
   };
+
+  if (isTodaySensitive) {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    params.startPublishedDate = yesterday.toISOString();
+  }
 
   try {
     console.log(`[Exa] Query: "${query}"`);
