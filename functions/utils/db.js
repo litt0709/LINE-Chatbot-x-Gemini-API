@@ -7,8 +7,11 @@ if (admin.apps.length === 0) {
 
 const db = admin.firestore();
 
+const rtdb = admin.database();
+
 /**
  * Thêm một tin nhắn vào mảng lịch sử của phiên (session).
+ * (Giữ lại cho tương thích ngược nếu cần)
  * @param {string} sessionId
  * @param {Object} messageObj
  */
@@ -20,6 +23,52 @@ const appendMessageToArray = async (sessionId, messageObj) => {
     }, { merge: true });
   } catch (error) {
     console.error(`[Firestore] Lỗi thêm tin nhắn vào mảng ${sessionId}:`, error.message);
+  }
+};
+
+/**
+ * Thêm một hoặc nhiều tin nhắn thô vào Realtime Database (Unlimited Writes).
+ * @param {string} sessionId 
+ * @param {...Object} messages
+ */
+const appendRawMessage = async (sessionId, ...messages) => {
+  try {
+    const ref = rtdb.ref(`chats/${sessionId}/messages`);
+    const promises = messages.map(msg => ref.push(msg));
+    await Promise.all(promises);
+  } catch (error) {
+    console.error(`[RTDB] Lỗi lưu tin nhắn thô ${sessionId}:`, error.message);
+  }
+};
+
+/**
+ * Lấy danh sách tin nhắn thô từ Realtime Database.
+ * @param {string} sessionId 
+ * @returns {Promise<Array>}
+ */
+const getRawMessages = async (sessionId) => {
+  try {
+    const snapshot = await rtdb.ref(`chats/${sessionId}/messages`).once('value');
+    if (!snapshot.exists()) return [];
+    
+    // Convert object of objects to array
+    const data = snapshot.val();
+    return Object.keys(data).map(key => data[key]);
+  } catch (error) {
+    console.error(`[RTDB] Lỗi lấy tin nhắn thô ${sessionId}:`, error.message);
+    return [];
+  }
+};
+
+/**
+ * Xóa toàn bộ tin nhắn thô của một session trên Realtime Database.
+ * @param {string} sessionId 
+ */
+const clearRawMessages = async (sessionId) => {
+  try {
+    await rtdb.ref(`chats/${sessionId}/messages`).remove();
+  } catch (error) {
+    console.error(`[RTDB] Lỗi xóa tin nhắn thô ${sessionId}:`, error.message);
   }
 };
 
@@ -42,5 +91,15 @@ const saveUserProfile = async (userId, data) => {
   }
 };
 
-module.exports = { db, FieldValue, appendMessageToArray, getUserProfile, saveUserProfile };
+module.exports = { 
+  db, 
+  rtdb,
+  FieldValue, 
+  appendMessageToArray, 
+  appendRawMessage,
+  getRawMessages,
+  clearRawMessages,
+  getUserProfile, 
+  saveUserProfile 
+};
 

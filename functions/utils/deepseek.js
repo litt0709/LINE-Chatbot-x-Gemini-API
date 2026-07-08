@@ -1,5 +1,5 @@
 const axios = require("axios");
-const { db, FieldValue } = require("./db");
+const { db, FieldValue, getUserProfile, getRawMessages } = require("./db");
 const { resolveWebContext } = require("./search");
 
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
@@ -34,12 +34,11 @@ Quy tắc:
  * @returns {Promise<string>}
  */
 const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown", lineMessageId = null, quoteContext = "", forceIgnoreCheck = false, groupContext = "") => {
-  // 1. Tải lịch sử hội thoại từ mảng `messages` và `summaries`
   const sessionRef = db.collection("users").doc(sessionId);
   const sessionDoc = await sessionRef.get();
   const sessionData = sessionDoc.data() || {};
-  const messagesArray = sessionData.messages || [];
   const summariesArray = sessionData.summaries || [];
+  const messagesArray = await getRawMessages(sessionId);
 
   const history = [];
   

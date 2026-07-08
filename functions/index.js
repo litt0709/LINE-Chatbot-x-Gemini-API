@@ -1,6 +1,6 @@
 const { onRequest } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
-const { db, FieldValue, pruneHistory, getUserProfile, saveUserProfile } = require("./utils/db");
+const { db, FieldValue, appendRawMessage, getRawMessages, clearRawMessages, getUserProfile, saveUserProfile } = require("./utils/db");
 const line = require("./utils/line");
 const telegram = require("./utils/telegram");
 
@@ -328,7 +328,7 @@ exports.webhook = onRequest(async (req, res) => {
       if (!isDirectlyTargeted && !isImplicitlyTargeted) {
         // Lưu background history và thoát
         const userMsg = { role: "user", text: messageContent, senderId: userId, createdAt: new Date().toISOString() };
-        db.collection("users").doc(String(chatId)).set({ messages: FieldValue.arrayUnion(userMsg) }, { merge: true }).catch(e => console.error("Lưu bg lỗi:", e.message));
+        await appendRawMessage(String(chatId), userMsg);
         return res.end();
       }
     }
@@ -398,7 +398,7 @@ exports.webhook = onRequest(async (req, res) => {
       const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, createdAt: new Date().toISOString() };
       
       if (rawMsg.trim() === "IGNORE") {
-        db.collection("users").doc(String(chatId)).set({ messages: FieldValue.arrayUnion(userMsgData) }, { merge: true });
+        await appendRawMessage(String(chatId), userMsgData);
         return res.end();
       }
 
@@ -409,7 +409,7 @@ exports.webhook = onRequest(async (req, res) => {
       await telegram.reply(chatId, msg);
       
       const botMsgData = { role: "model", text: botMsgText, createdAt: new Date().toISOString() };
-      db.collection("users").doc(String(chatId)).set({ messages: FieldValue.arrayUnion(userMsgData, botMsgData) }, { merge: true });
+      await appendRawMessage(String(chatId), userMsgData, botMsgData);
 
       return res.end();
 
@@ -476,16 +476,17 @@ exports.webhook = onRequest(async (req, res) => {
       }
 
         if (!isDirectlyTargeted && !isImplicitlyTargeted) {
-          const groupSessionId = event.source.groupId || event.source.roomId;
-          db.collection("users").doc(groupSessionId).set({
-            messages: FieldValue.arrayUnion({
-              role: "user",
-              text: messageContent,
-              senderId: userId,
-              lineMessageId: event.message.id,
-              createdAt: new Date().toISOString()
-            })
-          }, { merge: true }).catch(e => console.error("[LINE] Lỗi lưu group message:", e.message));
+          const sessionId = event.source.groupId || event.source.roomId;
+          const profile = await line.getUserProfile(userId, sessionId);
+          const senderName = profile?.displayName || "User";
+          await appendRawMessage(sessionId, {
+            role: "user",
+            text: messageContent,
+            senderName,
+            senderId: userId,
+            lineMessageId: event.message.id,
+            createdAt: new Date().toISOString()
+          });
           continue; 
         }
       }
@@ -569,7 +570,7 @@ exports.webhook = onRequest(async (req, res) => {
       const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, lineMessageId: event.message.id, createdAt: new Date().toISOString() };
       
       if (rawMsg.trim() === "IGNORE") {
-        db.collection("users").doc(sessionId).set({ messages: FieldValue.arrayUnion(userMsgData) }, { merge: true });
+        await appendRawMessage(sessionId, userMsgData);
         continue;
       }
 
@@ -586,7 +587,7 @@ exports.webhook = onRequest(async (req, res) => {
         botMsgData.lineMessageId = sentMessages[0].id;
       }
       
-      db.collection("users").doc(sessionId).set({ messages: FieldValue.arrayUnion(userMsgData, botMsgData) }, { merge: true }).catch(e => console.error("[LINE] DB save error:", e.message));
+      await appendRawMessage(sessionId, userMsgData, botMsgData);
 
       continue;
   }
@@ -660,8 +661,15 @@ exports.dailyHistoryCleanup = onSchedule({
     
     for (const doc of usersSnap.docs) {
       const data = doc.data();
+      const sessionId = doc.id;
       let needsUpdate = false;
       let updateData = {};
+
+      // Dọn dẹp trường messages cũ trên Firestore (nếu còn sót lại từ kiến trúc cũ)
+      if (data.messages !== undefined) {
+        updateData.messages = FieldValue.delete();
+        needsUpdate = true;
+      }
 
       // 1. Xóa các bản tóm tắt cũ hơn 24h
       let summaries = data.summaries || [];
@@ -672,10 +680,13 @@ exports.dailyHistoryCleanup = onSchedule({
         needsUpdate = true;
       }
 
-      // 2. Tóm tắt các tin nhắn thô hiện tại
-      if (data.messages && data.messages.length > 0) {
-        console.log(`[Cleanup] Đang tóm tắt ${data.messages.length} tin nhắn thô cho session: ${doc.id}`);
-        const summaryText = await llm.summarizeHistory(data.messages);
+      // 2. Lấy tin nhắn thô từ RTDB
+      const rawMessages = await getRawMessages(sessionId);
+
+      // 3. Tóm tắt các tin nhắn thô hiện tại
+      if (rawMessages && rawMessages.length > 0) {
+        console.log(`[Cleanup] Đang tóm tắt ${rawMessages.length} tin nhắn thô cho session: ${sessionId}`);
+        const summaryText = await llm.summarizeHistory(rawMessages);
         
         if (summaryText) {
           summaries.push({
@@ -685,11 +696,11 @@ exports.dailyHistoryCleanup = onSchedule({
           updateData.summaries = summaries;
         }
         
-        // Xóa sạch mảng messages thô vì đã tóm tắt xong
-        updateData.messages = [];
+        // Xóa sạch lịch sử trên RTDB vì đã tóm tắt xong
+        await clearRawMessages(sessionId);
         needsUpdate = true;
         
-        // Tránh bị Rate Limit của Gemini (15 RPM) nếu có quá nhiều Group
+        // Tránh bị Rate Limit của Gemini (15 RPM)
         await new Promise(r => setTimeout(r, 4000));
       }
 
