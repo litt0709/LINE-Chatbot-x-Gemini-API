@@ -3,7 +3,7 @@ const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { db, FieldValue, pruneHistory } = require("./utils/db");
 const line = require("./utils/line");
 const telegram = require("./utils/telegram");
-const messenger = require("./utils/messenger");
+
 const llm = require("./utils/llm");
 const { generateDailyNewsDigest } = require("./utils/news");
 
@@ -31,7 +31,7 @@ const ALLOWED_MESSENGER_USERS = [
 const isUserAllowed = (userId, platform) => {
   let list;
   if (platform === "TELEGRAM") list = ALLOWED_TELEGRAM_USERS;
-  else if (platform === "MESSENGER") list = ALLOWED_MESSENGER_USERS;
+
   else list = ALLOWED_LINE_USERS;
   return list.includes("*") || list.includes(userId);
 };
@@ -178,22 +178,7 @@ const buildLineMessage = (text, participants, isGroup = true) => {
 exports.webhook = onRequest(async (req, res) => {
   const platform = (process.env.PLATFORM || "LINE").toUpperCase();
 
-  // ── MESSENGER VERIFICATION ────────────────────────────────────────────────
   if (req.method === "GET") {
-    if (platform === "MESSENGER") {
-      const mode = req.query["hub.mode"];
-      const token = req.query["hub.verify_token"];
-      const challenge = req.query["hub.challenge"];
-
-      if (mode && token) {
-        if (mode === "subscribe" && token === process.env.MESSENGER_VERIFY_TOKEN) {
-          console.log("[Messenger] Webhook verified!");
-          return res.status(200).send(challenge);
-        } else {
-          return res.status(403).send("Verification failed");
-        }
-      }
-    }
     return res.status(200).send("OK GET");
   }
 
@@ -283,56 +268,6 @@ exports.webhook = onRequest(async (req, res) => {
     }
 
     return res.end();
-  }
-
-  // ── MESSENGER ─────────────────────────────────────────────────────────────
-  if (platform === "MESSENGER") {
-    const { object, entry } = req.body;
-    if (object !== "page" || !entry) return res.status(404).send("Not Found");
-
-    for (const pageEntry of entry) {
-      if (!pageEntry.messaging || !pageEntry.messaging[0]) continue;
-      const webhookEvent = pageEntry.messaging[0];
-      const senderId = webhookEvent.sender.id;
-
-      console.log(`[Messenger] User: ${senderId}`);
-
-      // Kiểm tra whitelist
-      if (!isUserAllowed(senderId, "MESSENGER")) {
-        console.log(`[Messenger] Từ chối User ${senderId}`);
-        continue;
-      }
-
-      // Xử lý tin nhắn văn bản
-      if (webhookEvent.message && webhookEvent.message.text) {
-        const text = webhookEvent.message.text;
-
-        // Đánh dấu đã xem & đang gõ phím
-        await messenger.sendAction(senderId, "mark_seen");
-        messenger.sendAction(senderId, "typing_on").catch(() => { });
-
-        // Lệnh reset bộ nhớ
-        if (cleanText(text).toLowerCase() === "quên hết đi nào") {
-          await clearSessionHistory(senderId);
-          await messenger.reply(senderId, "Em mất trí nhớ rồi, huhu!");
-          continue;
-        }
-
-        // Lấy tên người gửi
-        const senderName = await messenger.getUserProfile(senderId);
-
-        // Lưu ý: Messenger không cấp sẵn nội dung tin nhắn reply gốc qua webhook,
-        // chỉ cấp reply_to.mid, nên tạm bỏ qua quoteContext.
-        const rawMsg = await llm.chat(senderId, text, senderName, senderId, null, "");
-
-        // Messenger không hỗ trợ Markdown in đậm dạng **, xóa bỏ để dễ nhìn
-        const msg = rawMsg.replace(/\*\*/g, "");
-
-        await messenger.reply(senderId, msg);
-        messenger.sendAction(senderId, "typing_off").catch(() => { });
-      }
-    }
-    return res.status(200).send("EVENT_RECEIVED");
   }
 
   // ── LINE ──────────────────────────────────────────────────────────────────
@@ -467,12 +402,7 @@ exports.webhook = onRequest(async (req, res) => {
 });
 
 // ─── SCHEDULED NOTIFICATIONS ──────────────────────────────────────────────────
-exports.dailyNewsNotification = onSchedule({
-  schedule: process.env.NOTIFICATION_CRON_SCHEDULE || "0 8,13 * * *",
-  timeZone: "Asia/Ho_Chi_Minh",
-  timeoutSeconds: 300,
-  memory: "512MiB"
-}, async (event) => {
+const sendNotifications = async () => {
   const targetIdsStr = process.env.NOTIFICATION_TARGET_IDS || "";
   const targetIds = targetIdsStr.split(",").map(id => id.trim()).filter(Boolean);
   
@@ -487,7 +417,6 @@ exports.dailyNewsNotification = onSchedule({
   // Kiểm tra platform
   const isLine = !!process.env.CHANNEL_ACCESS_TOKEN;
   const isTelegram = !!process.env.TELEGRAM_BOT_TOKEN;
-  const isMessenger = !!process.env.MESSENGER_PAGE_ACCESS_TOKEN;
 
   for (const id of targetIds) {
     try {
@@ -497,12 +426,27 @@ exports.dailyNewsNotification = onSchedule({
       } else if (isTelegram) {
         await telegram.push(id, newsDigest);
         console.log(`[Schedule] Đã gửi bản tin cho Telegram ID: ${id}`);
-      } else if (isMessenger) {
-        await messenger.push(id, newsDigest);
-        console.log(`[Schedule] Đã gửi bản tin cho Messenger ID: ${id}`);
       }
     } catch (err) {
       console.error(`[Schedule] Lỗi khi gửi cho ID ${id}:`, err.message);
     }
   }
+};
+
+exports.morningNewsNotification = onSchedule({
+  schedule: "0 8 * * 1-5",
+  timeZone: "Asia/Ho_Chi_Minh",
+  timeoutSeconds: 300,
+  memory: "512MiB"
+}, async (event) => {
+  await sendNotifications();
+});
+
+exports.afternoonNewsNotification = onSchedule({
+  schedule: "30 13 * * 1-5",
+  timeZone: "Asia/Ho_Chi_Minh",
+  timeoutSeconds: 300,
+  memory: "512MiB"
+}, async (event) => {
+  await sendNotifications();
 });
