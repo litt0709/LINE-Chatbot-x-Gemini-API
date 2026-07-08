@@ -209,10 +209,27 @@ exports.webhook = onRequest(async (req, res) => {
     if (message.text) {
       const text = message.text;
 
-      // Trong group, chỉ trả lời khi được @tag
-      if (chatType !== "private") {
+      let isDirectlyTargeted = false;
+      let isImplicitlyTargeted = false;
+
+      if (chatType === "private") {
+        isDirectlyTargeted = true;
+      } else {
         const botUsername = process.env.TELEGRAM_BOT_USERNAME || "";
-        if (!botUsername || !text.includes(`@${botUsername}`)) return res.end();
+        if (botUsername && text.includes(`@${botUsername}`)) {
+          isDirectlyTargeted = true;
+        } else if (message.reply_to_message?.from?.username === botUsername) {
+          isDirectlyTargeted = true;
+        } else if (/\bannie\b/i.test(text)) {
+          isImplicitlyTargeted = true;
+        }
+
+        if (!isDirectlyTargeted && !isImplicitlyTargeted) {
+          // Lưu background history và thoát
+          const userMsg = { role: "user", text, senderId: userId, createdAt: new Date().toISOString() };
+          db.collection("users").doc(String(chatId)).set({ messages: FieldValue.arrayUnion(userMsg) }, { merge: true }).catch(e => console.error("Lưu bg lỗi:", e.message));
+          return res.end();
+        }
       }
 
       // Lệnh reset bộ nhớ
@@ -272,10 +289,23 @@ exports.webhook = onRequest(async (req, res) => {
         }
       }
 
-      const rawMsg = await llm.chat(String(chatId), cleanPrompt, senderName, userId, null, quoteContext);
+      const forceIgnoreCheck = (!isDirectlyTargeted && isImplicitlyTargeted);
+      const rawMsg = await llm.chat(String(chatId), cleanPrompt, senderName, userId, null, quoteContext, forceIgnoreCheck);
+      
+      const userMsgData = { role: "user", text, senderName, senderId: userId, createdAt: new Date().toISOString() };
+      
+      if (rawMsg.trim() === "IGNORE") {
+        db.collection("users").doc(String(chatId)).set({ messages: FieldValue.arrayUnion(userMsgData) }, { merge: true });
+        return res.end();
+      }
+
       // Convert @name → Telegram HTML mention thực sự
       const msg = convertTelegramMentions(rawMsg, participants);
       await telegram.reply(chatId, msg);
+      
+      const botMsgData = { role: "model", text: rawMsg, createdAt: new Date().toISOString() };
+      db.collection("users").doc(String(chatId)).set({ messages: FieldValue.arrayUnion(userMsgData, botMsgData) }, { merge: true });
+
       return res.end();
     }
 
@@ -316,12 +346,21 @@ exports.webhook = onRequest(async (req, res) => {
 
     // ── Tin nhắn văn bản
     if (event.message.type === "text") {
-      // Trong group/room: Lưu tin nhắn vào Firestore để hỗ trợ reply/quote sau này
-      if (event.source.type !== "user") {
+      let isDirectlyTargeted = false;
+      let isImplicitlyTargeted = false;
+
+      if (event.source.type === "user") {
+        isDirectlyTargeted = true;
+      } else {
         const isMentioned = event.message.mention?.mentionees?.some(m => m.isSelf === true);
-        if (!isMentioned) {
+        if (isMentioned) {
+          isDirectlyTargeted = true;
+        } else if (/\bannie\b/i.test(event.message.text)) {
+          isImplicitlyTargeted = true;
+        }
+
+        if (!isDirectlyTargeted && !isImplicitlyTargeted) {
           const groupSessionId = event.source.groupId || event.source.roomId;
-          // Chỉ lưu tin nhắn nhẹ nếu bot KHÔNG được đề cập (để phục vụ lookup sau này)
           db.collection("users").doc(groupSessionId).set({
             messages: FieldValue.arrayUnion({
               role: "user",
@@ -331,7 +370,7 @@ exports.webhook = onRequest(async (req, res) => {
               createdAt: new Date().toISOString()
             })
           }, { merge: true }).catch(e => console.error("[LINE] Lỗi lưu group message:", e.message));
-          continue; // Bot không được tag → dừng xử lý, không gọi LLM
+          continue; 
         }
       }
 
@@ -399,7 +438,15 @@ exports.webhook = onRequest(async (req, res) => {
 
       console.log(`[LINE] Participants map cho Session:`, JSON.stringify(participants));
 
-      const rawMsg = await llm.chat(sessionId, cleanPrompt, senderName, userId, event.message.id, quoteContext);
+      const forceIgnoreCheck = (!isDirectlyTargeted && isImplicitlyTargeted);
+      const rawMsg = await llm.chat(sessionId, cleanPrompt, senderName, userId, event.message.id, quoteContext, forceIgnoreCheck);
+
+      const userMsgData = { role: "user", text: event.message.text, senderName, senderId: userId, lineMessageId: event.message.id, createdAt: new Date().toISOString() };
+      
+      if (rawMsg.trim() === "IGNORE") {
+        db.collection("users").doc(sessionId).set({ messages: FieldValue.arrayUnion(userMsgData) }, { merge: true });
+        continue;
+      }
 
       // Xây dựng LINE message có proper mention tags
       const isGroup = event.source.type !== "user";
@@ -408,23 +455,13 @@ exports.webhook = onRequest(async (req, res) => {
 
       const sentMessages = await line.reply(event.replyToken, [lineMsg]);
 
-      // Lưu LINE message ID của tin nhắn bot vào mảng để hỗ trợ reply/quote sau này
+      const botMsgData = { role: "model", text: rawMsg, createdAt: new Date().toISOString() };
       if (sentMessages.length > 0) {
-        db.runTransaction(async t => {
-          const doc = await t.get(sessionRef);
-          const data = doc.data();
-          if (data && data.messages) {
-            const messages = data.messages;
-            for (let i = messages.length - 1; i >= 0; i--) {
-              if (messages[i].role === "model") {
-                messages[i].lineMessageId = sentMessages[0].id;
-                t.update(sessionRef, { messages });
-                break;
-              }
-            }
-          }
-        }).catch(e => console.error("[LINE] Lỗi update bot lineMessageId:", e));
+        botMsgData.lineMessageId = sentMessages[0].id;
       }
+      
+      db.collection("users").doc(sessionId).set({ messages: FieldValue.arrayUnion(userMsgData, botMsgData) }, { merge: true }).catch(e => console.error("[LINE] DB save error:", e.message));
+
       continue;
     }
 
@@ -491,25 +528,45 @@ exports.afternoonNewsNotification = onSchedule({
 
 // ─── HISTORY CLEANUP CRONJOB ──────────────────────────────────────────────────
 exports.dailyHistoryCleanup = onSchedule({
-  schedule: "0 2 * * *", // Chạy lúc 2h sáng mỗi ngày
+  schedule: "0 * * * *", // Chạy mỗi giờ (1h00, 2h00...)
   timeZone: "Asia/Ho_Chi_Minh",
   timeoutSeconds: 300,
   memory: "256MiB"
 }, async (event) => {
-  console.log("[Cleanup] Bắt đầu dọn dẹp mảng lịch sử (giữ 20 tin nhắn mới nhất)...");
+  console.log("[Cleanup] Bắt đầu dọn dẹp mảng lịch sử (giữ 4 giờ qua, max 1000 tin)...");
   try {
     const usersSnap = await db.collection("users").get();
     let cleanedCount = 0;
     
     // Sử dụng batch để tối ưu số lần commit
     const batch = db.batch();
+    const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000);
     
     usersSnap.forEach(doc => {
       const data = doc.data();
-      if (data && data.messages && data.messages.length > 20) {
-        const recentMessages = data.messages.slice(-20);
-        batch.update(doc.ref, { messages: recentMessages });
-        cleanedCount++;
+      if (data && data.messages && data.messages.length > 0) {
+        let needsUpdate = false;
+        
+        // 1. Lọc bỏ tin cũ hơn 4 giờ
+        let recentMessages = data.messages.filter(msg => {
+          if (!msg.createdAt) return true;
+          return new Date(msg.createdAt) >= fourHoursAgo;
+        });
+
+        if (recentMessages.length !== data.messages.length) {
+          needsUpdate = true;
+        }
+
+        // 2. Chặn trần 1000 tin nhắn
+        if (recentMessages.length > 1000) {
+          recentMessages = recentMessages.slice(-1000);
+          needsUpdate = true;
+        }
+
+        if (needsUpdate) {
+          batch.update(doc.ref, { messages: recentMessages });
+          cleanedCount++;
+        }
       }
     });
 

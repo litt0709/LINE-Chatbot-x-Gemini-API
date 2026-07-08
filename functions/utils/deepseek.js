@@ -29,16 +29,15 @@ Quy tắc Lõi:
  * @param {string} quoteContext - Ngữ cảnh trích dẫn (nếu có)
  * @returns {Promise<string>}
  */
-const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown", lineMessageId = null, quoteContext = "") => {
+const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown", lineMessageId = null, quoteContext = "", forceIgnoreCheck = false) => {
   // 1. Tải lịch sử hội thoại từ mảng `messages`
   const sessionRef = db.collection("users").doc(sessionId);
   const sessionDoc = await sessionRef.get();
   const messagesArray = sessionDoc.data()?.messages || [];
   
   const history = [];
-  // LLM chỉ cần tối đa 20 tin nhắn gần nhất để hiểu bối cảnh
-  const recentMessages = messagesArray.slice(-20);
-  recentMessages.forEach(msg => {
+  // Tải toàn bộ mảng `messages` (Đã được kiểm soát độ dài và thời gian bởi Cronjob)
+  messagesArray.forEach(msg => {
     const { role, text, senderName: name } = msg;
     const apiRole = role === "model" ? "assistant" : role;
     const content = apiRole === "user" ? `[${name || "User"}]: ${text}` : text;
@@ -59,8 +58,13 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   // Đưa quoteContext vào userContent để gửi sang API, tránh lưu quoteContext vào DB làm rác lịch sử
   const userContent = `[NEW] [${senderName}]: ${quoteContext || ""}${prompt}`;
 
+  let sysContent = buildSystemPrompt(webContext);
+  if (forceIgnoreCheck) {
+    sysContent += "\n\nBẮT BUỘC: Nếu câu nói của người dùng KHÔNG PHẢI là một câu hỏi trực tiếp hoặc lệnh trực tiếp yêu cầu bạn làm gì đó, bạn PHẢI trả lời chính xác bằng 1 từ: IGNORE. Tuyệt đối không giải thích thêm.";
+  }
+
   const messages = [
-    { role: "system", content: buildSystemPrompt(webContext) },
+    { role: "system", content: sysContent },
     ...history,
     { role: "user", content: userContent }
   ];
@@ -74,16 +78,6 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
     );
     const replyText = data.choices[0].message.content;
     console.log(`[DeepSeek] Phản hồi từ LLM: "${replyText}"`);
-
-    // 5. Lưu lượt hội thoại mới vào Firestore (Gộp chung vào mảng)
-    const userMsgData = { role: "user", text: prompt, senderName, senderId, createdAt: new Date().toISOString() };
-    if (lineMessageId) userMsgData.lineMessageId = lineMessageId; // Lưu để hỗ trợ tính năng reply/quote trên LINE
-    
-    const botMsgData = { role: "model", text: replyText, createdAt: new Date().toISOString() };
-    
-    await db.collection("users").doc(sessionId).set({
-      messages: FieldValue.arrayUnion(userMsgData, botMsgData)
-    }, { merge: true });
 
     return replyText;
   } catch (error) {
