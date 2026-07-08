@@ -596,7 +596,7 @@ exports.webhook = onRequest(async (req, res) => {
 });
 
 // ─── SCHEDULED NOTIFICATIONS ──────────────────────────────────────────────────
-const sendNotifications = async () => {
+const sendNotifications = async (type = "afternoon") => {
   const targetIdsStr = process.env.NOTIFICATION_TARGET_IDS || "";
   const targetIds = targetIdsStr.split(",").map(id => id.trim()).filter(Boolean);
   
@@ -605,8 +605,8 @@ const sendNotifications = async () => {
     return;
   }
 
-  console.log(`[Schedule] Bắt đầu tạo bản tin ngày cho ${targetIds.length} mục tiêu...`);
-  const newsDigest = await generateDailyNewsDigest();
+  console.log(`[Schedule] Bắt đầu tạo bản tin ngày cho ${targetIds.length} mục tiêu (loại: ${type})...`);
+  const newsDigest = await generateDailyNewsDigest(type);
 
   // Kiểm tra platform
   const isLine = !!process.env.CHANNEL_ACCESS_TOKEN;
@@ -633,7 +633,7 @@ exports.morningNewsNotification = onSchedule({
   timeoutSeconds: 300,
   memory: "512MiB"
 }, async (event) => {
-  await sendNotifications();
+  await sendNotifications("morning");
 });
 
 exports.afternoonNewsNotification = onSchedule({
@@ -642,7 +642,7 @@ exports.afternoonNewsNotification = onSchedule({
   timeoutSeconds: 300,
   memory: "512MiB"
 }, async (event) => {
-  await sendNotifications();
+  await sendNotifications("afternoon");
 });
 
 // ─── HISTORY CLEANUP CRONJOB ──────────────────────────────────────────────────
