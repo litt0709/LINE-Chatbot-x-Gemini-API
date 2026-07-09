@@ -40,13 +40,20 @@ const reply = async (token, payload) => {
 };
 
 
+
+const profileCache = new Map();
+
 /**
- * Lấy thông tin cá nhân (Profile) của người dùng từ LINE API.
+ * Lấy thông tin người dùng từ LINE (có cache trên RAM để giảm chi phí API và Compute).
  * @param {string} userId - ID người dùng LINE
  * @param {string|null} groupId - ID nhóm chat (nếu có) để gọi API lấy thành viên nhóm
  * @returns {Promise<{displayName: string, userId: string}|null>}
  */
 const getUserProfile = async (userId, groupId = null) => {
+  if (profileCache.has(userId)) {
+    return profileCache.get(userId);
+  }
+
   try {
     const url = groupId 
       ? `https://api.line.me/v2/bot/group/${groupId}/member/${userId}`
@@ -56,6 +63,7 @@ const getUserProfile = async (userId, groupId = null) => {
       url: url,
       headers: LINE_HEADER
     });
+    profileCache.set(userId, response.data);
     return response.data;
   } catch (error) {
     console.error("[LINE Profile] Lỗi lấy profile:", error?.response?.data || error.message);

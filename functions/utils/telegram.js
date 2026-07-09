@@ -17,8 +17,12 @@ const reply = async (chatId, text) => {
     return;
   }
 
-  // Chuyển đổi định dạng Markdown **chữ** thành HTML <b>chữ</b> để hiển thị in đậm trên Telegram
-  const htmlText = text.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>");
+  // 1. Chuyển đổi <br> (nếu có) thành \n
+  let safeText = text.replace(/<br\s*\/?>/gi, "\n");
+  // 2. Escape các ký tự HTML nguy hiểm để tránh lỗi parse_mode của Telegram
+  safeText = safeText.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  // 3. Phục hồi định dạng in đậm từ Markdown sang HTML <b>
+  const htmlText = safeText.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>");
 
   try {
     await axios.post(`${TELEGRAM_BASE_URL}/sendMessage`, {

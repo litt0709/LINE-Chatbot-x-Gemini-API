@@ -80,13 +80,33 @@ const buildGroupProfileContext = async (participantsMap, promptText = "", sender
   return ctx ? `\n\nThông tin tập thể: ${ctx.trim()}` : "";
 };
 
-const processAndExtractProfile = (text, senderId) => {
+const removeAccents = (str) => {
+  if (!str) return "";
+  return str
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D");
+};
+
+const processAndExtractProfile = (text, senderId, participants = {}) => {
   let cleanedText = text;
   const regex = /<PROFILE(?: userId="([^"]*)")?(?: gender="([^"]*)")?(?: public_traits="([^"]*)")?(?: private_traits="([^"]*)")?[^>]*>/gi;
   let match;
   
   while ((match = regex.exec(text)) !== null) {
-    const uid = match[1] || senderId; 
+    let uid = match[1] || senderId; 
+    
+    if (match[1]) {
+      const lowerUid = removeAccents(match[1].trim().toLowerCase());
+      if (participants[lowerUid]) {
+        uid = participants[lowerUid];
+        console.log(`[Profile] Phân giải tên "${match[1]}" thành ID thực: ${uid}`);
+      } else {
+        console.log(`[Profile] Không tìm thấy ID thực cho "${match[1]}", dùng tạm làm ID.`);
+      }
+    }
+    
     const gender = match[2];
     const public_traits = match[3];
     const private_traits = match[4];
@@ -109,7 +129,7 @@ const processAndExtractProfile = (text, senderId) => {
     }
   }
   
-  return cleanedText.replace(/<PROFILE[^>]*>/gi, "").trim();
+  return cleanedText.replace(/<PROFILE[^>]*>/gi, "").replace(/\n{3,}/g, "\n\n").trim();
 };
 
 /**
@@ -130,15 +150,6 @@ const clearSessionHistory = async (sessionId) => {
 };
 
 const cleanText = (text) => text.replace(/@[^\s]+/g, "").replace(/\s+/g, " ").trim();
-
-const removeAccents = (str) => {
-  if (!str) return "";
-  return str
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/đ/g, "d")
-    .replace(/Đ/g, "D");
-};
 
 /**
  * Chuyển đổi các @tên trong câu trả lời của bot thành Telegram mention thực sự.
@@ -402,7 +413,7 @@ exports.webhook = onRequest(async (req, res) => {
         return res.end();
       }
 
-      const botMsgText = processAndExtractProfile(rawMsg, userId);
+      const botMsgText = processAndExtractProfile(rawMsg, userId, participants);
 
       // Convert @name → Telegram HTML mention thực sự
       const msg = convertTelegramMentions(botMsgText, participants);
@@ -574,7 +585,7 @@ exports.webhook = onRequest(async (req, res) => {
         continue;
       }
 
-      const botMsgText = processAndExtractProfile(rawMsg, userId);
+      const botMsgText = processAndExtractProfile(rawMsg, userId, participants);
 
       // Xây dựng LINE message có proper mention tags
       const lineMsg = buildLineMessage(botMsgText, participants, isGroup);
@@ -694,17 +705,17 @@ exports.dailyHistoryCleanup = onSchedule({
             createdAt: new Date().toISOString()
           });
           updateData.summaries = summaries;
+          
+          // Xóa sạch lịch sử trên RTDB vì đã tóm tắt xong
+          await clearRawMessages(sessionId);
+          needsUpdate = true;
         }
-        
-        // Xóa sạch lịch sử trên RTDB vì đã tóm tắt xong
-        await clearRawMessages(sessionId);
-        needsUpdate = true;
         
         // Tránh bị Rate Limit của Gemini (15 RPM)
         await new Promise(r => setTimeout(r, 4000));
       }
 
-      if (needsUpdate) {
+      if (needsUpdate && Object.keys(updateData).length > 0) {
         batch.update(doc.ref, updateData);
         cleanedCount++;
       }
