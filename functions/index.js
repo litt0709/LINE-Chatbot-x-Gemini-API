@@ -91,7 +91,7 @@ const removeAccents = (str) => {
 
 const processAndExtractProfile = (text, senderId, participants = {}) => {
   let cleanedText = text;
-  const regex = /<PROFILE(?: userId="([^"]*)")?(?: gender="([^"]*)")?(?: public_traits="([^"]*)")?(?: private_traits="([^"]*)")?[^>]*>/gi;
+  const regex = /<PROFILE(?: userId="([^"]*)")?(?: real_name="([^"]*)")?(?: gender="([^"]*)")?(?: public_traits="([^"]*)")?(?: private_traits="([^"]*)")?[^>]*>/gi;
   let match;
   
   while ((match = regex.exec(text)) !== null) {
@@ -107,14 +107,16 @@ const processAndExtractProfile = (text, senderId, participants = {}) => {
       }
     }
     
-    const gender = match[2];
-    const public_traits = match[3];
-    const private_traits = match[4];
+    const real_name = match[2];
+    const gender = match[3];
+    const public_traits = match[4];
+    const private_traits = match[5];
     
-    if (gender || public_traits || private_traits) {
+    if (real_name || gender || public_traits || private_traits) {
       const existing = userProfileCache.get(uid) || {};
       const updateData = {};
       
+      if (real_name) updateData.real_name = real_name;
       if (gender) updateData.gender = gender;
       
       if (public_traits) {
@@ -335,10 +337,16 @@ exports.webhook = onRequest(async (req, res) => {
 
     if (!messageContent) return res.end();
 
+    let senderName = message.from.first_name || message.from.username || "User";
+    const cachedProfile = userProfileCache.get(userId);
+    if (cachedProfile && cachedProfile.real_name) {
+      senderName = cachedProfile.real_name;
+    }
+
     if (chatType !== "private") {
       if (!isDirectlyTargeted && !isImplicitlyTargeted) {
         // Lưu background history và thoát
-        const userMsg = { role: "user", text: messageContent, senderId: userId, createdAt: new Date().toISOString() };
+        const userMsg = { role: "user", text: messageContent, senderName, senderId: userId, createdAt: new Date().toISOString() };
         await appendRawMessage(String(chatId), userMsg);
         return res.end();
       }
@@ -350,8 +358,6 @@ exports.webhook = onRequest(async (req, res) => {
         await telegram.reply(chatId, "Em mất trí nhớ rồi, huhu!");
         return res.end();
       }
-
-      const senderName = message.from.first_name || message.from.username || "User";
 
       // Lấy participants lịch sử của session này (nếu có) làm fallback
       const sessionRef = db.collection("users").doc(String(chatId));
@@ -489,7 +495,11 @@ exports.webhook = onRequest(async (req, res) => {
         if (!isDirectlyTargeted && !isImplicitlyTargeted) {
           const sessionId = event.source.groupId || event.source.roomId;
           const profile = await line.getUserProfile(userId, sessionId);
-          const senderName = profile?.displayName || "User";
+          let senderName = profile?.displayName || "User";
+          const cachedProfile = userProfileCache.get(userId);
+          if (cachedProfile && cachedProfile.real_name) {
+            senderName = cachedProfile.real_name;
+          }
           await appendRawMessage(sessionId, {
             role: "user",
             text: messageContent,
@@ -507,7 +517,11 @@ exports.webhook = onRequest(async (req, res) => {
       // Lấy tên hiển thị của người gửi
       const profileGroupId = event.source.groupId || event.source.roomId;
       const profile = await line.getUserProfile(userId, profileGroupId);
-      const senderName = profile?.displayName || "User";
+      let senderName = profile?.displayName || "User";
+      const cachedProfile = userProfileCache.get(userId);
+      if (cachedProfile && cachedProfile.real_name) {
+        senderName = cachedProfile.real_name;
+      }
 
       // Lệnh reset bộ nhớ
       if (!isImage && cleanText(messageContent).toLowerCase() === "quên hết đi nào") {
