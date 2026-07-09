@@ -1,5 +1,6 @@
 const { onRequest } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
+const crypto = require("crypto");
 const { db, FieldValue, appendRawMessage, getRawMessages, clearRawMessages, getUserProfile, saveUserProfile } = require("./utils/db");
 const line = require("./utils/line");
 const telegram = require("./utils/telegram");
@@ -275,6 +276,13 @@ exports.webhook = onRequest(async (req, res) => {
 
   // ── TELEGRAM ──────────────────────────────────────────────────────────────
   if (platform === "TELEGRAM") {
+    // [SECURITY] Xác thực Webhook của Telegram
+    const secretToken = process.env.TELEGRAM_SECRET_TOKEN;
+    if (secretToken && req.headers["x-telegram-bot-api-secret-token"] !== secretToken) {
+      console.warn("[Telegram] TỪ CHỐI REQUEST: Sai Secret Token. Có dấu hiệu giả mạo Webhook!");
+      return res.status(401).send("Unauthorized");
+    }
+
     const { message } = req.body;
     if (!message) return res.end();
 
@@ -434,6 +442,20 @@ exports.webhook = onRequest(async (req, res) => {
   }
 
   // ── LINE ──────────────────────────────────────────────────────────────────
+  // [SECURITY] Xác thực Chữ ký Webhook của LINE
+  const channelSecret = process.env.CHANNEL_SECRET;
+  if (channelSecret) {
+    try {
+      const signature = crypto.createHmac("SHA256", channelSecret).update(req.rawBody).digest("base64");
+      if (signature !== req.headers["x-line-signature"]) {
+        console.warn("[LINE] TỪ CHỐI REQUEST: Sai x-line-signature. Có dấu hiệu giả mạo Webhook!");
+        return res.status(401).send("Unauthorized");
+      }
+    } catch (err) {
+      console.error("[LINE] Lỗi xác thực chữ ký:", err.message);
+    }
+  }
+
   const { events } = req.body;
   if (!events) return res.end();
 
