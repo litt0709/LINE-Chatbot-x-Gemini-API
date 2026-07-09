@@ -101,6 +101,11 @@ const resolveWebContext = async (prompt) => {
     if (isTodaySensitive) {
       const todayStr = new Date().toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
       finalQuery = `${cleanQuery} ngày ${todayStr}`;
+    } else {
+      if (!/\b20\d{2}\b/.test(finalQuery)) {
+        const currentYear = new Date().getFullYear();
+        finalQuery = `${cleanQuery} năm ${currentYear}`;
+      }
     }
 
     console.log(`[Search Router] Kích hoạt tìm kiếm (Tavily ưu tiên, Exa dự phòng): "${finalQuery}"`);

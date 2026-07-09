@@ -22,13 +22,25 @@ const reply = async (chatId, text) => {
   // 2. Escape các ký tự HTML nguy hiểm để tránh lỗi parse_mode của Telegram
   safeText = safeText.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   // 3. Phục hồi định dạng in đậm từ Markdown sang HTML <b>
-  const htmlText = safeText.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>");
+  let htmlText = safeText.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>");
+
+  let reply_markup = undefined;
+  const tagMatch = htmlText.match(/\[\s*TAGS\s*:(.*?)\]/i);
+  if (tagMatch) {
+    const tags = tagMatch[1].split("|").map(t => t.trim()).filter(Boolean);
+    htmlText = htmlText.replace(/\[\s*TAGS\s*:(.*?)\]/i, "").trim();
+    
+    reply_markup = {
+      inline_keyboard: tags.map(tag => [{ text: tag, callback_data: tag.substring(0, 64) }])
+    };
+  }
 
   try {
     await axios.post(`${TELEGRAM_BASE_URL}/sendMessage`, {
       chat_id: chatId,
       text: htmlText,
-      parse_mode: "HTML"
+      parse_mode: "HTML",
+      ...(reply_markup && { reply_markup })
     });
   } catch (error) {
     console.error("[Telegram] Lỗi gửi tin nhắn:", error?.response?.data || error.message);
@@ -80,6 +92,25 @@ const leaveChat = async (chatId) => {
   }
 };
 
+/**
+ * Cập nhật (xóa/đổi) bàn phím inline của một tin nhắn.
+ * @param {number|string} chatId 
+ * @param {number} messageId 
+ * @param {Object} replyMarkup 
+ */
+const editMessageReplyMarkup = async (chatId, messageId, replyMarkup) => {
+  if (!TELEGRAM_TOKEN) return;
+  try {
+    await axios.post(`${TELEGRAM_BASE_URL}/editMessageReplyMarkup`, {
+      chat_id: chatId,
+      message_id: messageId,
+      reply_markup: replyMarkup
+    });
+  } catch (error) {
+    console.error("[Telegram] Lỗi sửa bàn phím:", error?.response?.data || error.message);
+  }
+};
+
 const downloadMessageFile = async (fileId, fileName) => {
   const fileData = await getImageBinary(fileId);
   if (!fileData) return null;
@@ -99,4 +130,4 @@ const downloadMessageFile = async (fileId, fileName) => {
   return localPath;
 };
 
-module.exports = { reply, getImageBinary, downloadMessageFile, leaveChat, push: reply };
+module.exports = { reply, getImageBinary, downloadMessageFile, leaveChat, push: reply, editMessageReplyMarkup };

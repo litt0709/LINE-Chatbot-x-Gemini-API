@@ -47,15 +47,15 @@ const buildGroupProfileContext = async (participantsMap, promptText = "", sender
 
   for (const uid of uniqueIds) {
     if (!uid) continue;
-    
+
     const name = Object.keys(participantsMap).find(k => participantsMap[k] === uid) || uid;
-    
+
     // Thuật toán Smart Injection: Chỉ đưa Profile vào LLM nếu:
     // 1. Là người đang trực tiếp chat (senderId)
     // 2. Tên của họ được nhắc đến trong câu chat hoặc trong tin nhắn được Quote
     const isSender = (uid === senderId);
     const isMentioned = lowerPrompt.includes(name.toLowerCase());
-    
+
     if (!isSender && !isMentioned) continue;
 
     let profile = userProfileCache.get(uid);
@@ -63,16 +63,16 @@ const buildGroupProfileContext = async (participantsMap, promptText = "", sender
       profile = await getUserProfile(uid);
       if (profile) userProfileCache.set(uid, profile);
     }
-    
+
     if (profile) {
       const p = [];
       if (profile.gender) p.push(`Giới tính: ${profile.gender}`);
       if (profile.public_traits) p.push(`Đặc điểm chung: ${profile.public_traits}`);
       if (!isGroup && profile.private_traits) p.push(`Thông tin riêng tư: ${profile.private_traits}`);
-      
+
       // Fallback for old data format
       if (profile.traits) p.push(`Đặc tính: ${profile.traits}`);
-      
+
       if (p.length > 0) {
         ctx += `[${name}: ${p.join(", ")}] `;
       }
@@ -92,12 +92,21 @@ const removeAccents = (str) => {
 
 const processAndExtractProfile = (text, senderId, participants = {}) => {
   let cleanedText = text;
+
+  let topic = null;
+  const topicMatch = cleanedText.match(/<TOPIC>(.*?)<\/TOPIC>/i);
+  if (topicMatch) {
+    topic = topicMatch[1].trim();
+    console.log(`[Auto-Topic Sync] Phát hiện chủ đề mới: ${topic}`);
+    cleanedText = cleanedText.replace(/<TOPIC>.*?<\/TOPIC>/gi, "");
+  }
+
   const regex = /<PROFILE(?: userId="([^"]*)")?(?: real_name="([^"]*)")?(?: gender="([^"]*)")?(?: public_traits="([^"]*)")?(?: private_traits="([^"]*)")?[^>]*>/gi;
   let match;
-  
+
   while ((match = regex.exec(text)) !== null) {
-    let uid = match[1] || senderId; 
-    
+    let uid = match[1] || senderId;
+
     if (match[1]) {
       const lowerUid = removeAccents(match[1].trim().toLowerCase());
       if (participants[lowerUid]) {
@@ -107,32 +116,33 @@ const processAndExtractProfile = (text, senderId, participants = {}) => {
         console.log(`[Profile] Không tìm thấy ID thực cho "${match[1]}", dùng tạm làm ID.`);
       }
     }
-    
+
     const real_name = match[2];
     const gender = match[3];
     const public_traits = match[4];
     const private_traits = match[5];
-    
+
     if (real_name || gender || public_traits || private_traits) {
       const existing = userProfileCache.get(uid) || {};
       const updateData = {};
-      
+
       if (real_name) updateData.real_name = real_name;
       if (gender) updateData.gender = gender;
-      
+
       if (public_traits) {
         updateData.public_traits = existing.public_traits ? existing.public_traits + ", " + public_traits : public_traits;
       }
       if (private_traits) {
         updateData.private_traits = existing.private_traits ? existing.private_traits + ", " + private_traits : private_traits;
       }
-      
-      saveUserProfile(uid, updateData); 
+
+      saveUserProfile(uid, updateData);
       userProfileCache.set(uid, { ...existing, ...updateData });
     }
   }
-  
-  return cleanedText.replace(/<PROFILE[^>]*>/gi, "").replace(/\n{3,}/g, "\n\n").trim();
+
+  cleanedText = cleanedText.replace(/<PROFILE[^>]*>/gi, "").replace(/\n{3,}/g, "\n\n").trim();
+  return { text: cleanedText, topic };
 };
 
 /**
@@ -198,11 +208,30 @@ const convertTelegramMentions = (text, participants) => {
 const buildLineMessage = (text, participants, isGroup = true) => {
   let cleanedText = text.replace(/\*\*/g, ""); // Strip markdown bold
 
+  let quickReply = undefined;
+  const tagMatch = cleanedText.match(/\[\s*TAGS\s*:(.*?)\]/i);
+  if (tagMatch) {
+    const tags = tagMatch[1].split("|").map(t => t.trim()).filter(Boolean);
+    cleanedText = cleanedText.replace(/\[\s*TAGS\s*:(.*?)\]/i, "").trim();
+    
+    quickReply = {
+      items: tags.map(tag => ({
+        type: "action",
+        action: {
+          type: "message",
+          label: tag.substring(0, 20),
+          text: tag
+        }
+      }))
+    };
+  }
+
   // LINE API không hỗ trợ mentions trong chat 1-1, trả về text thường
   if (!isGroup) {
     return {
       type: "text",
-      text: cleanedText
+      text: cleanedText,
+      ...(quickReply && { quickReply })
     };
   }
 
@@ -252,14 +281,16 @@ const buildLineMessage = (text, participants, isGroup = true) => {
     return {
       type: "textV2",
       text: replacedText,
-      substitution: substitution
+      substitution: substitution,
+      ...(quickReply && { quickReply })
     };
   }
 
   // Nếu không có mention, trả về dạng text thường để tối ưu
   return {
     type: "text",
-    text: cleanedText
+    text: cleanedText,
+    ...(quickReply && { quickReply })
   };
 };
 
@@ -283,7 +314,21 @@ exports.webhook = onRequest(async (req, res) => {
       return res.status(401).send("Unauthorized");
     }
 
-    const { message } = req.body;
+    const { callback_query } = req.body;
+    let message = req.body.message;
+
+    if (callback_query) {
+      message = callback_query.message;
+      if (message) {
+        // Ẩn bàn phím inline ngay lập tức để User biết đã nhận lệnh
+        telegram.editMessageReplyMarkup(message.chat.id, message.message_id, { inline_keyboard: [] });
+
+        // Biến callback_query thành một tin nhắn thông thường để xử lý tiếp
+        message.text = callback_query.data;
+        message.from = callback_query.from; // Cập nhật người gửi từ callback
+      }
+    }
+
     if (!message) return res.end();
 
     const chatId = message.chat.id;
@@ -351,6 +396,36 @@ exports.webhook = onRequest(async (req, res) => {
       senderName = profile.real_name;
     }
 
+    // Lệnh bí mật: force nén dữ liệu
+    if (!isImage && cleanText(messageContent).toLowerCase() === "tóm tắt chủ đề") {
+      const rawMessages = await getRawMessages(String(chatId));
+      if (rawMessages && rawMessages.length > 0) {
+        const summaryText = await llm.summarizeHistory(rawMessages);
+        if (summaryText) {
+          let hotTopic = null;
+          const topicMatch = summaryText.match(/\[HOT_TOPIC:(.*?)\]/i);
+          if (topicMatch) {
+            const topicStr = topicMatch[1].trim();
+            if (topicStr.toLowerCase() !== "none") hotTopic = topicStr;
+          }
+          const sessionRef = db.collection("users").doc(String(chatId));
+          await sessionRef.set({ hotTopic }, { merge: true });
+          await telegram.reply(chatId, `Đã ép tóm tắt xong! Chủ đề nóng hiện tại là: ${hotTopic}`);
+          await clearRawMessages(String(chatId));
+        }
+      } else {
+        await telegram.reply(chatId, "Không có tin nhắn nào để tóm tắt ạ.");
+      }
+      return res.end();
+    }
+
+    // Lệnh reset bộ nhớ
+    if (!isImage && cleanText(messageContent).toLowerCase() === "quên hết đi nào") {
+      await clearSessionHistory(String(chatId));
+      await telegram.reply(chatId, "Em mất trí nhớ rồi, huhu!");
+      return res.end();
+    }
+
     if (chatType !== "private") {
       if (!isDirectlyTargeted && !isImplicitlyTargeted) {
         // Lưu background history và thoát
@@ -359,84 +434,82 @@ exports.webhook = onRequest(async (req, res) => {
         return res.end();
       }
     }
+    // Lấy participants lịch sử của session này (nếu có) làm fallback
+    const sessionRef = db.collection("users").doc(String(chatId));
+    const sessionDoc = await sessionRef.get();
+    const sessionData = sessionDoc.data() || {};
+    const sessionParticipants = sessionData.participants || {};
+    const hotTopic = sessionData.hotTopic || "";
 
-      // Lệnh reset bộ nhớ
-      if (!isImage && cleanText(messageContent).toLowerCase() === "quên hết đi nào") {
-        await clearSessionHistory(String(chatId));
-        await telegram.reply(chatId, "Em mất trí nhớ rồi, huhu!");
-        return res.end();
-      }
+    // Cập nhật bản đồ tên → userId (participants) TOÀN CỤC cho Telegram (với cache RAM)
+    if (!cachedTgParticipants) {
+      const globalRef = db.collection("metadata").doc("tg_participants");
+      const globalDoc = await globalRef.get();
+      cachedTgParticipants = globalDoc.data() || {};
+    }
 
-      // Lấy participants lịch sử của session này (nếu có) làm fallback
-      const sessionRef = db.collection("users").doc(String(chatId));
-      const sessionDoc = await sessionRef.get();
-      const sessionParticipants = sessionDoc.data()?.participants || {};
+    // Gộp và cập nhật tên người gửi mới
+    const participants = { ...sessionParticipants, ...cachedTgParticipants };
 
-      // Cập nhật bản đồ tên → userId (participants) TOÀN CỤC cho Telegram (với cache RAM)
-      if (!cachedTgParticipants) {
-        const globalRef = db.collection("metadata").doc("tg_participants");
-        const globalDoc = await globalRef.get();
-        cachedTgParticipants = globalDoc.data() || {};
-      }
-
-      // Gộp và cập nhật tên người gửi mới
-      const participants = { ...sessionParticipants, ...cachedTgParticipants };
-      
-      let hasNewData = false;
-      const lowerName = senderName.toLowerCase();
-      if (participants[lowerName] !== userId) {
-        participants[lowerName] = userId;
-        cachedTgParticipants[lowerName] = userId;
+    let hasNewData = false;
+    const lowerName = senderName.toLowerCase();
+    if (participants[lowerName] !== userId) {
+      participants[lowerName] = userId;
+      cachedTgParticipants[lowerName] = userId;
+      hasNewData = true;
+    }
+    if (message.from.username) {
+      const lowerUsername = message.from.username.toLowerCase();
+      if (participants[lowerUsername] !== userId) {
+        participants[lowerUsername] = userId;
+        cachedTgParticipants[lowerUsername] = userId;
         hasNewData = true;
       }
-      if (message.from.username) {
-        const lowerUsername = message.from.username.toLowerCase();
-        if (participants[lowerUsername] !== userId) {
-          participants[lowerUsername] = userId;
-          cachedTgParticipants[lowerUsername] = userId;
-          hasNewData = true;
-        }
+    }
+
+    // Lưu bất đồng bộ sang global nếu có dữ liệu mới
+    if (hasNewData) {
+      db.collection("metadata").doc("tg_participants").set(cachedTgParticipants, { merge: true }).catch(e => console.error("[Telegram] Lưu participants lỗi:", e.message));
+    }
+
+    // Nếu người dùng reply (trích dẫn) một tin nhắn khác, đính kèm nội dung đó vào prompt
+    let cleanPrompt = messageContent;
+    let quoteContext = "";
+    if (message.reply_to_message) {
+      const replied = message.reply_to_message;
+      const repliedFrom = replied.from?.first_name || replied.from?.username || "ai đó";
+      const repliedText = replied.text || replied.caption || "";
+      if (repliedText) {
+        quoteContext = `[Đang trả lời tin nhắn của ${repliedFrom}: "${repliedText}"]\n`;
       }
+    }
 
-      // Lưu bất đồng bộ sang global nếu có dữ liệu mới
-      if (hasNewData) {
-        db.collection("metadata").doc("tg_participants").set(cachedTgParticipants, { merge: true }).catch(e => console.error("[Telegram] Lưu participants lỗi:", e.message));
-      }
+    const forceIgnoreCheck = (!isDirectlyTargeted && isImplicitlyTargeted);
+    const isGroup = chatType !== "private";
+    const groupContext = await buildGroupProfileContext(participants, cleanPrompt, userId, isGroup);
+    const rawMsg = await llm.chat(String(chatId), cleanPrompt, senderName, userId, null, quoteContext, forceIgnoreCheck, groupContext, isGroup, hotTopic);
 
-      // Nếu người dùng reply (trích dẫn) một tin nhắn khác, đính kèm nội dung đó vào prompt
-      let cleanPrompt = messageContent;
-      let quoteContext = "";
-      if (message.reply_to_message) {
-        const replied = message.reply_to_message;
-        const repliedFrom = replied.from?.first_name || replied.from?.username || "ai đó";
-        const repliedText = replied.text || replied.caption || "";
-        if (repliedText) {
-          quoteContext = `[Đang trả lời tin nhắn của ${repliedFrom}: "${repliedText}"]\n`;
-        }
-      }
+    const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, createdAt: new Date().toISOString() };
 
-      const forceIgnoreCheck = (!isDirectlyTargeted && isImplicitlyTargeted);
-      const isGroup = chatType !== "private";
-      const groupContext = await buildGroupProfileContext(participants, cleanPrompt, userId, isGroup);
-      const rawMsg = await llm.chat(String(chatId), cleanPrompt, senderName, userId, null, quoteContext, forceIgnoreCheck, groupContext, isGroup);
-      
-      const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, createdAt: new Date().toISOString() };
-      
-      if (rawMsg.trim() === "IGNORE") {
-        await appendRawMessage(String(chatId), userMsgData);
-        return res.end();
-      }
-
-      const botMsgText = processAndExtractProfile(rawMsg, userId, participants);
-
-      // Convert @name → Telegram HTML mention thực sự
-      const msg = convertTelegramMentions(botMsgText, participants);
-      await telegram.reply(chatId, msg);
-      
-      const botMsgData = { role: "model", text: botMsgText, createdAt: new Date().toISOString() };
-      await appendRawMessage(String(chatId), userMsgData, botMsgData);
-
+    if (rawMsg.trim() === "IGNORE") {
+      await appendRawMessage(String(chatId), userMsgData);
       return res.end();
+    }
+
+    const { text: botMsgText, topic } = processAndExtractProfile(rawMsg, userId, participants);
+
+    if (topic) {
+      db.collection("users").doc(String(chatId)).set({ hotTopic: topic }, { merge: true }).catch(e => console.error("[Telegram] Lỗi cập nhật hotTopic:", e.message));
+    }
+
+    // Convert @name → Telegram HTML mention thực sự
+    const msg = convertTelegramMentions(botMsgText, participants);
+    await telegram.reply(chatId, msg);
+
+    const botMsgData = { role: "model", text: botMsgText, createdAt: new Date().toISOString() };
+    await appendRawMessage(String(chatId), userMsgData, botMsgData);
+
+    return res.end();
 
     return res.end();
   }
@@ -501,6 +574,38 @@ exports.webhook = onRequest(async (req, res) => {
 
     if (!messageContent) continue;
 
+    const sessionId = event.source.groupId || event.source.roomId || userId;
+
+    // Lệnh reset bộ nhớ
+    if (!isImage && cleanText(messageContent).toLowerCase() === "quên hết đi nào") {
+      await clearSessionHistory(sessionId);
+      await line.reply(event.replyToken, [{ type: "text", text: "Em mất trí nhớ rồi, huhu!" }]);
+      continue;
+    }
+
+    // Lệnh bí mật: force nén dữ liệu
+    if (!isImage && cleanText(messageContent).toLowerCase() === "tóm tắt chủ đề") {
+      const rawMessages = await getRawMessages(sessionId);
+      if (rawMessages && rawMessages.length > 0) {
+        const summaryText = await llm.summarizeHistory(rawMessages);
+        if (summaryText) {
+          let hotTopic = null;
+          const topicMatch = summaryText.match(/\[HOT_TOPIC:(.*?)\]/i);
+          if (topicMatch) {
+            const topicStr = topicMatch[1].trim();
+            if (topicStr.toLowerCase() !== "none") hotTopic = topicStr;
+          }
+          const sessionRef = db.collection("users").doc(sessionId);
+          await sessionRef.set({ hotTopic }, { merge: true });
+          await line.reply(event.replyToken, [{ type: "text", text: `Đã ép tóm tắt xong! Chủ đề nóng hiện tại là: ${hotTopic}` }]);
+          await clearRawMessages(sessionId);
+        }
+      } else {
+        await line.reply(event.replyToken, [{ type: "text", text: "Không có tin nhắn nào để tóm tắt ạ." }]);
+      }
+      continue;
+    }
+
     let isDirectlyTargeted = false;
     let isImplicitlyTargeted = false;
 
@@ -514,129 +619,131 @@ exports.webhook = onRequest(async (req, res) => {
         isImplicitlyTargeted = true;
       }
 
-        if (!isDirectlyTargeted && !isImplicitlyTargeted) {
-          const sessionId = event.source.groupId || event.source.roomId;
-          const profile = await line.getUserProfile(userId, sessionId);
-          let senderName = profile?.displayName || "User";
-          const userProfile = await getUserProfile(userId);
-          if (userProfile && userProfile.real_name) {
-            senderName = userProfile.real_name;
-          }
-          await appendRawMessage(sessionId, {
-            role: "user",
-            text: messageContent,
-            senderName,
-            senderId: userId,
-            lineMessageId: event.message.id,
-            createdAt: new Date().toISOString()
-          });
-          continue; 
+      if (!isDirectlyTargeted && !isImplicitlyTargeted) {
+        const profile = await line.getUserProfile(userId, sessionId);
+        let senderName = profile?.displayName || "User";
+        const userProfile = await getUserProfile(userId);
+        if (userProfile && userProfile.real_name) {
+          senderName = userProfile.real_name;
         }
-      }
-
-      const sessionId = event.source.groupId || event.source.roomId || userId;
-
-      // Lấy tên hiển thị của người gửi
-      const profileGroupId = event.source.groupId || event.source.roomId;
-      const profile = await line.getUserProfile(userId, profileGroupId);
-      let senderName = profile?.displayName || "User";
-      const userProfile = await getUserProfile(userId);
-      if (userProfile && userProfile.real_name) {
-        senderName = userProfile.real_name;
-      }
-
-      // Lệnh reset bộ nhớ
-      if (!isImage && cleanText(messageContent).toLowerCase() === "quên hết đi nào") {
-        await clearSessionHistory(sessionId);
-        await line.reply(event.replyToken, [{ type: "text", text: "Em mất trí nhớ rồi, huhu!" }]);
+        await appendRawMessage(sessionId, {
+          role: "user",
+          text: messageContent,
+          senderName,
+          senderId: userId,
+          lineMessageId: event.message.id,
+          createdAt: new Date().toISOString()
+        });
         continue;
       }
+    }
 
-      // 1. Tải toàn bộ dữ liệu session (participants và messages) 1 lần duy nhất
-      const sessionRef = db.collection("users").doc(sessionId);
-      const sessionDoc = await sessionRef.get();
-      const sessionData = sessionDoc.data() || {};
-      
-      const sessionParticipants = sessionData.participants || {};
-      const messagesArray = sessionData.messages || [];
+    // Lấy tên hiển thị của người gửi
+    const profileGroupId = event.source.groupId || event.source.roomId;
+    const profile = await line.getUserProfile(userId, profileGroupId);
+    let senderName = profile?.displayName || "User";
+    const userProfile = await getUserProfile(userId);
+    if (userProfile && userProfile.real_name) {
+      senderName = userProfile.real_name;
+    }
 
-      // Nếu người dùng reply (trích dẫn) một tin nhắn khác, tìm nội dung trong mảng history
-      let cleanPrompt = messageContent;
-      let quoteContext = "";
-      const quotedId = event.message.quotedMessageId;
-      if (quotedId) {
-        try {
-          const q = messagesArray.find(m => m.lineMessageId === quotedId);
-          if (q) {
-            const quotedFrom = q.senderName || (q.role === "model" ? "Annie" : "ai đó");
-            const fullText = q.text;
-            quoteContext = `[Đang trả lời tin nhắn của ${quotedFrom}: "${fullText}"]\n`;
-          } else if (isDirectlyTargeted || isImplicitlyTargeted) {
-            console.log(`[LINE] Quoted message không có trong history, thử tải on-demand file/ảnh (ID: ${quotedId})...`);
-            const localPath = await line.downloadMessageFile(quotedId, "quoted_media");
-            if (localPath) {
-              const fileDesc = await llm.analyzeDocument(localPath);
-              quoteContext = `[NỘI DUNG FILE/ẢNH ĐƯỢC TRÍCH DẪN]:\n"${fileDesc.trim()}"\n`;
-            }
-          }
-        } catch (err) {
-          console.error("[LINE] Lỗi tra cứu quoted message:", err.message);
-        }
-      }
-
-      // Cập nhật bản đồ tên → userId TOÀN CỤC cho LINE (với cache RAM)
-      if (!cachedLineParticipants) {
-        const globalRef = db.collection("metadata").doc("line_participants");
-        const globalDoc = await globalRef.get();
-        cachedLineParticipants = globalDoc.data() || {};
-      }
-
-      // Gộp và cập nhật tên người gửi mới
-      const participants = { ...sessionParticipants, ...cachedLineParticipants };
-      const lowerName = senderName.toLowerCase();
-      
-      let hasNewData = false;
-      if (participants[lowerName] !== userId) {
-        participants[lowerName] = userId;
-        cachedLineParticipants[lowerName] = userId;
-        hasNewData = true;
-      }
-
-      // Lưu bất đồng bộ sang global nếu có dữ liệu mới
-      if (hasNewData) {
-        db.collection("metadata").doc("line_participants").set(cachedLineParticipants, { merge: true }).catch(e => console.error("[LINE] Lưu participants lỗi:", e.message));
-      }
-
-      console.log(`[LINE] Participants map cho Session:`, JSON.stringify(participants));
-
-      const forceIgnoreCheck = (!isDirectlyTargeted && isImplicitlyTargeted);
-      const isGroup = event.source.type !== "user";
-      const groupContext = await buildGroupProfileContext(participants, cleanPrompt, userId, isGroup);
-      const rawMsg = await llm.chat(sessionId, cleanPrompt, senderName, userId, event.message.id, quoteContext, forceIgnoreCheck, groupContext, isGroup);
-
-      const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, lineMessageId: event.message.id, createdAt: new Date().toISOString() };
-      
-      if (rawMsg.trim() === "IGNORE") {
-        await appendRawMessage(sessionId, userMsgData);
-        continue;
-      }
-
-      const botMsgText = processAndExtractProfile(rawMsg, userId, participants);
-
-      // Xây dựng LINE message có proper mention tags
-      const lineMsg = buildLineMessage(botMsgText, participants, isGroup);
-      console.log(`[LINE] Payload gửi đi:`, JSON.stringify(lineMsg));
-
-      const sentMessages = await line.reply(event.replyToken, [lineMsg]);
-
-      const botMsgData = { role: "model", text: botMsgText, createdAt: new Date().toISOString() };
-      if (sentMessages.length > 0) {
-        botMsgData.lineMessageId = sentMessages[0].id;
-      }
-      
-      await appendRawMessage(sessionId, userMsgData, botMsgData);
-
+    // Lệnh reset bộ nhớ
+    if (!isImage && cleanText(messageContent).toLowerCase() === "quên hết đi nào") {
+      await clearSessionHistory(sessionId);
+      await line.reply(event.replyToken, [{ type: "text", text: "Em mất trí nhớ rồi, huhu!" }]);
       continue;
+    }
+
+    // 1. Tải toàn bộ dữ liệu session (participants và messages) 1 lần duy nhất
+    const sessionRef = db.collection("users").doc(sessionId);
+    const sessionDoc = await sessionRef.get();
+    const sessionData = sessionDoc.data() || {};
+
+    const sessionParticipants = sessionData.participants || {};
+    const messagesArray = sessionData.messages || [];
+    const hotTopic = sessionData.hotTopic || "";
+
+    // Nếu người dùng reply (trích dẫn) một tin nhắn khác, tìm nội dung trong mảng history
+    let cleanPrompt = messageContent;
+    let quoteContext = "";
+    const quotedId = event.message.quotedMessageId;
+    if (quotedId) {
+      try {
+        const q = messagesArray.find(m => m.lineMessageId === quotedId);
+        if (q) {
+          const quotedFrom = q.senderName || (q.role === "model" ? "Annie" : "ai đó");
+          const fullText = q.text;
+          quoteContext = `[Đang trả lời tin nhắn của ${quotedFrom}: "${fullText}"]\n`;
+        } else if (isDirectlyTargeted || isImplicitlyTargeted) {
+          console.log(`[LINE] Quoted message không có trong history, thử tải on-demand file/ảnh (ID: ${quotedId})...`);
+          const localPath = await line.downloadMessageFile(quotedId, "quoted_media");
+          if (localPath) {
+            const fileDesc = await llm.analyzeDocument(localPath);
+            quoteContext = `[NỘI DUNG FILE/ẢNH ĐƯỢC TRÍCH DẪN]:\n"${fileDesc.trim()}"\n`;
+          }
+        }
+      } catch (err) {
+        console.error("[LINE] Lỗi tra cứu quoted message:", err.message);
+      }
+    }
+
+    // Cập nhật bản đồ tên → userId TOÀN CỤC cho LINE (với cache RAM)
+    if (!cachedLineParticipants) {
+      const globalRef = db.collection("metadata").doc("line_participants");
+      const globalDoc = await globalRef.get();
+      cachedLineParticipants = globalDoc.data() || {};
+    }
+
+    // Gộp và cập nhật tên người gửi mới
+    const participants = { ...sessionParticipants, ...cachedLineParticipants };
+    const lowerName = senderName.toLowerCase();
+
+    let hasNewData = false;
+    if (participants[lowerName] !== userId) {
+      participants[lowerName] = userId;
+      cachedLineParticipants[lowerName] = userId;
+      hasNewData = true;
+    }
+
+    // Lưu bất đồng bộ sang global nếu có dữ liệu mới
+    if (hasNewData) {
+      db.collection("metadata").doc("line_participants").set(cachedLineParticipants, { merge: true }).catch(e => console.error("[LINE] Lưu participants lỗi:", e.message));
+    }
+
+    console.log(`[LINE] Participants map cho Session:`, JSON.stringify(participants));
+
+    const forceIgnoreCheck = (!isDirectlyTargeted && isImplicitlyTargeted);
+    const isGroup = event.source.type !== "user";
+    const groupContext = await buildGroupProfileContext(participants, cleanPrompt, userId, isGroup);
+    const rawMsg = await llm.chat(sessionId, cleanPrompt, senderName, userId, event.message.id, quoteContext, forceIgnoreCheck, groupContext, isGroup, hotTopic);
+
+    const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, lineMessageId: event.message.id, createdAt: new Date().toISOString() };
+
+    if (rawMsg.trim() === "IGNORE") {
+      await appendRawMessage(sessionId, userMsgData);
+      continue;
+    }
+
+    const { text: botMsgText, topic } = processAndExtractProfile(rawMsg, userId, participants);
+
+    if (topic) {
+      db.collection("users").doc(sessionId).set({ hotTopic: topic }, { merge: true }).catch(e => console.error("[LINE] Lỗi cập nhật hotTopic:", e.message));
+    }
+
+    // Xây dựng LINE message có proper mention tags
+    const lineMsg = buildLineMessage(botMsgText, participants, isGroup);
+    console.log(`[LINE] Payload gửi đi:`, JSON.stringify(lineMsg));
+
+    const sentMessages = await line.reply(event.replyToken, [lineMsg]);
+
+    const botMsgData = { role: "model", text: botMsgText, createdAt: new Date().toISOString() };
+    if (sentMessages.length > 0) {
+      botMsgData.lineMessageId = sentMessages[0].id;
+    }
+
+    await appendRawMessage(sessionId, userMsgData, botMsgData);
+
+    continue;
   }
 
   res.end();
@@ -646,7 +753,7 @@ exports.webhook = onRequest(async (req, res) => {
 const sendNotifications = async (type = "afternoon") => {
   const targetIdsStr = process.env.NOTIFICATION_TARGET_IDS || "";
   const targetIds = targetIdsStr.split(",").map(id => id.trim()).filter(Boolean);
-  
+
   if (targetIds.length === 0) {
     console.log("[Schedule] Không có target ID nào được cấu hình. Bỏ qua.");
     return;
@@ -709,7 +816,7 @@ exports.masterScheduler = onSchedule({
       let cleanedCount = 0;
       const batch = db.batch();
       const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
-      
+
       for (const doc of usersSnap.docs) {
         const data = doc.data();
         const sessionId = doc.id;
@@ -734,18 +841,18 @@ exports.masterScheduler = onSchedule({
         if (rawMessages && rawMessages.length > 0) {
           console.log(`[Cleanup] Đang tóm tắt ${rawMessages.length} tin nhắn thô cho session: ${sessionId}`);
           const summaryText = await llm.summarizeHistory(rawMessages);
-          
+
           if (summaryText) {
             summaries.push({
               text: summaryText,
               createdAt: new Date().toISOString()
             });
             updateData.summaries = summaries;
-            
+
             await clearRawMessages(sessionId);
             needsUpdate = true;
           }
-          
+
           await new Promise(r => setTimeout(r, 4000));
         }
 
@@ -758,7 +865,7 @@ exports.masterScheduler = onSchedule({
       if (cleanedCount > 0) {
         await batch.commit();
       }
-      
+
       console.log(`[Cleanup] Đã nén và dọn dẹp lịch sử thành công cho ${cleanedCount} sessions.`);
     } catch (error) {
       console.error("[Cleanup] Lỗi khi Nén Ký Ức:", error);

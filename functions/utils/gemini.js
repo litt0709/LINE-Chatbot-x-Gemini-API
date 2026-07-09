@@ -79,6 +79,8 @@ Hãy tóm tắt ngắn gọn các sự kiện chính và thông tin quan trọng
 Chú ý giữ lại các sở thích cá nhân, quan điểm, file được gửi hoặc thông tin gắn liền với từng người dùng.
 Không dài dòng, cố gắng gói gọn dưới 1000 chữ.
 
+BẮT BUỘC TRƯỚC KHI KẾT THÚC BẢN TÓM TẮT: Dựa vào lịch sử chat, hãy xác định xem nhóm đang thảo luận về Chủ đề/Sự kiện/Giải đấu gì sôi nổi nhất. Chỉ được phép chọn 01 chủ đề ĐƠN NHẤT và NỔI BẬT NHẤT. In ra chính xác theo định dạng: \`[HOT_TOPIC: Tên chủ đề]\` (VD: \`[HOT_TOPIC: World Cup 2026]\`). Nếu cuộc trò chuyện quá chung chung không có chủ đề cụ thể, in ra: \`[HOT_TOPIC: None]\`. Cấm liệt kê nhiều chủ đề.
+
 Lịch sử chat thô:
 ${formattedChat}`;
 

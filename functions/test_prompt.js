@@ -25,7 +25,7 @@ Rule:
 async function test(prompt, name) {
   const messages = [
     { role: "system", content: prompt },
-    { role: "user", content: "[NEW] [Eddy]: Chào Annie, em làm 1 bài toán 15 + 34 rồi vẽ trái tim bằng ascii cho anh xem nhé" }
+    { role: "user", content: "[NEW] [Eddy]: Chào Annie, em cho anh xem lịch thi đấu tứ kết world cup 2026 nhé" }
   ];
 
   try {

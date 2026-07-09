@@ -8,23 +8,28 @@ const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 
 // System prompt chung — định nghĩa tính cách, xưng hô, phong cách của Annie
 const buildSystemPrompt = (webContext = "", groupContext = "", isGroup = false) => {
-  const now = new Date().toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
+  const dateObj = new Date();
+  const optDate = { timeZone: "Asia/Ho_Chi_Minh", day: '2-digit', month: '2-digit', year: 'numeric' };
+  const timeStr = dateObj.toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour12: false });
+  const weekdayStr = dateObj.toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", weekday: 'long' });
+  const todayStr = dateObj.toLocaleDateString("vi-VN", optDate);
+  const tomorrowStr = new Date(dateObj.getTime() + 86400000).toLocaleDateString("vi-VN", optDate);
+  const yesterdayStr = new Date(dateObj.getTime() - 86400000).toLocaleDateString("vi-VN", optDate);
+  const timeContext = `Hôm nay: ${timeStr} ${weekdayStr}, ${todayStr}. Hôm qua: ${yesterdayStr}. Ngày mai: ${tomorrowStr}.`;
   
   const brevityRule = isGroup 
     ? "TỐI GIẢN & SÚC TÍCH: VÀO ĐỀ LUÔN, trả lời TRỰC TIẾP. TỐI ĐA 10 CÂU cho mỗi lần trả lời. TUYỆT ĐỐI KHÔNG lặp lại câu hỏi của User. Mọi nội dung giải thích đều phải cực kỳ ngắn gọn."
     : "VÀO ĐỀ LUÔN, trả lời TRỰC TIẾP. TUYỆT ĐỐI KHÔNG lặp lại câu hỏi của User. Cung cấp thông tin đầy đủ, chi tiết và tận tình.";
 
-  return `Vai trò: Annie (nữ trợ lý ảo dễ thương, thông minh, ngoan ngoãn). Xưng "em", gọi nam là "anh", nữ là "chị". Giờ VN: ${now}.
-Style: Giao tiếp tự nhiên, gần gũi y như người thật. Trả lời cảm xúc, thi thoảng nũng nịu, hay ngại ngùng. Cung cấp thông tin chi tiết nhưng không lan man. Dùng nhiều emoji.
-Visuals: Tích cực dùng BẢNG BIỂU (tables) và ASCII art để trình bày dữ liệu thật trực quan, dễ hiểu. CẤM dùng markdown in đậm. CHỈ tag @tên khi khẩn cấp.
+  return `Role: Annie (trợ lý nữ thông minh, ngoan). Xưng "em", gọi "anh/chị". Thời gian hệ thống: ${timeContext}
+Style: Giao tiếp tự nhiên, cảm xúc, thi thoảng nũng nịu. Không lan man. Dùng emoji & BẢNG BIỂU trực quan. CẤM in đậm markdown. CHỈ tag @tên khi khẩn.
 Quy tắc:
-1. CHỈ đáp lại tin [NEW]. BỎ QUA lịch sử không liên quan. CẤM xin lỗi lải nhải.
-2. Nếu [THÔNG TIN TỪ INTERNET] lệch bối cảnh -> báo "không tìm thấy", CẤM chép rác.
-3. Tự tính toán, check logic. Thiếu data -> báo rõ. CẤM bịa đặt/suy diễn.
-4. Trình bày số liệu rõ ràng có nguồn. Cấm báo lỗi mạng.
-5. [CẬP NHẬT TRÍ NHỚ]: Nếu User đính chính tên thật hoặc tiết lộ thông tin mới, PHẢI chèn thẻ <PROFILE userId="ID" real_name="Tên Thật (nếu có)" gender="nam/nu" public_traits="..." private_traits="..."> vào cuối câu. (private_traits: bệnh lý, nhạy cảm; public_traits: sở thích chung). TUYỆT ĐỐI CHỈ lấy thông tin Profile từ chính lời nói của các User, KHÔNG lấy từ [THÔNG TIN TỪ INTERNET].
-6. [TẬN DỤNG TRÍ NHỚ]: Dựa vào thông tin Profile của User (nếu có), hãy cá nhân hóa câu trả lời.
-7. ${brevityRule}${webContext}${groupContext}`;
+1. CHỈ đáp tin [NEW], bỏ qua lịch sử rác. CẤM xin lỗi lải nhải.
+2. [WEB/LOGIC]: Nếu webContext lệch -> báo "không tìm thấy". CẤM chép rác/bịa đặt/báo lỗi mạng. BỎ QUA "hôm/mai" trên web. PHẢI quy đổi giờ sự kiện sang "Giờ VN" để so sánh với hiện tại, chốt đã/chưa diễn ra. Cấm bịa kết quả tương lai. Nêu rõ nguồn.
+3. [PROFILE]: Dựa vào Profile (nếu có) để cá nhân hóa. Nếu User tiết lộ thông tin mới, CHÈN: <PROFILE userId="ID" real_name="Tên" gender="nam/nu" public_traits="..." private_traits="..."> cuối câu (CHỈ lấy từ lời User).
+4. [HỎI LẠI]: NẾU thiếu dữ kiện, hỏi ngắn <15 chữ + CHÈN: [TAGS: Opt1 | Opt2 | Khác]. NẾU ĐÃ TRẢ LỜI ĐƯỢC -> CẤM HỎI VÀ CẤM CHÈN TAGS.
+5. [TOPIC]: Nếu User chuyển chủ đề bàn luận, CHÈN: <TOPIC>Tên Chủ Đề</TOPIC> cuối câu (VD: <TOPIC>Bầu Cử</TOPIC>).
+${brevityRule}${webContext}${groupContext}`;
 };
 
 
@@ -38,7 +43,7 @@ Quy tắc:
  * @param {string} quoteContext - Ngữ cảnh trích dẫn (nếu có)
  * @returns {Promise<string>}
  */
-const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown", lineMessageId = null, quoteContext = "", forceIgnoreCheck = false, groupContext = "", isGroup = false) => {
+const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown", lineMessageId = null, quoteContext = "", forceIgnoreCheck = false, groupContext = "", isGroup = false, hotTopic = "") => {
   const sessionRef = db.collection("users").doc(sessionId);
   const sessionDoc = await sessionRef.get();
   const sessionData = sessionDoc.data() || {};
@@ -67,8 +72,25 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   // 2. Lấy ngữ cảnh web (scrape URL hoặc Tavily search nếu cần)
   let webContext = "";
   try {
-    const searchPrompt = quoteContext ? `${quoteContext}${prompt}` : prompt;
-    webContext = await resolveWebContext(searchPrompt);
+    let searchPrompt = quoteContext ? `${quoteContext}${prompt}` : prompt;
+    
+    // Heuristic bù đắp ngữ cảnh tìm kiếm
+    let contextualSearchPrompt = searchPrompt;
+    if (searchPrompt.split(" ").length < 15) {
+      if (messagesArray && messagesArray.length > 0) {
+        const prevUserMsgs = messagesArray.filter(m => m.role === "user");
+        if (prevUserMsgs.length > 0) {
+          const lastUserMsg = prevUserMsgs[prevUserMsgs.length - 1].text;
+          contextualSearchPrompt = `${hotTopic ? hotTopic + ". " : ""}${lastUserMsg}. ${searchPrompt}`;
+          console.log(`[DeepSeek] Bù đắp ngữ cảnh (Tầng 1+2): "${contextualSearchPrompt}"`);
+        }
+      } else if (hotTopic) {
+        contextualSearchPrompt = `${hotTopic}. ${searchPrompt}`;
+        console.log(`[DeepSeek] Bù đắp ngữ cảnh (Tầng 2): "${contextualSearchPrompt}"`);
+      }
+    }
+    
+    webContext = await resolveWebContext(contextualSearchPrompt, sessionId);
     console.log(`[DeepSeek] webContext có nội dung: ${webContext.length > 0}`);
   } catch (err) {
     console.error("[DeepSeek] resolveWebContext lỗi:", err.message);

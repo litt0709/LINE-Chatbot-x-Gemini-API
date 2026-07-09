@@ -23,20 +23,30 @@ const searchTavily = async (query) => {
 
   const isTodaySensitive = TODAY_KEYWORDS.some(kw => query.toLowerCase().includes(kw));
 
+  const trustedDomains = require("./trusted_sources.json");
+
   const params = {
     api_key: TAVILY_API_KEY,
     query,
-    search_depth: isTodaySensitive ? "advanced" : "basic",
+    search_depth: "advanced",
     include_answer: true,
     max_results: 5,
+    include_domains: trustedDomains,
     ...(isTodaySensitive && { time_range: "day" })
   };
 
   try {
-    console.log(`[Tavily] Query: "${query}" | Hôm nay: ${isTodaySensitive}`);
-    const { data } = await axios.post("https://api.tavily.com/search", params);
+    console.log(`[Tavily] Query: "${query}" | Hôm nay: ${isTodaySensitive} | Ưu tiên trang chính thống VN`);
+    let response = await axios.post("https://api.tavily.com/search", params);
 
-    const { answer, results = [] } = data;
+    // Retry fallback nếu nguồn chính thống không có dữ liệu
+    if (!response.data.answer && (!response.data.results || response.data.results.length === 0)) {
+      console.log(`[Tavily] Trang chính thống không có kết quả, tự động mở rộng tìm kiếm toàn mạng Internet...`);
+      delete params.include_domains;
+      response = await axios.post("https://api.tavily.com/search", params);
+    }
+
+    const { answer, results = [] } = response.data;
     if (!answer && results.length === 0) return "Không tìm thấy kết quả liên quan trên internet.";
 
     let summary = "Thông tin thực tế từ Internet (Tavily):\n";
