@@ -77,7 +77,7 @@ const summarizeHistory = async (messages) => {
   const prompt = `Đây là lịch sử chat của nhóm trong thời gian qua. Dữ liệu này sẽ được dùng làm bộ nhớ dài hạn cho AI.
 Hãy tóm tắt ngắn gọn các sự kiện chính và thông tin quan trọng. Cú pháp bắt buộc: [Tên người dùng] đã nói/làm gì.
 Chú ý giữ lại các sở thích cá nhân, quan điểm, file được gửi hoặc thông tin gắn liền với từng người dùng.
-Không dài dòng, phải cực kỳ súc tích (dưới 300 chữ).
+Không dài dòng, cố gắng gói gọn dưới 1000 chữ.
 
 Lịch sử chat thô:
 ${formattedChat}`;

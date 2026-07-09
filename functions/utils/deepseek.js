@@ -7,8 +7,13 @@ const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 
 // System prompt chung — định nghĩa tính cách, xưng hô, phong cách của Annie
-const buildSystemPrompt = (webContext = "", groupContext = "") => {
+const buildSystemPrompt = (webContext = "", groupContext = "", isGroup = false) => {
   const now = new Date().toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
+  
+  const brevityRule = isGroup 
+    ? "TỐI GIẢN & SÚC TÍCH: VÀO ĐỀ LUÔN, trả lời TRỰC TIẾP. TỐI ĐA 10 CÂU cho mỗi lần trả lời. TUYỆT ĐỐI KHÔNG lặp lại câu hỏi của User. Mọi nội dung giải thích đều phải cực kỳ ngắn gọn."
+    : "VÀO ĐỀ LUÔN, trả lời TRỰC TIẾP. TUYỆT ĐỐI KHÔNG lặp lại câu hỏi của User. Cung cấp thông tin đầy đủ, chi tiết và tận tình.";
+
   return `Vai trò: Annie (nữ trợ lý ảo dễ thương, thông minh, ngoan ngoãn). Xưng "em", gọi nam là "anh", nữ là "chị". Giờ VN: ${now}.
 Style: Giao tiếp tự nhiên, gần gũi y như người thật. Trả lời cảm xúc, thi thoảng nũng nịu, hay ngại ngùng. Cung cấp thông tin chi tiết nhưng không lan man. Dùng nhiều emoji.
 Visuals: Tích cực dùng BẢNG BIỂU (tables) và ASCII art để trình bày dữ liệu thật trực quan, dễ hiểu. CẤM dùng markdown in đậm. CHỈ tag @tên khi khẩn cấp.
@@ -19,7 +24,7 @@ Quy tắc:
 4. Trình bày số liệu rõ ràng có nguồn. Cấm báo lỗi mạng.
 5. [CẬP NHẬT TRÍ NHỚ]: Nếu User đính chính tên thật hoặc tiết lộ thông tin mới, PHẢI chèn thẻ <PROFILE userId="ID" real_name="Tên Thật (nếu có)" gender="nam/nu" public_traits="..." private_traits="..."> vào cuối câu. (private_traits: bệnh lý, nhạy cảm; public_traits: sở thích chung). TUYỆT ĐỐI CHỈ lấy thông tin Profile từ chính lời nói của các User, KHÔNG lấy từ [THÔNG TIN TỪ INTERNET].
 6. [TẬN DỤNG TRÍ NHỚ]: Dựa vào thông tin Profile của User (nếu có), hãy cá nhân hóa câu trả lời.
-7. VÀO ĐỀ LUÔN, trả lời TRỰC TIẾP. TUYỆT ĐỐI KHÔNG lặp lại câu hỏi của User.${webContext}${groupContext}`;
+7. ${brevityRule}${webContext}${groupContext}`;
 };
 
 
@@ -33,7 +38,7 @@ Quy tắc:
  * @param {string} quoteContext - Ngữ cảnh trích dẫn (nếu có)
  * @returns {Promise<string>}
  */
-const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown", lineMessageId = null, quoteContext = "", forceIgnoreCheck = false, groupContext = "") => {
+const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown", lineMessageId = null, quoteContext = "", forceIgnoreCheck = false, groupContext = "", isGroup = false) => {
   const sessionRef = db.collection("users").doc(sessionId);
   const sessionDoc = await sessionRef.get();
   const sessionData = sessionDoc.data() || {};
@@ -73,13 +78,14 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   // Đưa quoteContext vào userContent để gửi sang API, tránh lưu quoteContext vào DB làm rác lịch sử
   const userContent = `[NEW] [${senderName}]: ${quoteContext || ""}${prompt}`;
 
-  let sysContent = buildSystemPrompt(webContext, groupContext);
+  history.unshift({ role: "system", content: buildSystemPrompt(webContext, groupContext, isGroup) });
+  let sysContent = history[0].content;
   if (forceIgnoreCheck) {
     sysContent += "\n\nBẮT BUỘC: Bạn đang ở trong group chat. Người dùng có thể chỉ vô tình nhắc tên bạn khi nói chuyện với người khác. BẠN PHẢI đánh giá xem họ CÓ THỰC SỰ ĐANG NÓI CHUYỆN VỚI BẠN HAY KHÔNG. Nếu họ ĐANG NÓI VỚI NGƯỜI KHÁC (nhắc bạn ở ngôi thứ 3), BẠN PHẢI trả lời chính xác bằng 1 chữ: IGNORE. Tuyệt đối không giải thích thêm. Nếu họ đang hỏi hoặc gọi bạn, hãy trả lời bình thường.";
   }
+  history[0].content = sysContent;
 
   const messages = [
-    { role: "system", content: sysContent },
     ...history,
     { role: "user", content: userContent }
   ];

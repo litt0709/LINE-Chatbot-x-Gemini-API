@@ -338,9 +338,9 @@ exports.webhook = onRequest(async (req, res) => {
     if (!messageContent) return res.end();
 
     let senderName = message.from.first_name || message.from.username || "User";
-    const cachedProfile = userProfileCache.get(userId);
-    if (cachedProfile && cachedProfile.real_name) {
-      senderName = cachedProfile.real_name;
+    const profile = await getUserProfile(userId);
+    if (profile && profile.real_name) {
+      senderName = profile.real_name;
     }
 
     if (chatType !== "private") {
@@ -410,7 +410,7 @@ exports.webhook = onRequest(async (req, res) => {
       const forceIgnoreCheck = (!isDirectlyTargeted && isImplicitlyTargeted);
       const isGroup = chatType !== "private";
       const groupContext = await buildGroupProfileContext(participants, cleanPrompt, userId, isGroup);
-      const rawMsg = await llm.chat(String(chatId), cleanPrompt, senderName, userId, null, quoteContext, forceIgnoreCheck, groupContext);
+      const rawMsg = await llm.chat(String(chatId), cleanPrompt, senderName, userId, null, quoteContext, forceIgnoreCheck, groupContext, isGroup);
       
       const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, createdAt: new Date().toISOString() };
       
@@ -496,9 +496,9 @@ exports.webhook = onRequest(async (req, res) => {
           const sessionId = event.source.groupId || event.source.roomId;
           const profile = await line.getUserProfile(userId, sessionId);
           let senderName = profile?.displayName || "User";
-          const cachedProfile = userProfileCache.get(userId);
-          if (cachedProfile && cachedProfile.real_name) {
-            senderName = cachedProfile.real_name;
+          const userProfile = await getUserProfile(userId);
+          if (userProfile && userProfile.real_name) {
+            senderName = userProfile.real_name;
           }
           await appendRawMessage(sessionId, {
             role: "user",
@@ -518,9 +518,9 @@ exports.webhook = onRequest(async (req, res) => {
       const profileGroupId = event.source.groupId || event.source.roomId;
       const profile = await line.getUserProfile(userId, profileGroupId);
       let senderName = profile?.displayName || "User";
-      const cachedProfile = userProfileCache.get(userId);
-      if (cachedProfile && cachedProfile.real_name) {
-        senderName = cachedProfile.real_name;
+      const userProfile = await getUserProfile(userId);
+      if (userProfile && userProfile.real_name) {
+        senderName = userProfile.real_name;
       }
 
       // Lệnh reset bộ nhớ
@@ -590,7 +590,7 @@ exports.webhook = onRequest(async (req, res) => {
       const forceIgnoreCheck = (!isDirectlyTargeted && isImplicitlyTargeted);
       const isGroup = event.source.type !== "user";
       const groupContext = await buildGroupProfileContext(participants, cleanPrompt, userId, isGroup);
-      const rawMsg = await llm.chat(sessionId, cleanPrompt, senderName, userId, event.message.id, quoteContext, forceIgnoreCheck, groupContext);
+      const rawMsg = await llm.chat(sessionId, cleanPrompt, senderName, userId, event.message.id, quoteContext, forceIgnoreCheck, groupContext, isGroup);
 
       const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, lineMessageId: event.message.id, createdAt: new Date().toISOString() };
       
@@ -652,95 +652,94 @@ const sendNotifications = async (type = "afternoon") => {
   }
 };
 
-exports.morningNewsNotification = onSchedule({
-  schedule: "0 8 * * 1-5",
+// ─── MASTER CRONJOB (ALL-IN-ONE) ──────────────────────────────────────────────
+// Giảm thiểu tối đa số lượng Job trên Cloud Scheduler để đảm bảo chi phí 0đ
+exports.masterScheduler = onSchedule({
+  schedule: "0,30 * * * *", // Chạy mỗi 30 phút
   timeZone: "Asia/Ho_Chi_Minh",
   timeoutSeconds: 300,
   memory: "512MiB"
 }, async (event) => {
-  await sendNotifications("morning");
-});
+  const now = new Date();
+  const vnTime = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }));
+  const hour = vnTime.getHours();
+  const minute = vnTime.getMinutes();
+  const dayOfWeek = vnTime.getDay(); // 0 is Sunday, 1 is Monday ... 5 is Friday
+  const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5;
 
-exports.afternoonNewsNotification = onSchedule({
-  schedule: "30 13 * * 1-5",
-  timeZone: "Asia/Ho_Chi_Minh",
-  timeoutSeconds: 300,
-  memory: "512MiB"
-}, async (event) => {
-  await sendNotifications("afternoon");
-});
+  // 1. Bản tin Sáng: 8:00 (Thứ 2 - Thứ 6)
+  if (isWeekday && hour === 8 && minute < 30) {
+    console.log("[Scheduler] Kích hoạt Bản tin Sáng");
+    await sendNotifications("morning");
+  }
 
-// ─── HISTORY CLEANUP CRONJOB ──────────────────────────────────────────────────
-exports.dailyHistoryCleanup = onSchedule({
-  schedule: "0 * * * *", // Chạy mỗi giờ (1h00, 2h00...)
-  timeZone: "Asia/Ho_Chi_Minh",
-  timeoutSeconds: 300,
-  memory: "256MiB"
-}, async (event) => {
-  console.log("[Cleanup] Bắt đầu Nén Ký Ức (Memory Compression) và dọn dẹp lịch sử...");
-  try {
-    const usersSnap = await db.collection("users").get();
-    let cleanedCount = 0;
-    const batch = db.batch();
-    const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
-    
-    for (const doc of usersSnap.docs) {
-      const data = doc.data();
-      const sessionId = doc.id;
-      let needsUpdate = false;
-      let updateData = {};
+  // 2. Bản tin Chiều: 13:30 (Thứ 2 - Thứ 6)
+  if (isWeekday && hour === 13 && minute >= 30) {
+    console.log("[Scheduler] Kích hoạt Bản tin Chiều");
+    await sendNotifications("afternoon");
+  }
 
-      // Dọn dẹp trường messages cũ trên Firestore (nếu còn sót lại từ kiến trúc cũ)
-      if (data.messages !== undefined) {
-        updateData.messages = FieldValue.delete();
-        needsUpdate = true;
-      }
+  // 3. Dọn dẹp Lịch sử (Memory Compression): Chạy mỗi 2 tiếng chẵn (0:00, 2:00, 4:00...)
+  if (hour % 2 === 0 && minute < 30) {
+    console.log("[Scheduler] Kích hoạt Dọn dẹp Ký Ức (Mỗi 2 tiếng)");
+    try {
+      const usersSnap = await db.collection("users").get();
+      let cleanedCount = 0;
+      const batch = db.batch();
+      const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
+      
+      for (const doc of usersSnap.docs) {
+        const data = doc.data();
+        const sessionId = doc.id;
+        let needsUpdate = false;
+        let updateData = {};
 
-      // 1. Xóa các bản tóm tắt cũ hơn 24h
-      let summaries = data.summaries || [];
-      const oldSummariesLength = summaries.length;
-      summaries = summaries.filter(s => new Date(s.createdAt).getTime() >= twentyFourHoursAgo);
-      if (summaries.length !== oldSummariesLength) {
-        updateData.summaries = summaries;
-        needsUpdate = true;
-      }
-
-      // 2. Lấy tin nhắn thô từ RTDB
-      const rawMessages = await getRawMessages(sessionId);
-
-      // 3. Tóm tắt các tin nhắn thô hiện tại
-      if (rawMessages && rawMessages.length > 0) {
-        console.log(`[Cleanup] Đang tóm tắt ${rawMessages.length} tin nhắn thô cho session: ${sessionId}`);
-        const summaryText = await llm.summarizeHistory(rawMessages);
-        
-        if (summaryText) {
-          summaries.push({
-            text: summaryText,
-            createdAt: new Date().toISOString()
-          });
-          updateData.summaries = summaries;
-          
-          // Xóa sạch lịch sử trên RTDB vì đã tóm tắt xong
-          await clearRawMessages(sessionId);
+        if (data.messages !== undefined) {
+          updateData.messages = FieldValue.delete();
           needsUpdate = true;
         }
-        
-        // Tránh bị Rate Limit của Gemini (15 RPM)
-        await new Promise(r => setTimeout(r, 4000));
+
+        let summaries = data.summaries || [];
+        const oldSummariesLength = summaries.length;
+        summaries = summaries.filter(s => new Date(s.createdAt).getTime() >= twentyFourHoursAgo);
+        if (summaries.length !== oldSummariesLength) {
+          updateData.summaries = summaries;
+          needsUpdate = true;
+        }
+
+        const rawMessages = await getRawMessages(sessionId);
+
+        if (rawMessages && rawMessages.length > 0) {
+          console.log(`[Cleanup] Đang tóm tắt ${rawMessages.length} tin nhắn thô cho session: ${sessionId}`);
+          const summaryText = await llm.summarizeHistory(rawMessages);
+          
+          if (summaryText) {
+            summaries.push({
+              text: summaryText,
+              createdAt: new Date().toISOString()
+            });
+            updateData.summaries = summaries;
+            
+            await clearRawMessages(sessionId);
+            needsUpdate = true;
+          }
+          
+          await new Promise(r => setTimeout(r, 4000));
+        }
+
+        if (needsUpdate && Object.keys(updateData).length > 0) {
+          batch.update(doc.ref, updateData);
+          cleanedCount++;
+        }
       }
 
-      if (needsUpdate && Object.keys(updateData).length > 0) {
-        batch.update(doc.ref, updateData);
-        cleanedCount++;
+      if (cleanedCount > 0) {
+        await batch.commit();
       }
+      
+      console.log(`[Cleanup] Đã nén và dọn dẹp lịch sử thành công cho ${cleanedCount} sessions.`);
+    } catch (error) {
+      console.error("[Cleanup] Lỗi khi Nén Ký Ức:", error);
     }
-
-    if (cleanedCount > 0) {
-      await batch.commit();
-    }
-    
-    console.log(`[Cleanup] Đã nén và dọn dẹp lịch sử thành công cho ${cleanedCount} sessions.`);
-  } catch (error) {
-    console.error("[Cleanup] Lỗi khi Nén Ký Ức:", error);
   }
 });
