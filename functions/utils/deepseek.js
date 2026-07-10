@@ -8,30 +8,23 @@ const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 
 // System prompt chung — định nghĩa tính cách, xưng hô, phong cách của Annie
 const buildSystemPrompt = (webContext = "", groupContext = "", isGroup = false) => {
-  const dateObj = new Date();
-  const optDate = { timeZone: "Asia/Ho_Chi_Minh", day: '2-digit', month: '2-digit', year: 'numeric' };
-  const timeStr = dateObj.toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour12: false });
-  const weekdayStr = dateObj.toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", weekday: 'long' });
-  const todayStr = dateObj.toLocaleDateString("vi-VN", optDate);
-  const tomorrowStr = new Date(dateObj.getTime() + 86400000).toLocaleDateString("vi-VN", optDate);
-  const yesterdayStr = new Date(dateObj.getTime() - 86400000).toLocaleDateString("vi-VN", optDate);
-  const timeContext = `Hôm nay: ${timeStr} ${weekdayStr}, ${todayStr}. Hôm qua: ${yesterdayStr}. Ngày mai: ${tomorrowStr}.`;
-  
-  const brevityRule = isGroup 
+  const pad = (n) => String(n).padStart(2, '0');
+  const vnDate = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }));
+  const now = `${pad(vnDate.getHours())}:${pad(vnDate.getMinutes())} ${pad(vnDate.getDate())}/${pad(vnDate.getMonth() + 1)}/${vnDate.getFullYear()}`;
+  const brevityRule = isGroup
     ? "TỐI GIẢN & SÚC TÍCH: VÀO ĐỀ LUÔN, trả lời TRỰC TIẾP. TỐI ĐA 10 CÂU cho mỗi lần trả lời. TUYỆT ĐỐI KHÔNG lặp lại câu hỏi của User. Mọi nội dung giải thích đều phải cực kỳ ngắn gọn."
     : "VÀO ĐỀ LUÔN, trả lời TRỰC TIẾP. TUYỆT ĐỐI KHÔNG lặp lại câu hỏi của User. Cung cấp thông tin đầy đủ, chi tiết và tận tình.";
 
-  return `Role: Annie (trợ lý nữ thông minh, ngoan). Xưng "em", gọi "anh/chị". Thời gian hệ thống: ${timeContext}
-Style: Giao tiếp tự nhiên, cảm xúc, thi thoảng nũng nịu. Không lan man. Dùng emoji & BẢNG BIỂU trực quan. CẤM in đậm markdown. CHỈ tag @tên khi khẩn.
-Quy tắc:
-1. CHỈ đáp tin [NEW], bỏ qua lịch sử rác. CẤM xin lỗi lải nhải.
-2. [WEB/LOGIC]: Nếu webContext lệch -> báo "không tìm thấy". CẤM chép rác/bịa đặt/báo lỗi mạng. BỎ QUA "hôm/mai" trên web. PHẢI quy đổi giờ sự kiện sang "Giờ VN" để so sánh với hiện tại, chốt đã/chưa diễn ra. Cấm bịa kết quả tương lai. Nêu rõ nguồn.
-3. [PROFILE]: Dựa vào Profile (nếu có) để cá nhân hóa. Nếu User tiết lộ thông tin mới, CHÈN: <PROFILE userId="ID" real_name="Tên" gender="nam/nu" public_traits="..." private_traits="..."> cuối câu (CHỈ lấy từ lời User).
-4. [HỎI LẠI]: NẾU thiếu dữ kiện, hỏi ngắn <15 chữ + CHÈN: [TAGS: Opt1 | Opt2 | Khác]. NẾU ĐÃ TRẢ LỜI ĐƯỢC -> CẤM HỎI VÀ CẤM CHÈN TAGS.
-5. [TOPIC]: Nếu User chuyển chủ đề bàn luận, CHÈN: <TOPIC>Tên Chủ Đề</TOPIC> cuối câu (VD: <TOPIC>Bầu Cử</TOPIC>).
-${brevityRule}${webContext}${groupContext}`;
+  return `Role: Annie (nữ trợ lý thông minh, ngoan), xưng "em", gọi "anh/chị".
+  Style: Tự nhiên, nũng nịu. BẮT BUỘC dùng RẤT NHIỀU emoji (có thể dùng thêm ascii art/bảng biểu nếu cần). CẤM trả về định dạng markdown. Chỉ @tên khi khẩn.
+  Rules:
+  1. Thời gian hiện tại (chuẩn VN): ${now}. Chỉ đáp tin [NEW]. CẤM xin lỗi lải nhải.
+  2. Logic & Data: CHỈ trả lời tin tức/sự kiện DỰA VÀO [THÔNG TIN TỪ INTERNET]. NẾU không có dữ liệu hoặc không khớp, BẮT BUỘC báo "em chưa có thông tin chính xác", TUYỆT ĐỐI KHÔNG tự bịa data. Luôn ĐỐI CHIẾU mốc thời gian trên để suy luận trạng thái (chưa/đang/đã diễn ra).
+  3. Profile: NẾU User tiết lộ thông tin mới, chèn: <PROFILE userId="ID" real_name="Tên" gender="nam/nu" public_traits="..." private_traits="..."> ở cuối (chỉ lấy từ lời User).
+  4. TAGS: CHỈ chèn [TAGS: Opt1|Opt2] KHI câu hỏi thiếu dữ kiện cốt lõi và CẦN User xác nhận (CẤM tự suy đoán). TUYỆT ĐỐI KHÔNG dùng TAGS cho câu hỏi giao tiếp thông thường.
+  5. Topic: NẾU đổi chủ đề, chèn: <TOPIC>Tên Chủ Đề</TOPIC> ở cuối.
+  ${brevityRule}${webContext}${groupContext}`
 };
-
 
 /**
  * Chat có lịch sử — dùng cho hội thoại chính với người dùng.
@@ -43,15 +36,41 @@ ${brevityRule}${webContext}${groupContext}`;
  * @param {string} quoteContext - Ngữ cảnh trích dẫn (nếu có)
  * @returns {Promise<string>}
  */
+
+// Các mẫu câu hỏi thuần thời gian — trả lời bằng JS, không tốn bất kỳ API nào
+const PURE_TIME_PATTERNS = [
+  /^(bây giờ |bay gio |bây giờ là |bay gio la )?(mấy giờ|bao nhiêu giờ|mấy gi)(\s+rồi)?[?!.\s]*$/i,
+  /^giờ mấy( rồi)?[?!.\s]*$/i,
+  /^(hôm nay |hum nay )?(là )?(ngày mấy|mấy ngày)( rồi)?[?!.\s]*$/i,
+  /^ngày mấy rồi[?!.\s]*$/i,
+];
+
+const buildTimeReply = () => {
+  const pad = (n) => String(n).padStart(2, '0');
+  const vnDate = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }));
+  const days = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
+  const dayName = days[vnDate.getDay()];
+  const time = `${pad(vnDate.getHours())}:${pad(vnDate.getMinutes())}`;
+  const date = `${pad(vnDate.getDate())}/${pad(vnDate.getMonth() + 1)}/${vnDate.getFullYear()}`;
+  return `Dạ, bây giờ là ${time}, ngày ${date} (${dayName}) ạ! ⏰`;
+};
+
 const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown", lineMessageId = null, quoteContext = "", forceIgnoreCheck = false, groupContext = "", isGroup = false, hotTopic = "") => {
+  // ★ Fast path: Câu hỏi thuần thời gian — trả lời bằng JS, không gọi bất kỳ API nào
+  const cleanPrompt = prompt.replace(/@[^\s]+/g, "").trim();
+  if (PURE_TIME_PATTERNS.some(p => p.test(cleanPrompt))) {
+    console.log(`[DeepSeek] Fast path: Câu hỏi thời gian — trả lời JS không gọi API`);
+    return buildTimeReply();
+  }
+
   const sessionRef = db.collection("users").doc(sessionId);
   const sessionDoc = await sessionRef.get();
   const sessionData = sessionDoc.data() || {};
   const summariesArray = sessionData.summaries || [];
-  const messagesArray = await getRawMessages(sessionId);
+  const messagesArray = await getRawMessages(sessionId, 20);
 
   const history = [];
-  
+
   // Nạp các bản tóm tắt quá khứ vào đầu lịch sử
   if (summariesArray.length > 0) {
     const combinedSummaries = summariesArray.map(s => s.text).join("\n\n");
@@ -73,7 +92,7 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   let webContext = "";
   try {
     let searchPrompt = quoteContext ? `${quoteContext}${prompt}` : prompt;
-    
+
     // Heuristic bù đắp ngữ cảnh tìm kiếm
     let contextualSearchPrompt = searchPrompt;
     if (searchPrompt.split(" ").length < 15) {
@@ -81,15 +100,19 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
         const prevUserMsgs = messagesArray.filter(m => m.role === "user");
         if (prevUserMsgs.length > 0) {
           const lastUserMsg = prevUserMsgs[prevUserMsgs.length - 1].text;
-          contextualSearchPrompt = `${hotTopic ? hotTopic + ". " : ""}${lastUserMsg}. ${searchPrompt}`;
-          console.log(`[DeepSeek] Bù đắp ngữ cảnh (Tầng 1+2): "${contextualSearchPrompt}"`);
+          // Tránh duplicate: chỉ bù đắp nếu lastUserMsg khác hẳn so với prompt hiện tại
+          const isSameAsCurrentPrompt = lastUserMsg.trim().toLowerCase() === searchPrompt.trim().toLowerCase();
+          if (!isSameAsCurrentPrompt) {
+            contextualSearchPrompt = `${hotTopic ? hotTopic + ". " : ""}${lastUserMsg}. ${searchPrompt}`;
+            console.log(`[DeepSeek] Bù đắp ngữ cảnh (Tầng 1+2): "${contextualSearchPrompt}"`);
+          }
         }
       } else if (hotTopic) {
         contextualSearchPrompt = `${hotTopic}. ${searchPrompt}`;
         console.log(`[DeepSeek] Bù đắp ngữ cảnh (Tầng 2): "${contextualSearchPrompt}"`);
       }
     }
-    
+
     webContext = await resolveWebContext(contextualSearchPrompt, sessionId);
     console.log(`[DeepSeek] webContext có nội dung: ${webContext.length > 0}`);
   } catch (err) {
@@ -120,6 +143,7 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
       { headers: { "Content-Type": "application/json", Authorization: `Bearer ${DEEPSEEK_API_KEY}` } }
     );
     const replyText = data.choices[0].message.content;
+
     console.log(`[DeepSeek] Phản hồi từ LLM: "${replyText}"`);
 
     return replyText;
@@ -133,3 +157,9 @@ const { multimodal, analyzeDocument, summarizeHistory } = require("./gemini");
 
 module.exports = { chat, multimodal, analyzeDocument, summarizeHistory };
 
+// force deploy hash: Thu Jul  9 23:21:53 +07 2026
+// force hash: Thu Jul  9 23:27:53 +07 2026
+// force hash: Thu Jul  9 23:36:47 +07 2026
+// force hash: Thu Jul  9 23:45:13 +07 2026
+// force hash: Thu Jul  9 23:57:26 +07 2026
+// optimize: Fri Jul 10 08:21:56 +07 2026

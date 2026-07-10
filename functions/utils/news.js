@@ -11,7 +11,9 @@ const generateDailyNewsDigest = async (type = "afternoon") => {
     return "Xin lỗi anh chị, em không thể tổng hợp bản tin lúc này ạ. 🥺";
   }
 
-  const now = new Date().toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
+  const pad = (n) => String(n).padStart(2, '0');
+  const vnDate = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }));
+  const now = `${pad(vnDate.getHours())}:${pad(vnDate.getMinutes())} ${pad(vnDate.getDate())}/${pad(vnDate.getMonth()+1)}/${vnDate.getFullYear()}`;
   let searchPrompt = "";
   let systemPrompt = "";
 

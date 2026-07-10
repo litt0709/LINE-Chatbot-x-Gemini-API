@@ -1,5 +1,44 @@
 const { searchTavily, TODAY_KEYWORDS } = require("./tavily");
 const { searchExa } = require("./exa");
+const axios = require("axios");
+
+/**
+ * Sử dụng DeepSeek để trích xuất từ khóa tìm kiếm cốt lõi từ câu nói của người dùng.
+ * @param {string} contextualPrompt - Câu nói đã được bù đắp ngữ cảnh
+ * @returns {Promise<string>}
+ */
+const extractSearchQuery = async (contextualPrompt) => {
+  try {
+    const apiKey = process.env.DEEPSEEK_API_KEY;
+    if (!apiKey) return contextualPrompt;
+    
+    const { data } = await axios.post(
+      "https://api.deepseek.com/v1/chat/completions",
+      {
+        model: "deepseek-chat",
+        messages: [
+          { role: "system", content: "Bạn là hệ thống trích xuất từ khóa tìm kiếm. BẮT BUỘC trả về JSON: {\"search_query\": \"từ khóa tối ưu nhất\", \"has_entity\": true/false}. has_entity = true NẾU CÓ chứa danh từ riêng (tên giải, đội, người, địa danh...), = false nếu chỉ toàn từ chung chung như 'lịch thi đấu', 'kết quả', 'hôm nay'." },
+          { role: "user", content: contextualPrompt }
+        ],
+        response_format: { type: "json_object" },
+        max_tokens: 50,
+        temperature: 0
+      },
+      { headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` } }
+    );
+    
+    const result = JSON.parse(data.choices[0].message.content);
+    let query = result.search_query.trim();
+    // Xóa ngoặc kép hoặc dấu chấm do LLM sinh thừa
+    query = query.replace(/^["']|["']$/g, "").trim();
+    
+    console.log(`[LLM Extractor] Original: "${contextualPrompt}" -> Extracted: "${query}", has_entity: ${result.has_entity}`);
+    return { query, has_entity: result.has_entity };
+  } catch (err) {
+    console.error("[LLM Extractor] Lỗi:", err.message);
+    return { query: contextualPrompt, has_entity: true }; // Fallback về prompt gốc, coi như có entity để search chạy tiếp
+  }
+};
 
 // ─── Regex lọc URL ───────────────────────────────────────────────────────────
 const URL_REGEX = /(https?:\/\/[^\s"'>\]]+)/gi;
@@ -14,6 +53,14 @@ const SEARCH_KEYWORDS = [
   "đội", "trận", "thắng", "thua", "vô địch", "bàn thắng", "ghi bàn", "tỉ số",
   "tin hot", "fact check", "kiểm chứng", "sự thật", "tin chuẩn", "tin thật",
   "thông tin", "tổng hợp", "chi tiết", "tiểu sử", "tác giả", "scandal", "drama", "phốt", "hướng dẫn"
+];
+
+// ─── Mẫu câu hỏi về giờ/ngày hiện tại — KHAI KHÔNG search (bot tự biết từ system prompt) ───
+const SKIP_SEARCH_PATTERNS = [
+  /bây giờ (là )?(mấy giờ|ngày mấy)/i,
+  /mấy giờ rồi/i, /giờ mấy rồi/i,
+  /hôm nay là ngày mấy/i, /ngày mấy rồi/i,
+  /bây giờ là bao nhiêu giờ/i
 ];
 
 const QUESTION_PATTERNS = [
@@ -31,6 +78,11 @@ const QUESTION_PATTERNS = [
 const checkNeedsSearch = (prompt) => {
   const query = prompt.replace(/@[^\s]+/g, "").replace(/\s+/g, " ").trim().toLowerCase();
   if (!query) return false;
+  // Ưu tiên bỏ qua trước: câu hỏi thời gian hiện tại bot tự biết, không cần search
+  if (SKIP_SEARCH_PATTERNS.some(p => p.test(query))) {
+    console.log(`[Search Router] Bỏ qua search (câu hỏi thời gian hiện tại): "${query}"`);
+    return false;
+  }
   if (SEARCH_KEYWORDS.some(kw => query.includes(kw))) {
     console.log(`[Search Router] Khớp từ khóa → cần search: "${query}"`);
     return true;
@@ -93,47 +145,54 @@ const resolveWebContext = async (prompt) => {
 
   let searchSummary = "";
   if (checkNeedsSearch(prompt)) {
-    const cleanQuery = prompt.replace(/@[^\s]+/g, "").replace(/\s+/g, " ").trim();
+    // LLM Query Extraction (Phương án 2): Trích xuất chính xác từ khóa, bỏ qua mọi rác hội thoại
+    let cleanQuery = prompt.replace(/@[^\s]+/g, "").replace(/\s+/g, " ").trim();
+    const extractionResult = await extractSearchQuery(cleanQuery);
     
-    let finalQuery = cleanQuery;
+    if (!extractionResult.has_entity) {
+      console.log(`[Search Router] Bị chặn do thiếu Danh từ riêng (has_entity = false)`);
+      return "";
+    }
+    
+    let finalQuery = extractionResult.query;
     const { TODAY_KEYWORDS } = require("./tavily");
     const isTodaySensitive = TODAY_KEYWORDS.some(kw => cleanQuery.toLowerCase().includes(kw));
     if (isTodaySensitive) {
       const todayStr = new Date().toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
-      finalQuery = `${cleanQuery} ngày ${todayStr}`;
+      finalQuery = `${extractionResult.query} ngày ${todayStr}`;
     } else {
       if (!/\b20\d{2}\b/.test(finalQuery)) {
         const currentYear = new Date().getFullYear();
-        finalQuery = `${cleanQuery} năm ${currentYear}`;
+        finalQuery = `${extractionResult.query} năm ${currentYear}`;
       }
     }
 
-    console.log(`[Search Router] Kích hoạt tìm kiếm (Tavily ưu tiên, Exa dự phòng): "${finalQuery}"`);
+    console.log(`[Search Router] Kích hoạt tìm kiếm: "${finalQuery}"`);
     
-    let tavilyResult = await searchTavily(finalQuery);
-    
-    if (tavilyResult) {
-      searchSummary = tavilyResult;
-    } else {
-      console.log(`[Search Router] Tavily không có kết quả hoặc bị lỗi, chuyển sang Exa...`);
-      const { searchExa } = require("./exa");
-      let exaResult = await searchExa(finalQuery);
-      if (exaResult) {
-        searchSummary = exaResult;
+    try {
+      const tavilyResult = await searchTavily(finalQuery);
+      searchSummary = tavilyResult || "";
+    } catch (tavilyErr) {
+      // Chỉ fallback Exa khi Tavily chết hẳn (exception), không phải khi no results
+      console.log(`[Search Router] Tavily lỗi, fallback sang Exa: ${tavilyErr.message}`);
+      try {
+        const exaResult = await searchExa(finalQuery);
+        searchSummary = exaResult || "";
+      } catch (exaErr) {
+        console.error(`[Search Router] Cả Tavily và Exa đều lỗi.`);
       }
     }
     
     searchSummary = searchSummary.trim();
   }
 
+
+  // Không inject gì nếu không có dữ liệu — tránh lãng phí token
+  if (!urlText && !searchSummary) return "";
+
   let context = "";
-  if (urlText) context += `\n\n[NỘI DUNG URL NGƯỜI DÙNG GỬI ĐẾN]:\n${urlText}\n`;
-  
-  if (searchSummary) {
-    context += `\n\n[THÔNG TIN TỪ INTERNET]:\n${searchSummary}\n`;
-  } else {
-    context += `\n\n[THÔNG TIN TỪ INTERNET]:\nKhông có dữ liệu tìm kiếm cho câu hỏi này.\n`;
-  }
+  if (urlText) context += `\n\n[NỘI DUNG URL NGƯỜI DÙNG GỬi ĐẾN]:\n${urlText}\n`;
+  if (searchSummary) context += `\n\n[THÔNG TIN TỪ INTERNET]:\n${searchSummary}\n`;
   
   return context;
 };

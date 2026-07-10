@@ -43,12 +43,15 @@ const appendRawMessage = async (sessionId, ...messages) => {
 
 /**
  * Lấy danh sách tin nhắn thô từ Realtime Database.
- * @param {string} sessionId 
+ * @param {string} sessionId
+ * @param {number|null} limit - Số tin nhắn gần nhất cần lấy. Nếu null, lấy toàn bộ (dùng cho summarization/cleanup).
  * @returns {Promise<Array>}
  */
-const getRawMessages = async (sessionId) => {
+const getRawMessages = async (sessionId, limit = null) => {
   try {
-    const snapshot = await rtdb.ref(`chats/${sessionId}/messages`).once('value');
+    let ref = rtdb.ref(`chats/${sessionId}/messages`);
+    if (limit) ref = ref.limitToLast(limit);
+    const snapshot = await ref.once('value');
     if (!snapshot.exists()) return [];
     
     // Convert object of objects to array
