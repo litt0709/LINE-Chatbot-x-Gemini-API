@@ -198,22 +198,10 @@ const buildLineMessage = (text, participants, isGroup = true, hotTopic = "") => 
   let cleanedText = text.replace(/\*\*/g, ""); // Strip markdown bold
 
   let quickReply = undefined;
-  let tagsStr = "";
-
   const taskMatch = cleanedText.match(/<Task\s+mode="ASK"\s+tags="([^"]+)"\s*\/?>/i);
   if (taskMatch) {
-    tagsStr = taskMatch[1];
+    const tags = taskMatch[1].split("|").map(t => t.trim()).filter(Boolean);
     cleanedText = cleanedText.replace(/<Task[^>]*>/gi, "").trim();
-  } else {
-    const tagMatch = cleanedText.match(/\[\s*TAGS\s*:(.*?)\]/i);
-    if (tagMatch) {
-      tagsStr = tagMatch[1];
-      cleanedText = cleanedText.replace(/\[\s*TAGS\s*:(.*?)\]/i, "").trim();
-    }
-  }
-
-  if (tagsStr) {
-    const tags = tagsStr.split("|").map(t => t.trim()).filter(Boolean);
 
     quickReply = {
       items: tags.map(tag => {

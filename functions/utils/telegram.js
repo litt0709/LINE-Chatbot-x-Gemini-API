@@ -20,22 +20,11 @@ const reply = async (chatId, text) => {
   // --- Bóc tách XML Tags TRƯỚC KHI xử lý ký tự HTML ---
   let reply_markup = undefined;
   let rawText = text;
-  let tagsStr = "";
 
   const taskMatch = rawText.match(/<Task\s+mode="ASK"\s+tags="([^"]+)"\s*\/?>/i);
   if (taskMatch) {
-    tagsStr = taskMatch[1];
+    const tags = taskMatch[1].split("|").map(t => t.trim()).filter(Boolean);
     rawText = rawText.replace(/<Task[^>]*>/gi, "").trim();
-  } else {
-    const tagMatch = rawText.match(/\[\s*TAGS\s*:(.*?)\]/i);
-    if (tagMatch) {
-      tagsStr = tagMatch[1];
-      rawText = rawText.replace(/\[\s*TAGS\s*:(.*?)\]/i, "").trim();
-    }
-  }
-
-  if (tagsStr) {
-    const tags = tagsStr.split("|").map(t => t.trim()).filter(Boolean);
     
     reply_markup = {
       inline_keyboard: tags.map(tag => {
