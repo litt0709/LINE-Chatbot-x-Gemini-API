@@ -373,8 +373,11 @@ exports.webhook = onRequest(async (req, res) => {
     let isImplicitlyTargeted = !isDirectlyTargeted && messageContent && /\bannie\b/i.test(messageContent);
 
     const shouldProcessMedia = chatType === "private" || isDirectlyTargeted || isImplicitlyTargeted;
+    // Lazy Image: Ảnh/file gửi thuần (không kèm caption) → lưu placeholder, không OCR ngay
+    const hasCaption = !!(message.caption && message.caption.trim());
+    const isRawMedia = (message.photo || message.document) && !hasCaption;
 
-    if (shouldProcessMedia) {
+    if (shouldProcessMedia && !isRawMedia) {
       if (message.photo) {
         console.log(`[Telegram] Đang xử lý ảnh từ User ${userId}...`);
         const fileId = message.photo[message.photo.length - 1].file_id;
@@ -404,6 +407,35 @@ exports.webhook = onRequest(async (req, res) => {
         messageContent = (messageContent ? messageContent + "\n" : "") + `[TÀI LIỆU ĐƯỢC TRÍCH DẪN: ${fileName}]:\n"${fileDesc.trim()}"`;
         isImage = true;
       }
+    }
+
+    // Lazy Image (Private chat): lưu placeholder nếu ảnh/file không có caption
+    if (isRawMedia) {
+      let senderNameForPlaceholder = message.from.first_name || message.from.username || "User";
+      const profileForPlaceholder = await getUserProfile(userId);
+      if (profileForPlaceholder?.real_name) senderNameForPlaceholder = profileForPlaceholder.real_name;
+
+      const mediaId = message.photo
+        ? message.photo[message.photo.length - 1].file_id
+        : message.document.file_id;
+      const mediaType = message.photo ? "image" : "document";
+      const placeholderText = message.photo
+        ? "[HÌNH ẢNH]"
+        : `[TÀI LIỆU: ${message.document.file_name || "document"}]`;
+
+      console.log(`[Telegram] Lazy Image (${chatType}): lưu placeholder, không OCR ngay.`);
+      const userMsg = {
+        role: "user",
+        text: placeholderText,
+        senderName: senderNameForPlaceholder,
+        senderId: userId,
+        mediaId,
+        mediaType,
+        createdAt: new Date().toISOString()
+      };
+      await appendRawMessage(String(chatId), userMsg);
+      await registerActiveSession(String(chatId));
+      return res.end();
     }
 
     if (!messageContent) return res.end();
@@ -444,28 +476,14 @@ exports.webhook = onRequest(async (req, res) => {
       return res.end();
     }
 
+    // Group chat: lưu background history (ảnh không tag bot đã xử lý ở block isRawMedia trên)
     if (chatType !== "private") {
       if (!isDirectlyTargeted && !isImplicitlyTargeted) {
-        let text = messageContent || "";
-        let mediaId = null;
-        let mediaType = null;
-
-        if (message.photo) {
-          text = "[HÌNH ẢNH]";
-          mediaId = message.photo[message.photo.length - 1].file_id;
-          mediaType = "image";
-        } else if (message.document) {
-          text = `[TÀI LIỆU: ${message.document.file_name || "document"}]`;
-          mediaId = message.document.file_id;
-          mediaType = "document";
-        }
-
         const userMsg = { 
           role: "user", 
-          text, 
+          text: messageContent || "", 
           senderName, 
           senderId: userId, 
-          ...(mediaId && { mediaId, mediaType }),
           createdAt: new Date().toISOString() 
         };
         await appendRawMessage(String(chatId), userMsg);
