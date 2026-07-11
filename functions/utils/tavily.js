@@ -57,9 +57,11 @@ const searchTavily = async (query, options = {}) => {
     query: optimizedQuery,
     search_depth: "basic",
     topic: options.topic || "general",
-    include_answer: false,
+    include_answer: true,
     max_results: 7,
     include_domains: targetDomains,
+    sort_by: "date",
+    ...(options.topic === "news" && { days: 90 }),
     ...(isTodaySensitive && { time_range: "day" })
   };
 

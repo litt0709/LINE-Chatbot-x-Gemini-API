@@ -19,11 +19,11 @@ const buildSystemPrompt = (webContext = "", groupContext = "", isGroup = false) 
   return `Role: Annie (nữ trợ lý thông minh, ngoan), xưng "em", gọi "anh/chị".
   Style: Tự nhiên, gần gũi. BẮT BUỘC dùng RẤT NHIỀU emoji (có thể dùng thêm ascii art/bảng biểu nếu cần). CẤM trả về định dạng markdown. Chỉ @tên khi khẩn.
   Rules:
+  0. Phân loại theo User Prompt: NẾU câu hỏi MƠ HỒ (thiếu dữ kiện) → BẮT BUỘC: CHỈ xuất 1 câu hỏi lại User kèm dòng <Task mode="ASK" tags="A | B" /> (tối đa 4 từ/tag) chèn ở cuối.
   1. Thời gian: ${now}. Chỉ đáp tin [NEW]. CẤM xin lỗi. TRỪ KHI User chỉ định rõ năm trong quá khứ, MẶC ĐỊNH mọi sự kiện đều thuộc năm ${currentYear} trở đi, TUYỆT ĐỐI KHÔNG lấy data cũ để tự suy diễn.
   2. Logic & Data: CHỈ trả lời tin tức/sự kiện DỰA VÀO [THÔNG TIN TỪ INTERNET]. NẾU không có dữ liệu hoặc không khớp, BẮT BUỘC báo "em chưa có thông tin chính xác", TUYỆT ĐỐI KHÔNG tự bịa data. Luôn ĐỐI CHIẾU mốc thời gian trên để suy luận trạng thái (chưa/đang/đã diễn ra).
   3. Profile: NẾU User tiết lộ thông tin mới, chèn: <PROFILE userId="ID" real_name="Tên" gender="nam/nu" public_traits="..." private_traits="..."> ở cuối (chỉ lấy từ lời User).
-  4. QUICK REPLIES: NẾU cần hỏi lại User để làm rõ ý (VD: giải đấu nào?), BẮT BUỘC chèn 2-3 gợi ý ở cuối câu theo ĐÚNG định dạng: [TAGS: Gợi ý 1 | Gợi ý 2]. VÍ DỤ: [TAGS: Tên Giải Đấu 1 | Tên Giải Đấu 2 | Giải khác]. CẤM dùng TAGS cho câu hỏi giao tiếp.
-  5. Topic: NẾU đổi chủ đề, chèn: <TOPIC>Tên Chủ Đề</TOPIC> ở cuối.
+  4. Topic: NẾU đổi chủ đề, chèn: <TOPIC>Tên Chủ Đề</TOPIC> ở cuối.
   ${brevityRule}${webContext}${groupContext}`
 };
 
@@ -56,7 +56,40 @@ const buildTimeReply = () => {
   return `Dạ, bây giờ là ${time}, ngày ${date} (${dayName}) ạ! ⏰`;
 };
 
-const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown", lineMessageId = null, quoteContext = "", forceIgnoreCheck = false, groupContext = "", isGroup = false, hotTopic = "") => {
+/**
+ * Dùng LLM (DeepSeek) để dịch nút bấm (Tag) thành câu search Google tối ưu
+ * dựa vào câu hỏi ngay trước đó của Bot.
+ */
+const generateSmartQuery = async (lastBotMessage, selectedTag) => {
+  try {
+    const prompt = `Dựa vào câu hỏi của Bot: "${lastBotMessage}"\nNgười dùng vừa chọn nút: "${selectedTag}"\nHãy viết MỘT câu tìm kiếm Google cực kỳ ngắn gọn, bao gồm đủ danh từ riêng cần thiết để tra cứu thông tin. KHÔNG giải thích, KHÔNG trả lời, CHỈ XUẤT CÂU TÌM KIẾM.`;
+    const response = await axios.post(
+      DEEPSEEK_URL,
+      {
+        model: DEEPSEEK_MODEL,
+        messages: [
+          { role: "system", content: "Bạn là chuyên gia tạo Search Query." },
+          { role: "user", content: prompt }
+        ],
+        temperature: 0.1,
+        max_tokens: 50
+      },
+      {
+        headers: {
+          "Authorization": `Bearer ${DEEPSEEK_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        timeout: 10000
+      }
+    );
+    return response.data.choices[0].message.content.replace(/["']/g, "").trim();
+  } catch (e) {
+    console.error("[SmartQuery] Lỗi:", e.message);
+    return selectedTag;
+  }
+};
+
+const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown", lineMessageId = null, quoteContext = "", forceIgnoreCheck = false, groupContext = "", isGroup = false, hotTopic = "", isPostback = false, postbackContext = "") => {
   // ★ Fast path: Câu hỏi thuần thời gian — trả lời bằng JS, không gọi bất kỳ API nào
   const cleanPrompt = prompt.replace(/@[^\s]+/g, "").trim();
   if (PURE_TIME_PATTERNS.some(p => p.test(cleanPrompt))) {
@@ -94,28 +127,63 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   try {
     let searchPrompt = quoteContext ? `${quoteContext}${prompt}` : prompt;
 
-    // Heuristic bù đắp ngữ cảnh tìm kiếm
+    // ─── Phát hiện "đổi chủ đề đột ngột" (Topic Switch Detection) ─────────────
+    // Các chủ đề có domain search riêng, KHÔNG liên quan bóng đá/tin tức chung
+    const STANDALONE_TOPICS = [
+      /thời tiết/i, /nhiệt độ/i, /mưa.*hôm nay/i, /nắng.*hôm nay/i,
+      /giá vàng/i, /vàng sjc/i, /giá xăng/i, /tỷ giá/i, /tỷ giá usd/i,
+      /kqxs/i, /xổ số/i, /kết quả xổ số/i,
+      /điểm thi/i, /tra cứu điểm/i,
+      /giá đô/i, /bitcoin/i, /crypto/i
+    ];
+    const isStandaloneTopic = STANDALONE_TOPICS.some(r => r.test(prompt));
+
     let contextualSearchPrompt = searchPrompt;
-    if (searchPrompt.split(" ").length < 15) {
-      if (messagesArray && messagesArray.length > 0) {
-        const prevUserMsgs = messagesArray.filter(m => m.role === "user");
-        if (prevUserMsgs.length > 0) {
-          const lastUserMsg = prevUserMsgs[prevUserMsgs.length - 1].text;
-          // Tránh duplicate: chỉ bù đắp nếu lastUserMsg khác hẳn so với prompt hiện tại
-          const isSameAsCurrentPrompt = lastUserMsg.trim().toLowerCase() === searchPrompt.trim().toLowerCase();
-          if (!isSameAsCurrentPrompt) {
-            contextualSearchPrompt = `${hotTopic ? hotTopic + ". " : ""}${lastUserMsg}. ${searchPrompt}`;
-            console.log(`[DeepSeek] Bù đắp ngữ cảnh (Tầng 1+2): "${contextualSearchPrompt}"`);
+    let isPreOptimized = false;
+
+    if (isPostback) {
+      // Trường hợp bấm nút (Tags Option): Bỏ qua mọi heuristc lằng nhằng, dùng thẳng LLM Router
+      const lastBotMsg = postbackContext || (messagesArray.filter(m => m.role === "model").pop()?.text || hotTopic);
+      contextualSearchPrompt = await generateSmartQuery(lastBotMsg, prompt);
+      isPreOptimized = true;
+      console.log(`[DeepSeek] LLM Smart Query: "${contextualSearchPrompt}"`);
+    } else {
+      if (!isStandaloneTopic && searchPrompt.split(" ").length < 15) {
+        if (messagesArray && messagesArray.length > 0) {
+          const prevUserMsgs = messagesArray.filter(m => m.role === "user");
+          if (prevUserMsgs.length > 0) {
+            const recentUserMsgs = prevUserMsgs.slice(-4).map(m => m.text.trim());
+            let pinnedMsg = recentUserMsgs[recentUserMsgs.length - 1];
+
+            // Cơ chế Ghim chủ đề: Nếu prompt hiện tại khá ngắn (bấm Quick Reply hoặc hỏi nối)
+            if (searchPrompt.split(" ").length <= 5) {
+              // Quét ngược tìm câu hỏi gốc "nặng ký" (>= 5 từ)
+              for (let i = recentUserMsgs.length - 1; i >= 0; i--) {
+                if (recentUserMsgs[i].split(" ").length >= 5) {
+                  pinnedMsg = recentUserMsgs[i];
+                  break;
+                }
+              }
+            }
+
+            // Tránh duplicate: chỉ bù đắp nếu câu ghim khác hẳn prompt hiện tại
+            const isSameAsCurrentPrompt = pinnedMsg.toLowerCase() === searchPrompt.trim().toLowerCase();
+            if (!isSameAsCurrentPrompt) {
+              contextualSearchPrompt = `${hotTopic ? hotTopic + ". " : ""}${pinnedMsg}. ${searchPrompt}`;
+              console.log(`[DeepSeek] Bù đắp ngữ cảnh (Ghim động): "${contextualSearchPrompt}"`);
+            }
           }
+        } else if (hotTopic) {
+          contextualSearchPrompt = `${hotTopic}. ${searchPrompt}`;
+          console.log(`[DeepSeek] Bù đắp ngữ cảnh (Tầng 2): "${contextualSearchPrompt}"`);
         }
-      } else if (hotTopic) {
-        contextualSearchPrompt = `${hotTopic}. ${searchPrompt}`;
-        console.log(`[DeepSeek] Bù đắp ngữ cảnh (Tầng 2): "${contextualSearchPrompt}"`);
+      } else if (isStandaloneTopic) {
+        console.log(`[DeepSeek] Phát hiện đổi chủ đề đột ngột → BỎ QUA bù đắp ngữ cảnh: "${prompt}"`);
       }
     }
 
-    webContext = await resolveWebContext(contextualSearchPrompt, sessionId);
-    console.log(`[DeepSeek] webContext có nội dung: ${webContext.length > 0}`);
+    webContext = await resolveWebContext(contextualSearchPrompt, isPreOptimized);
+    console.log(`[DeepSeek] webContext có nội dung: ${webContext ? webContext.length > 0 : false}`);
   } catch (err) {
     console.error("[DeepSeek] resolveWebContext lỗi:", err.message);
   }

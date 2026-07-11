@@ -198,11 +198,23 @@ const buildLineMessage = (text, participants, isGroup = true, hotTopic = "") => 
   let cleanedText = text.replace(/\*\*/g, ""); // Strip markdown bold
 
   let quickReply = undefined;
-  const tagMatch = cleanedText.match(/\[\s*TAGS\s*:(.*?)\]/i);
-  if (tagMatch) {
-    const tags = tagMatch[1].split("|").map(t => t.trim()).filter(Boolean);
-    cleanedText = cleanedText.replace(/\[\s*TAGS\s*:(.*?)\]/i, "").trim();
-    
+  let tagsStr = "";
+
+  const taskMatch = cleanedText.match(/<Task\s+mode="ASK"\s+tags="([^"]+)"\s*\/?>/i);
+  if (taskMatch) {
+    tagsStr = taskMatch[1];
+    cleanedText = cleanedText.replace(/<Task[^>]*>/gi, "").trim();
+  } else {
+    const tagMatch = cleanedText.match(/\[\s*TAGS\s*:(.*?)\]/i);
+    if (tagMatch) {
+      tagsStr = tagMatch[1];
+      cleanedText = cleanedText.replace(/\[\s*TAGS\s*:(.*?)\]/i, "").trim();
+    }
+  }
+
+  if (tagsStr) {
+    const tags = tagsStr.split("|").map(t => t.trim()).filter(Boolean);
+
     quickReply = {
       items: tags.map(tag => {
         const dataString = `action=quick_reply&text=${encodeURIComponent(tag)}&topic=${encodeURIComponent(hotTopic || "")}&ts=${Date.now()}`;
@@ -310,9 +322,14 @@ exports.webhook = onRequest(async (req, res) => {
     const { callback_query } = req.body;
     let message = req.body.message;
 
+    let isPostback = false;
+    let postbackContext = "";
+
     if (callback_query) {
+      isPostback = true;
       message = callback_query.message;
       if (message) {
+        postbackContext = message.text || message.caption || "";
         // Ẩn bàn phím inline ngay lập tức để User biết đã nhận lệnh
         telegram.editMessageReplyMarkup(message.chat.id, message.message_id, { inline_keyboard: [] });
         message.from = callback_query.from; // Cập nhật người gửi từ callback
@@ -353,6 +370,12 @@ exports.webhook = onRequest(async (req, res) => {
 
     // Xử lý tin nhắn (Text, Ảnh, Document)
     let messageContent = message.text || message.caption || null;
+
+    if (messageContent && messageContent.trim() === "/start") {
+      await telegram.reply(chatId, "Dạ em chào anh chị! Em là Annie đây ạ 🥰. Anh chị cần tra cứu tin tức, hỏi đáp hay lấy lịch thi đấu bóng đá thì cứ nhắn em nhé, em sẵn sàng 24/7 luôn ạ! ✨");
+      return res.end();
+    }
+
     let isImage = false;
 
     const botUsername = process.env.TELEGRAM_BOT_USERNAME || "";
@@ -494,7 +517,7 @@ exports.webhook = onRequest(async (req, res) => {
     const forceIgnoreCheck = (!isDirectlyTargeted && isImplicitlyTargeted);
     const isGroup = chatType !== "private";
     const groupContext = await buildGroupProfileContext(participants, cleanPrompt, userId, isGroup);
-    const rawMsg = await llm.chat(String(chatId), cleanPrompt, senderName, userId, null, quoteContext, forceIgnoreCheck, groupContext, isGroup, hotTopic);
+    const rawMsg = await llm.chat(String(chatId), cleanPrompt, senderName, userId, null, quoteContext, forceIgnoreCheck, groupContext, isGroup, hotTopic, isPostback, postbackContext);
 
     const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, createdAt: new Date().toISOString() };
 
@@ -563,7 +586,11 @@ exports.webhook = onRequest(async (req, res) => {
     let isImage = false;
     const eventMessageId = event.message?.id || `postback_${Date.now()}`;
 
+    let isPostback = false;
+    let postbackContext = "";
+
     if (event.type === "postback") {
+      isPostback = true;
       try {
         const data = new URLSearchParams(event.postback.data);
         if (data.get("action") === "quick_reply") {
@@ -580,7 +607,7 @@ exports.webhook = onRequest(async (req, res) => {
 
           const text = data.get("text");
           const topic = data.get("topic");
-          messageContent = topic ? `[Chủ đề: ${topic}] ${text}` : text;
+          messageContent = text;
           console.log(`[LINE] Nhận postback Quick Reply: ${messageContent}`);
         }
       } catch (err) {
@@ -746,7 +773,7 @@ exports.webhook = onRequest(async (req, res) => {
     const forceIgnoreCheck = (!isDirectlyTargeted && isImplicitlyTargeted);
     const isGroup = event.source.type !== "user";
     const groupContext = await buildGroupProfileContext(participants, cleanPrompt, userId, isGroup);
-    const rawMsg = await llm.chat(sessionId, cleanPrompt, senderName, userId, eventMessageId, quoteContext, forceIgnoreCheck, groupContext, isGroup, hotTopic);
+    const rawMsg = await llm.chat(sessionId, cleanPrompt, senderName, userId, eventMessageId, quoteContext, forceIgnoreCheck, groupContext, isGroup, hotTopic, isPostback, postbackContext);
 
     const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, lineMessageId: eventMessageId, createdAt: new Date().toISOString() };
 

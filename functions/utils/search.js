@@ -136,7 +136,7 @@ const scrapeUrl = async (url) => {
  * @param {string} prompt - Câu chat gốc của người dùng (có thể chứa URL, @mention)
  * @returns {Promise<string>} Chuỗi ngữ cảnh web (rỗng nếu không cần search)
  */
-const resolveWebContext = async (prompt) => {
+const resolveWebContext = async (prompt, isPreOptimized = false) => {
   const urls = prompt.match(URL_REGEX);
   let urlText = null;
 
@@ -147,26 +147,30 @@ const resolveWebContext = async (prompt) => {
   }
 
   let searchSummary = "";
-  if (checkNeedsSearch(prompt)) {
-    // LLM Query Extraction (Phương án 2): Trích xuất chính xác từ khóa, bỏ qua mọi rác hội thoại
+  if (isPreOptimized || checkNeedsSearch(prompt)) {
+    let finalQuery = prompt;
     let cleanQuery = prompt.replace(/@[^\s]+/g, "").replace(/\s+/g, " ").trim();
-    const extractionResult = await extractSearchQuery(cleanQuery);
-    
-    if (!extractionResult.has_entity) {
-      console.log(`[Search Router] Bị chặn do thiếu Danh từ riêng (has_entity = false)`);
-      return "";
+
+    if (!isPreOptimized) {
+      // LLM Query Extraction (Phương án 2): Trích xuất chính xác từ khóa, bỏ qua mọi rác hội thoại
+      const extractionResult = await extractSearchQuery(cleanQuery);
+      
+      if (!extractionResult.has_entity) {
+        console.log(`[Search Router] Bị chặn do thiếu Danh từ riêng (has_entity = false)`);
+        return "";
+      }
+      finalQuery = extractionResult.query;
     }
     
-    let finalQuery = extractionResult.query;
     const { TODAY_KEYWORDS } = require("./tavily");
     const isTodaySensitive = TODAY_KEYWORDS.some(kw => cleanQuery.toLowerCase().includes(kw));
     if (isTodaySensitive) {
       const todayStr = new Date().toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
-      finalQuery = `${extractionResult.query} ngày ${todayStr}`;
+      finalQuery = `${finalQuery} ngày ${todayStr}`;
     } else {
       if (!/\b20\d{2}\b/.test(finalQuery)) {
         const currentYear = new Date().getFullYear();
-        finalQuery = `${extractionResult.query} năm ${currentYear}`;
+        finalQuery = `${finalQuery} năm ${currentYear}`;
       }
     }
 

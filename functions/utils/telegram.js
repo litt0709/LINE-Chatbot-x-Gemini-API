@@ -17,26 +17,45 @@ const reply = async (chatId, text) => {
     return;
   }
 
-  // 1. Chuyển đổi <br> (nếu có) thành \n
-  let safeText = text.replace(/<br\s*\/?>/gi, "\n");
-  // 2. Escape các ký tự HTML nguy hiểm để tránh lỗi parse_mode của Telegram
-  safeText = safeText.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  // 3. Phục hồi định dạng in đậm từ Markdown sang HTML <b>
-  let htmlText = safeText.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>");
-
+  // --- Bóc tách XML Tags TRƯỚC KHI xử lý ký tự HTML ---
   let reply_markup = undefined;
-  const tagMatch = htmlText.match(/\[\s*TAGS\s*:(.*?)\]/i);
-  if (tagMatch) {
-    const tags = tagMatch[1].split("|").map(t => t.trim()).filter(Boolean);
-    htmlText = htmlText.replace(/\[\s*TAGS\s*:(.*?)\]/i, "").trim();
+  let rawText = text;
+  let tagsStr = "";
+
+  const taskMatch = rawText.match(/<Task\s+mode="ASK"\s+tags="([^"]+)"\s*\/?>/i);
+  if (taskMatch) {
+    tagsStr = taskMatch[1];
+    rawText = rawText.replace(/<Task[^>]*>/gi, "").trim();
+  } else {
+    const tagMatch = rawText.match(/\[\s*TAGS\s*:(.*?)\]/i);
+    if (tagMatch) {
+      tagsStr = tagMatch[1];
+      rawText = rawText.replace(/\[\s*TAGS\s*:(.*?)\]/i, "").trim();
+    }
+  }
+
+  if (tagsStr) {
+    const tags = tagsStr.split("|").map(t => t.trim()).filter(Boolean);
     
     reply_markup = {
       inline_keyboard: tags.map(tag => {
-        const payload = JSON.stringify({ ts: Date.now(), t: tag.substring(0, 45) });
+        let safeTag = tag;
+        // Rút gọn dần chuỗi tag cho đến khi toàn bộ cục JSON nhỏ hơn hoặc bằng 64 bytes
+        while (Buffer.byteLength(JSON.stringify({ ts: Date.now(), t: safeTag })) > 64 && safeTag.length > 0) {
+          safeTag = safeTag.slice(0, -1);
+        }
+        const payload = JSON.stringify({ ts: Date.now(), t: safeTag });
         return [{ text: tag, callback_data: payload }];
       })
     };
   }
+
+  // 1. Chuyển đổi <br> (nếu có) thành \n
+  let safeText = rawText.replace(/<br\s*\/?>/gi, "\n");
+  // 2. Escape các ký tự HTML nguy hiểm để tránh lỗi parse_mode của Telegram
+  safeText = safeText.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  // 3. Phục hồi định dạng in đậm từ Markdown sang HTML <b>
+  let htmlText = safeText.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>");
 
   try {
     await axios.post(`${TELEGRAM_BASE_URL}/sendMessage`, {

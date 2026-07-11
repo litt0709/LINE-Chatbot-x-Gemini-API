@@ -22,11 +22,16 @@ const searchExa = async (query, options = {}) => {
   const { TODAY_KEYWORDS } = require("./tavily");
   const isTodaySensitive = TODAY_KEYWORDS.some(kw => query.toLowerCase().includes(kw));
 
+  const ninetyDaysAgo = new Date();
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+
   const params = {
     query,
     type: "magic",
     useAutoprompt: true,
     numResults: 5,
+    startPublishedDate: ninetyDaysAgo.toISOString(),
+    sort_by: "published_date",
     contents: {
       text: { maxCharacters: 1500 }
     },
