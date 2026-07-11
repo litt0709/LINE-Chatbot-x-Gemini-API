@@ -24,6 +24,7 @@ const buildSystemPrompt = (webContext = "", groupContext = "", isGroup = false) 
   2. Logic & Data: CHỈ trả lời tin tức/sự kiện DỰA VÀO [THÔNG TIN TỪ INTERNET]. NẾU không có dữ liệu hoặc không khớp, BẮT BUỘC báo "em chưa có thông tin chính xác", TUYỆT ĐỐI KHÔNG tự bịa data. Luôn ĐỐI CHIẾU mốc thời gian trên để suy luận trạng thái (chưa/đang/đã diễn ra).
   3. Profile: NẾU User tiết lộ thông tin mới, chèn: <PROFILE userId="ID" real_name="Tên" gender="nam/nu" public_traits="..." private_traits="..."> ở cuối (chỉ lấy từ lời User).
   4. Topic: NẾU đổi chủ đề, chèn: <TOPIC>Tên Chủ Đề</TOPIC> ở cuối.
+  5. Bias: Cực kỳ trung lập. Tin tức User nêu CHỈ là giả thuyết, BẮT BUỘC ưu tiên dữ liệu internet. Chuyện cá nhân/giả định: được phân tích nhưng KHÔNG xác nhận tính thật giả.
   ${brevityRule}${webContext}${groupContext}`
 };
 
@@ -137,7 +138,7 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
         const sessionData = sessionDoc.data() || {};
         const summariesArray = sessionData.summaries || [];
         const filteredSummaries = filterSummariesByIntent(summariesArray, prompt);
-        
+
         if (filteredSummaries.length > 0) {
           history.push({
             role: "system",
@@ -154,9 +155,9 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   const mergedMessages = [];
   messagesArray.forEach(msg => {
     const lastMsg = mergedMessages[mergedMessages.length - 1];
-    const isSameSender = lastMsg && lastMsg.role === msg.role && 
-                         (msg.role === "model" || lastMsg.senderId === msg.senderId);
-    
+    const isSameSender = lastMsg && lastMsg.role === msg.role &&
+      (msg.role === "model" || lastMsg.senderId === msg.senderId);
+
     if (isSameSender) {
       lastMsg.text += ` | ${msg.text}`;
     } else {
@@ -239,8 +240,10 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   }
 
   // 3. Build message list
-  // Đưa quoteContext vào userContent để gửi sang API, tránh lưu quoteContext vào DB làm rác lịch sử
-  const userContent = `[NEW] [${senderName}]: ${quoteContext || ""}${prompt}`;
+  if (quoteContext) {
+    history.push({ role: "system", content: quoteContext.trim() });
+  }
+  const userContent = `[NEW] [${senderName}]: ${prompt}`;
 
   history.unshift({ role: "system", content: buildSystemPrompt(webContext, groupContext, isGroup) });
   let sysContent = history[0].content;

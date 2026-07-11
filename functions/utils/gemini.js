@@ -77,14 +77,14 @@ const summarizeHistory = async (messages, sessionId = "unknown") => {
   const formattedChat = messages.map(m => `[${m.senderName || m.role}]: ${m.text}`).join("\n");
   
   const prompt = `Đây là lịch sử chat của nhóm. Nhiệm vụ của bạn:
-1. Tóm tắt ngắn gọn các sự kiện chính dưới 1000 chữ (Cú pháp: [Tên] đã nói/làm gì).
+1. Tóm tắt ngắn gọn các sự kiện chính dưới 1000 chữ. BẮT BUỘC format rõ ràng: dùng ký tự \\n để ngắt dòng, phân các ý bằng gạch đầu dòng (-) hoặc emoji (📌, 👉), và bôi đậm ý chính bằng **text**.
 2. Xác định 01 chủ đề NỔI BẬT NHẤT (VD: World Cup 2026). Nếu không rõ, ghi "None".
 3. Phân tích Audit Keywords: Tìm các từ khóa tìm kiếm user dùng mà hệ thống có thể cần. Đánh giá xem nó có phải sự kiện trong ngày (is_today_sensitive) và phân loại vào (NEWS/FINANCE/DEV/SOCIAL/GENERAL).
 4. Phân tích Audit Issues: Tìm các câu trả lời sai hoặc ngớ ngẩn của bot (Hallucination) so với câu hỏi.
 
-BẮT BUỘC TRẢ VỀ ĐÚNG ĐỊNH DẠNG JSON SAU (không chứa markdown, không chứa text ngoài JSON):
+BẮT BUỘC TRẢ VỀ ĐÚNG ĐỊNH DẠNG JSON SAU (chỉ chứa JSON, được phép dùng \\n và dấu gạch ngang bên trong chuỗi string):
 {
-  "summary": "Nội dung tóm tắt...",
+  "summary": "Nội dung tóm tắt...\\n- 📌 **Sự kiện 1:** ...\\n- 👉 **Sự kiện 2:** ...",
   "hot_topic": "World Cup 2026",
   "audit_keywords": [
     { "word": "từ khóa", "is_today_sensitive": false, "suggested_category": "NEWS", "reason": "lý do" }

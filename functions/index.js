@@ -1,7 +1,7 @@
 const { onRequest } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const crypto = require("crypto");
-const { db, FieldValue, appendRawMessage, getRawMessages, clearRawMessages, getUserProfile, saveUserProfile, registerActiveSession, getActiveSessions, deregisterActiveSession, getSessionMetadata, updateSessionMetadata, getGlobalParticipants, saveGlobalParticipants } = require("./utils/db");
+const { db, rtdb, FieldValue, appendRawMessage, getRawMessages, clearRawMessages, getUserProfile, saveUserProfile, registerActiveSession, getActiveSessions, deregisterActiveSession, getSessionMetadata, updateSessionMetadata, getGlobalParticipants, saveGlobalParticipants } = require("./utils/db");
 const line = require("./utils/line");
 const telegram = require("./utils/telegram");
 
@@ -140,14 +140,23 @@ const processAndExtractProfile = (text, senderId, participants = {}) => {
  */
 const clearSessionHistory = async (sessionId) => {
   try {
+    // 1. Xóa Firestore History
     const chatRef = db.collection("users").doc(sessionId).collection("history");
     const snapshot = await chatRef.get();
     const batch = db.batch();
     snapshot.forEach(doc => batch.delete(doc.ref));
     await batch.commit();
     console.log(`[Firestore] Đã xóa lịch sử chat: ${sessionId}`);
+
+    // 2. Xóa RTDB Raw Messages
+    await clearRawMessages(sessionId);
+    console.log(`[RTDB] Đã xóa tin nhắn thô: ${sessionId}`);
+
+    // 3. Xóa Metadata (participants, hotTopic) trên RTDB & Cache
+    await updateSessionMetadata(sessionId, { participants: {}, hotTopic: "" });
+    console.log(`[RTDB/Cache] Đã reset metadata: ${sessionId}`);
   } catch (error) {
-    console.error(`[Firestore] Lỗi xóa lịch sử chat ${sessionId}:`, error.message);
+    console.error(`[Reset Session] Lỗi xóa lịch sử chat ${sessionId}:`, error.message);
   }
 };
 
@@ -535,6 +544,25 @@ exports.webhook = onRequest(async (req, res) => {
       const repliedText = replied.text || replied.caption || "";
       if (repliedText) {
         quoteContext = `[Đang trả lời tin nhắn của ${repliedFrom}: "${repliedText}"]\n`;
+      }
+    } else if (chatType === "private") {
+      const lastMsgSnap = await rtdb.ref(`chats/${chatId}/messages`).orderByKey().limitToLast(5).once("value");
+      if (lastMsgSnap.exists()) {
+        const lastMsgs = Object.values(lastMsgSnap.val());
+        const mediaMsg = lastMsgs.reverse().find(m => m.mediaId);
+        if (mediaMsg) {
+          if (mediaMsg.mediaType === "image") {
+            const imageBinary = await telegram.getImageBinary(mediaMsg.mediaId);
+            const imgDesc = await llm.multimodal(imageBinary);
+            quoteContext = `[BỨC ẢNH ĐƯỢC NHẮC ĐẾN]: "${imgDesc.trim()}"\n`;
+          } else if (mediaMsg.mediaType === "document") {
+            const docNameMatch = mediaMsg.text.match(/\[TÀI LIỆU:\s*(.*?)\]/);
+            const fileName = docNameMatch ? docNameMatch[1] : "document";
+            const localPath = await telegram.downloadMessageFile(mediaMsg.mediaId, fileName);
+            const fileDesc = await llm.analyzeDocument(localPath);
+            quoteContext = `[TÀI LIỆU ĐƯỢC NHẮC ĐẾN: ${fileName}]:\n"${fileDesc.trim()}"\n`;
+          }
+        }
       }
     }
 
