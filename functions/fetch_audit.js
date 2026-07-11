@@ -1,5 +1,5 @@
 const admin = require("firebase-admin");
-const serviceAccount = require("./auth/line-ai-chatbot-eab18-firebase-adminsdk-fbsvc-2abdcc42a0.json");
+const serviceAccount = require("./auth/tele-ai-chatbot-firebase-adminsdk-fbsvc-f017990579.json");
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
