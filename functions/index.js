@@ -446,8 +446,28 @@ exports.webhook = onRequest(async (req, res) => {
 
     if (chatType !== "private") {
       if (!isDirectlyTargeted && !isImplicitlyTargeted) {
-        // Lưu background history và thoát
-        const userMsg = { role: "user", text: messageContent, senderName, senderId: userId, createdAt: new Date().toISOString() };
+        let text = messageContent || "";
+        let mediaId = null;
+        let mediaType = null;
+
+        if (message.photo) {
+          text = "[HÌNH ẢNH]";
+          mediaId = message.photo[message.photo.length - 1].file_id;
+          mediaType = "image";
+        } else if (message.document) {
+          text = `[TÀI LIỆU: ${message.document.file_name || "document"}]`;
+          mediaId = message.document.file_id;
+          mediaType = "document";
+        }
+
+        const userMsg = { 
+          role: "user", 
+          text, 
+          senderName, 
+          senderId: userId, 
+          ...(mediaId && { mediaId, mediaType }),
+          createdAt: new Date().toISOString() 
+        };
         await appendRawMessage(String(chatId), userMsg);
         await registerActiveSession(String(chatId));
         return res.end();
@@ -601,19 +621,49 @@ exports.webhook = onRequest(async (req, res) => {
       }
     } else if (event.type === "message" && event.message.type === "text") {
       messageContent = event.message.text;
-    } else if (event.message?.type === "image" && event.source.type === "user") {
-      console.log(`[LINE] Đang xử lý ảnh từ User ${userId}...`);
-      const imageBinary = await line.getImageBinary(event.message.id);
-      const imgDesc = await llm.multimodal(imageBinary);
-      messageContent = `[BỨC ẢNH NGƯỜI DÙNG VỪA GỬI ĐẾN]: "${imgDesc.trim()}". Hãy phản hồi tự nhiên dựa trên mô tả bức ảnh này.`;
-      isImage = true;
-    } else if (event.message?.type === "file" && event.source.type === "user") {
+    } else if (event.message?.type === "image") {
+      const sessionId = event.source.groupId || event.source.roomId || userId;
+      const sessionData = await getSessionMetadata(sessionId);
+      const sessionParticipants = sessionData.participants || {};
+      const cachedParticipants = await getGlobalParticipants("line");
+      const participants = { ...sessionParticipants, ...cachedParticipants };
+      const senderName = Object.keys(participants).find(key => participants[key] === userId) || "User";
+
+      const userMsg = {
+        role: "user",
+        text: "[HÌNH ẢNH]",
+        mediaId: event.message.id,
+        mediaType: "image",
+        senderName,
+        senderId: userId,
+        lineMessageId: event.message.id,
+        createdAt: new Date().toISOString()
+      };
+      await appendRawMessage(sessionId, userMsg);
+      await registerActiveSession(sessionId);
+      continue;
+    } else if (event.message?.type === "file") {
+      const sessionId = event.source.groupId || event.source.roomId || userId;
+      const sessionData = await getSessionMetadata(sessionId);
+      const sessionParticipants = sessionData.participants || {};
+      const cachedParticipants = await getGlobalParticipants("line");
+      const participants = { ...sessionParticipants, ...cachedParticipants };
+      const senderName = Object.keys(participants).find(key => participants[key] === userId) || "User";
       const fileName = event.message.fileName || "document";
-      console.log(`[LINE] Đang xử lý file ${fileName} từ User ${userId}...`);
-      const localPath = await line.downloadMessageFile(event.message.id, fileName);
-      const fileDesc = await llm.analyzeDocument(localPath);
-      messageContent = `[TÀI LIỆU NGƯỜI DÙNG VỪA GỬI ĐẾN: ${fileName}]:\n"${fileDesc.trim()}"\n\nHãy phân tích và trả lời người dùng dựa trên thông tin tóm tắt này.`;
-      isImage = true;
+
+      const userMsg = {
+        role: "user",
+        text: `[TÀI LIỆU: ${fileName}]`,
+        mediaId: event.message.id,
+        mediaType: "document",
+        senderName,
+        senderId: userId,
+        lineMessageId: event.message.id,
+        createdAt: new Date().toISOString()
+      };
+      await appendRawMessage(sessionId, userMsg);
+      await registerActiveSession(sessionId);
+      continue;
     }
 
     if (!messageContent) continue;
@@ -714,9 +764,21 @@ exports.webhook = onRequest(async (req, res) => {
       try {
         const q = messagesArray.find(m => m.lineMessageId === quotedId);
         if (q) {
-          const quotedFrom = q.senderName || (q.role === "model" ? "Annie" : "ai đó");
-          const fullText = q.text;
-          quoteContext = `[Đang trả lời tin nhắn của ${quotedFrom}: "${fullText}"]\n`;
+          if (q.mediaType === "image") {
+            console.log(`[LINE] Quoted message là hình ảnh, đang tải on-demand và phân tích (ID: ${q.mediaId})...`);
+            const imageBinary = await line.getImageBinary(q.mediaId);
+            const imgDesc = await llm.multimodal(imageBinary);
+            quoteContext = `[BỨC ẢNH ĐƯỢC TRÍCH DẪN]: "${imgDesc.trim()}"\n`;
+          } else if (q.mediaType === "document") {
+            console.log(`[LINE] Quoted message là tài liệu, đang tải on-demand và phân tích (ID: ${q.mediaId})...`);
+            const localPath = await line.downloadMessageFile(q.mediaId, "quoted_doc");
+            const fileDesc = await llm.analyzeDocument(localPath);
+            quoteContext = `[TÀI LIỆU ĐƯỢC TRÍCH DẪN]: "${fileDesc.trim()}"\n`;
+          } else {
+            const quotedFrom = q.senderName || (q.role === "model" ? "Annie" : "ai đó");
+            const fullText = q.text;
+            quoteContext = `[Đang trả lời tin nhắn của ${quotedFrom}: "${fullText}"]\n`;
+          }
         } else if (isDirectlyTargeted || isImplicitlyTargeted) {
           console.log(`[LINE] Quoted message không có trong history, thử tải on-demand file/ảnh (ID: ${quotedId})...`);
           const localPath = await line.downloadMessageFile(quotedId, "quoted_media");
