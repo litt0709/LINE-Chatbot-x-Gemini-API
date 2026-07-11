@@ -3,41 +3,44 @@ const { searchExa } = require("./exa");
 const axios = require("axios");
 
 /**
- * Sử dụng DeepSeek để trích xuất từ khóa tìm kiếm cốt lõi từ câu nói của người dùng.
+ * Trích xuất từ khóa tìm kiếm (Dùng Regex nội bộ thay vì LLM để giảm độ trễ).
  * @param {string} contextualPrompt - Câu nói đã được bù đắp ngữ cảnh
- * @returns {Promise<string>}
+ * @returns {Promise<{query: string, has_entity: boolean}>}
  */
 const extractSearchQuery = async (contextualPrompt) => {
-  try {
-    const apiKey = process.env.DEEPSEEK_API_KEY;
-    if (!apiKey) return contextualPrompt;
-    
-    const { data } = await axios.post(
-      "https://api.deepseek.com/v1/chat/completions",
-      {
-        model: "deepseek-chat",
-        messages: [
-          { role: "system", content: "Bạn là hệ thống trích xuất từ khóa tìm kiếm. BẮT BUỘC trả về JSON: {\"search_query\": \"từ khóa tối ưu nhất\", \"has_entity\": true/false}. has_entity = true NẾU CÓ chứa danh từ riêng (tên giải, đội, người, địa danh...), = false nếu chỉ toàn từ chung chung như 'lịch thi đấu', 'kết quả', 'hôm nay'." },
-          { role: "user", content: contextualPrompt }
-        ],
-        response_format: { type: "json_object" },
-        max_tokens: 50,
-        temperature: 0
-      },
-      { headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` } }
-    );
-    
-    const result = JSON.parse(data.choices[0].message.content);
-    let query = result.search_query.trim();
-    // Xóa ngoặc kép hoặc dấu chấm do LLM sinh thừa
-    query = query.replace(/^["']|["']$/g, "").trim();
-    
-    console.log(`[LLM Extractor] Original: "${contextualPrompt}" -> Extracted: "${query}", has_entity: ${result.has_entity}`);
-    return { query, has_entity: result.has_entity };
-  } catch (err) {
-    console.error("[LLM Extractor] Lỗi:", err.message);
-    return { query: contextualPrompt, has_entity: true }; // Fallback về prompt gốc, coi như có entity để search chạy tiếp
+  // 1. Mở rộng bộ từ rác (noise words)
+  const noiseWords = [
+    "annie ơi", "annie", "bot ơi", "bot", "cho anh hỏi", "cho em hỏi", "cho mình hỏi", "hỏi xíu",
+    "tìm giúp", "tìm giùm", "tra giúp", "tra giùm", "xem giúp", "xem giùm", "giúp anh", "giúp em",
+    "cho anh", "cho em", "cho chị", "cho mình", "với", "nhé", "nha", "đi", "ạ", "ơi",
+    "chưa em", "chưa anh", "nhỉ", "có trận nào", "có ai", "có...không", "có...chưa",
+    "thế nào", "ra sao", "chi tiết hơn", "thông tin", "kể về", "biết gì", "nào"
+  ];
+  
+  let query = contextualPrompt;
+  for (const word of noiseWords) {
+    query = query.replace(new RegExp(`\\b${word}\\b`, 'gi'), "");
   }
+  
+  // 2. Chuyển dấu câu thành khoảng trắng để không dính chữ, KHÔNG dùng Set khử trùng lặp
+  query = query.replace(/[.,?!]/g, " ").replace(/\s+/g, ' ').trim();
+
+  // Fallback nếu xóa xong rỗng
+  if (!query) query = contextualPrompt.replace(/[.,?!]/g, " ");
+
+  // Nhận diện có cần search không (thay thế cho LLM has_entity)
+  // Check viết hoa (Bỏ qua ký tự đầu tiên của câu)
+  const hasCapitalized = /[A-ZĐ]/.test(query.substring(1));
+  
+  // Check các từ khóa đặc biệt
+  const specialKeywords = ["lịch", "tỷ số", "tỉ số", "kết quả", "kqxs", "giá", "thời tiết", "bóng đá", "tứ kết", "bán kết", "chung kết", "trận", "tin tức", "điểm thi"];
+  const hasSpecial = specialKeywords.some(kw => query.toLowerCase().includes(kw));
+
+  const has_entity = hasCapitalized || hasSpecial;
+
+  console.log(`[Regex Extractor] Original: "${contextualPrompt}" -> Extracted: "${query}", has_entity: ${has_entity}`);
+  
+  return { query, has_entity };
 };
 
 // ─── Regex lọc URL ───────────────────────────────────────────────────────────
@@ -167,18 +170,37 @@ const resolveWebContext = async (prompt) => {
       }
     }
 
-    console.log(`[Search Router] Kích hoạt tìm kiếm: "${finalQuery}"`);
+    const CATEGORY_REGEX = {
+      NEWS: /bóng đá|tứ kết|trận|kết quả|tỉ số|tỷ số|tin tức|thời sự|chính trị/i,
+      FINANCE: /giá vàng|tỷ giá|chứng khoán|cổ phiếu|vnindex/i,
+      DEV: /code|lập trình|lỗi|api|react|nodejs|github/i,
+      SOCIAL: /drama|phốt|cộng đồng mạng|twitter|x\b/i
+    };
+
+    let category = "GENERAL";
+    if (CATEGORY_REGEX.DEV.test(finalQuery)) category = "DEV";
+    else if (CATEGORY_REGEX.SOCIAL.test(finalQuery)) category = "SOCIAL";
+    else if (CATEGORY_REGEX.NEWS.test(finalQuery) || CATEGORY_REGEX.FINANCE.test(finalQuery)) category = "NEWS";
+
+    console.log(`[Search Router] Kích hoạt tìm kiếm: "${finalQuery}" | Category: ${category}`);
     
     try {
-      const tavilyResult = await searchTavily(finalQuery);
-      searchSummary = tavilyResult || "";
-    } catch (tavilyErr) {
-      // Chỉ fallback Exa khi Tavily chết hẳn (exception), không phải khi no results
-      console.log(`[Search Router] Tavily lỗi, fallback sang Exa: ${tavilyErr.message}`);
+      if (category === "DEV" || category === "SOCIAL") {
+        const exaCat = category === "DEV" ? "github" : "tweet";
+        searchSummary = await searchExa(finalQuery, { category: exaCat }) || "";
+      } else {
+        const tavilyTopic = category === "NEWS" ? "news" : "general";
+        searchSummary = await searchTavily(finalQuery, { topic: tavilyTopic }) || "";
+      }
+    } catch (err) {
+      console.log(`[Search Router] Nguồn chính lỗi, chạy fallback: ${err.message}`);
       try {
-        const exaResult = await searchExa(finalQuery);
-        searchSummary = exaResult || "";
-      } catch (exaErr) {
+        if (category === "DEV" || category === "SOCIAL") {
+          searchSummary = await searchTavily(finalQuery) || "";
+        } else {
+          searchSummary = await searchExa(finalQuery) || "";
+        }
+      } catch (fallbackErr) {
         console.error(`[Search Router] Cả Tavily và Exa đều lỗi.`);
       }
     }

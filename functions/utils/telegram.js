@@ -31,7 +31,10 @@ const reply = async (chatId, text) => {
     htmlText = htmlText.replace(/\[\s*TAGS\s*:(.*?)\]/i, "").trim();
     
     reply_markup = {
-      inline_keyboard: tags.map(tag => [{ text: tag, callback_data: tag.substring(0, 64) }])
+      inline_keyboard: tags.map(tag => {
+        const payload = JSON.stringify({ ts: Date.now(), t: tag.substring(0, 45) });
+        return [{ text: tag, callback_data: payload }];
+      })
     };
   }
 

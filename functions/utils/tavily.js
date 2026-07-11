@@ -14,9 +14,10 @@ const TODAY_KEYWORDS = [
 /**
  * Tìm kiếm thông tin trên internet bằng Tavily API.
  * @param {string} query
+ * @param {object} options
  * @returns {Promise<string|null>}
  */
-const searchTavily = async (query) => {
+const searchTavily = async (query, options = {}) => {
   if (!TAVILY_API_KEY || TAVILY_API_KEY === "YOUR_TAVILY_API_KEY_HERE") {
     console.log("[Tavily] API Key chưa được cấu hình. Bỏ qua tìm kiếm.");
     return null;
@@ -55,8 +56,9 @@ const searchTavily = async (query) => {
     api_key: TAVILY_API_KEY,
     query: optimizedQuery,
     search_depth: "basic",
+    topic: options.topic || "general",
     include_answer: false,
-    max_results: 3,
+    max_results: 7,
     include_domains: targetDomains,
     ...(isTodaySensitive && { time_range: "day" })
   };

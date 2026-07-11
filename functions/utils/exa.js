@@ -10,9 +10,10 @@ const EXA_MONTHLY_LIMIT = 950;
 /**
  * Tìm kiếm thông tin trên internet bằng Exa API.
  * @param {string} query
+ * @param {object} options
  * @returns {Promise<string|null>}
  */
-const searchExa = async (query) => {
+const searchExa = async (query, options = {}) => {
   if (!EXA_API_KEY || EXA_API_KEY === "YOUR_EXA_API_KEY_HERE") {
     console.log("[Exa] API Key chưa được cấu hình. Bỏ qua tìm kiếm.");
     return null;
@@ -28,7 +29,8 @@ const searchExa = async (query) => {
     numResults: 5,
     contents: {
       text: { maxCharacters: 1500 }
-    }
+    },
+    ...(options.category && { category: options.category })
   };
 
   if (isTodaySensitive) {

@@ -130,7 +130,7 @@ const processAndExtractProfile = (text, senderId, participants = {}) => {
     }
   }
 
-  cleanedText = cleanedText.replace(/<PROFILE[^>]*>/gi, "").replace(/\n{3,}/g, "\n\n").trim();
+  cleanedText = cleanedText.replace(/<PROFILE[^>]*>|<\/PROFILE>/gi, "").replace(/\n{3,}/g, "\n\n").trim();
   return { text: cleanedText, topic };
 };
 
@@ -205,7 +205,7 @@ const buildLineMessage = (text, participants, isGroup = true, hotTopic = "") => 
     
     quickReply = {
       items: tags.map(tag => {
-        const dataString = `action=quick_reply&text=${encodeURIComponent(tag)}&topic=${encodeURIComponent(hotTopic || "")}`;
+        const dataString = `action=quick_reply&text=${encodeURIComponent(tag)}&topic=${encodeURIComponent(hotTopic || "")}&ts=${Date.now()}`;
         return {
           type: "action",
           action: {
@@ -315,10 +315,24 @@ exports.webhook = onRequest(async (req, res) => {
       if (message) {
         // Ẩn bàn phím inline ngay lập tức để User biết đã nhận lệnh
         telegram.editMessageReplyMarkup(message.chat.id, message.message_id, { inline_keyboard: [] });
-
-        // Biến callback_query thành một tin nhắn thông thường để xử lý tiếp
-        message.text = callback_query.data;
         message.from = callback_query.from; // Cập nhật người gửi từ callback
+
+        if (callback_query.data && callback_query.data.startsWith('{"ts":')) {
+          try {
+            const payload = JSON.parse(callback_query.data);
+            const now = Date.now();
+            if (now - payload.ts > 30000) {
+              console.log(`[Telegram] Callback hết hạn (${now - payload.ts}ms)`);
+              telegram.sendMessage(message.chat.id, "Dạ đã hết thời gian chọn lựa (quá 30s), nếu anh chị có câu hỏi khác thì cứ hỏi em nha! ⏳");
+              return res.end();
+            }
+            message.text = payload.t;
+          } catch (e) {
+            message.text = callback_query.data;
+          }
+        } else {
+          message.text = callback_query.data;
+        }
       }
     }
 
@@ -393,7 +407,7 @@ exports.webhook = onRequest(async (req, res) => {
     if (!isImage && cleanText(messageContent).toLowerCase() === "tóm tắt chủ đề") {
       const rawMessages = await getRawMessages(String(chatId));
       if (rawMessages && rawMessages.length > 0) {
-        const summaryText = await llm.summarizeHistory(rawMessages);
+        const summaryText = await llm.summarizeHistory(rawMessages, String(chatId));
         if (summaryText) {
           let hotTopic = null;
           const topicMatch = summaryText.match(/\[HOT_TOPIC:(.*?)\]/i);
@@ -553,6 +567,17 @@ exports.webhook = onRequest(async (req, res) => {
       try {
         const data = new URLSearchParams(event.postback.data);
         if (data.get("action") === "quick_reply") {
+          const ts = parseInt(data.get("ts") || "0", 10);
+          const now = Date.now();
+          if (ts > 0 && now - ts > 30000) {
+            console.log(`[LINE] Postback hết hạn (${now - ts}ms)`);
+            await line.replyMessage(event.replyToken, [{
+              type: "text",
+              text: "Dạ đã hết thời gian chọn lựa (quá 30s), nếu anh chị có câu hỏi khác thì cứ hỏi em nha! ⏳"
+            }]);
+            return;
+          }
+
           const text = data.get("text");
           const topic = data.get("topic");
           messageContent = topic ? `[Chủ đề: ${topic}] ${text}` : text;
@@ -593,7 +618,7 @@ exports.webhook = onRequest(async (req, res) => {
     if (!isImage && cleanText(messageContent).toLowerCase() === "tóm tắt chủ đề") {
       const rawMessages = await getRawMessages(sessionId);
       if (rawMessages && rawMessages.length > 0) {
-        const summaryText = await llm.summarizeHistory(rawMessages);
+        const summaryText = await llm.summarizeHistory(rawMessages, sessionId);
         if (summaryText) {
           let hotTopic = null;
           const topicMatch = summaryText.match(/\[HOT_TOPIC:(.*?)\]/i);
@@ -615,7 +640,7 @@ exports.webhook = onRequest(async (req, res) => {
     let isDirectlyTargeted = false;
     let isImplicitlyTargeted = false;
 
-    if (event.source.type === "user") {
+    if (event.source.type === "user" || event.type === "postback") {
       isDirectlyTargeted = true;
     } else {
       const isMentioned = event.message?.mention?.mentionees?.some(m => m.isSelf === true);
@@ -846,7 +871,7 @@ exports.masterScheduler = onSchedule({
 
         if (rawMessages && rawMessages.length > 0) {
           console.log(`[Cleanup] Đang tóm tắt ${rawMessages.length} tin nhắn thô cho session: ${sessionId}`);
-          const summaryText = await llm.summarizeHistory(rawMessages);
+          const summaryText = await llm.summarizeHistory(rawMessages, sessionId);
 
           if (summaryText) {
             summaries.push({

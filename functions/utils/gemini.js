@@ -1,5 +1,6 @@
 const { GoogleGenAI } = require("@google/genai");
 const fs = require("fs");
+const { db } = require("./db");
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 const GEMINI_MODEL = "gemini-2.5-flash";
 
@@ -65,21 +66,33 @@ const analyzeDocument = async (localFilePath) => {
 };
 
 /**
- * Nén ký ức (Memory Compression).
+ * Nén ký ức (Memory Compression) và tạo Audit Log.
  * @param {Array} messages - Mảng các tin nhắn thô
- * @returns {Promise<string>}
+ * @param {string} sessionId - ID của session/group để track log
+ * @returns {Promise<string>} Trả về string tóm tắt theo format cũ
  */
-const summarizeHistory = async (messages) => {
+const summarizeHistory = async (messages, sessionId = "unknown") => {
   if (!messages || messages.length === 0) return "";
   
   const formattedChat = messages.map(m => `[${m.senderName || m.role}]: ${m.text}`).join("\n");
   
-  const prompt = `Đây là lịch sử chat của nhóm trong thời gian qua. Dữ liệu này sẽ được dùng làm bộ nhớ dài hạn cho AI.
-Hãy tóm tắt ngắn gọn các sự kiện chính và thông tin quan trọng. Cú pháp bắt buộc: [Tên người dùng] đã nói/làm gì.
-Chú ý giữ lại các sở thích cá nhân, quan điểm, file được gửi hoặc thông tin gắn liền với từng người dùng.
-Không dài dòng, cố gắng gói gọn dưới 1000 chữ.
+  const prompt = `Đây là lịch sử chat của nhóm. Nhiệm vụ của bạn:
+1. Tóm tắt ngắn gọn các sự kiện chính dưới 1000 chữ (Cú pháp: [Tên] đã nói/làm gì).
+2. Xác định 01 chủ đề NỔI BẬT NHẤT (VD: World Cup 2026). Nếu không rõ, ghi "None".
+3. Phân tích Audit Keywords: Tìm các từ khóa tìm kiếm user dùng mà hệ thống có thể cần. Đánh giá xem nó có phải sự kiện trong ngày (is_today_sensitive) và phân loại vào (NEWS/FINANCE/DEV/SOCIAL/GENERAL).
+4. Phân tích Audit Issues: Tìm các câu trả lời sai hoặc ngớ ngẩn của bot (Hallucination) so với câu hỏi.
 
-BẮT BUỘC TRƯỚC KHI KẾT THÚC BẢN TÓM TẮT: Dựa vào lịch sử chat, hãy xác định xem nhóm đang thảo luận về Chủ đề/Sự kiện/Giải đấu gì sôi nổi nhất. Chỉ được phép chọn 01 chủ đề ĐƠN NHẤT và NỔI BẬT NHẤT. In ra chính xác theo định dạng: \`[HOT_TOPIC: Tên chủ đề]\` (VD: \`[HOT_TOPIC: World Cup 2026]\`). Nếu cuộc trò chuyện quá chung chung không có chủ đề cụ thể, in ra: \`[HOT_TOPIC: None]\`. Cấm liệt kê nhiều chủ đề.
+BẮT BUỘC TRẢ VỀ ĐÚNG ĐỊNH DẠNG JSON SAU (không chứa markdown, không chứa text ngoài JSON):
+{
+  "summary": "Nội dung tóm tắt...",
+  "hot_topic": "World Cup 2026",
+  "audit_keywords": [
+    { "word": "từ khóa", "is_today_sensitive": false, "suggested_category": "NEWS", "reason": "lý do" }
+  ],
+  "audit_issues": [
+    { "user_question": "...", "bot_answer": "...", "issue_type": "hallucination", "severity": "HIGH", "note": "..." }
+  ]
+}
 
 Lịch sử chat thô:
 ${formattedChat}`;
@@ -87,11 +100,44 @@ ${formattedChat}`;
   try {
     const response = await ai.models.generateContent({
       model: GEMINI_MODEL,
-      contents: [{ role: "user", parts: [{ text: prompt }] }]
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      config: {
+        responseMimeType: "application/json"
+      }
     });
-    return response.text.trim();
+    const textResp = response.text.trim();
+    
+    let jsonObj = null;
+    try {
+      jsonObj = JSON.parse(textResp);
+    } catch (parseErr) {
+      const cleaned = textResp.replace(/```json/gi, "").replace(/```/g, "").trim();
+      jsonObj = JSON.parse(cleaned);
+    }
+
+    // Ghi Audit Log vào Firestore
+    try {
+      if ((jsonObj.audit_keywords && jsonObj.audit_keywords.length > 0) || (jsonObj.audit_issues && jsonObj.audit_issues.length > 0)) {
+        const expireAtDate = new Date();
+        expireAtDate.setDate(expireAtDate.getDate() + 30); // TTL 30 ngày
+        await db.collection("audit_logs").add({
+          timestamp: new Date().toISOString(),
+          sessionId: sessionId,
+          audit_keywords: jsonObj.audit_keywords || [],
+          audit_issues: jsonObj.audit_issues || [],
+          expireAt: expireAtDate
+        });
+        console.log(`[Audit Log] Ghi log thành công cho session ${sessionId}`);
+      }
+    } catch (dbErr) {
+      console.error("[Audit Log] Lỗi ghi DB:", dbErr.message);
+    }
+
+    // Reconstruct the legacy string format so index.js continues to work without changing its regex logic
+    return `${jsonObj.summary || ""}\n\n[HOT_TOPIC: ${jsonObj.hot_topic || "None"}]`;
+
   } catch (error) {
-    console.error("[Gemini] Lỗi nén trí nhớ:", error.message);
+    console.error("[Gemini] Lỗi nén trí nhớ & audit:", error.message);
     return "";
   }
 };
