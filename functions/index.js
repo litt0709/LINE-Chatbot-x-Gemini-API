@@ -1,7 +1,7 @@
 const { onRequest } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const crypto = require("crypto");
-const { db, FieldValue, appendRawMessage, getRawMessages, clearRawMessages, getUserProfile, saveUserProfile } = require("./utils/db");
+const { db, FieldValue, appendRawMessage, getRawMessages, clearRawMessages, getUserProfile, saveUserProfile, registerActiveSession, getActiveSessions, deregisterActiveSession, getSessionMetadata, updateSessionMetadata, getGlobalParticipants, saveGlobalParticipants } = require("./utils/db");
 const line = require("./utils/line");
 const telegram = require("./utils/telegram");
 
@@ -426,10 +426,10 @@ exports.webhook = onRequest(async (req, res) => {
             const topicStr = topicMatch[1].trim();
             if (topicStr.toLowerCase() !== "none") hotTopic = topicStr;
           }
-          const sessionRef = db.collection("users").doc(String(chatId));
-          await sessionRef.set({ hotTopic }, { merge: true });
+          await updateSessionMetadata(String(chatId), { hotTopic });
           await telegram.reply(chatId, `Đã ép tóm tắt xong! Chủ đề nóng hiện tại là: ${hotTopic}`);
           await clearRawMessages(String(chatId));
+          await deregisterActiveSession(String(chatId));
         }
       } else {
         await telegram.reply(chatId, "Không có tin nhắn nào để tóm tắt ạ.");
@@ -449,21 +449,19 @@ exports.webhook = onRequest(async (req, res) => {
         // Lưu background history và thoát
         const userMsg = { role: "user", text: messageContent, senderName, senderId: userId, createdAt: new Date().toISOString() };
         await appendRawMessage(String(chatId), userMsg);
+        await registerActiveSession(String(chatId));
         return res.end();
       }
     }
-    // Lấy participants lịch sử của session này (nếu có) làm fallback
-    const sessionRef = db.collection("users").doc(String(chatId));
-    const sessionDoc = await sessionRef.get();
-    const sessionData = sessionDoc.data() || {};
+    // Lấy participants lịch sử và hotTopic từ RTDB có Cache RAM
+    await registerActiveSession(String(chatId));
+    const sessionData = await getSessionMetadata(String(chatId));
     const sessionParticipants = sessionData.participants || {};
     const hotTopic = sessionData.hotTopic || "";
 
     // Cập nhật bản đồ tên → userId (participants) TOÀN CỤC cho Telegram (với cache RAM)
     if (!cachedTgParticipants) {
-      const globalRef = db.collection("metadata").doc("tg_participants");
-      const globalDoc = await globalRef.get();
-      cachedTgParticipants = globalDoc.data() || {};
+      cachedTgParticipants = await getGlobalParticipants("tg");
     }
 
     // Gộp và cập nhật tên người gửi mới
@@ -487,7 +485,7 @@ exports.webhook = onRequest(async (req, res) => {
 
     // Lưu bất đồng bộ sang global nếu có dữ liệu mới
     if (hasNewData) {
-      db.collection("metadata").doc("tg_participants").set(cachedTgParticipants, { merge: true }).catch(e => console.error("[Telegram] Lưu participants lỗi:", e.message));
+      await saveGlobalParticipants("tg", cachedTgParticipants);
     }
 
     // Nếu người dùng reply (trích dẫn) một tin nhắn khác, đính kèm nội dung đó vào prompt
@@ -517,7 +515,7 @@ exports.webhook = onRequest(async (req, res) => {
     const { text: botMsgText, topic } = processAndExtractProfile(rawMsg, userId, participants);
 
     if (topic) {
-      db.collection("users").doc(String(chatId)).set({ hotTopic: topic }, { merge: true }).catch(e => console.error("[Telegram] Lỗi cập nhật hotTopic:", e.message));
+      await updateSessionMetadata(String(chatId), { hotTopic: topic });
     }
 
     // Convert @name → Telegram HTML mention thực sự
@@ -700,13 +698,12 @@ exports.webhook = onRequest(async (req, res) => {
       continue;
     }
 
-    // 1. Tải toàn bộ dữ liệu session (participants và messages) 1 lần duy nhất
-    const sessionRef = db.collection("users").doc(sessionId);
-    const sessionDoc = await sessionRef.get();
-    const sessionData = sessionDoc.data() || {};
+    // 1. Đăng ký active session và tải metadata từ RTDB
+    await registerActiveSession(sessionId);
+    const sessionData = await getSessionMetadata(sessionId);
 
     const sessionParticipants = sessionData.participants || {};
-    const messagesArray = sessionData.messages || [];
+    const messagesArray = await getRawMessages(sessionId, 25);
     const hotTopic = sessionData.hotTopic || "";
 
     // Nếu người dùng reply (trích dẫn) một tin nhắn khác, tìm nội dung trong mảng history
@@ -735,9 +732,7 @@ exports.webhook = onRequest(async (req, res) => {
 
     // Cập nhật bản đồ tên → userId TOÀN CỤC cho LINE (với cache RAM)
     if (!cachedLineParticipants) {
-      const globalRef = db.collection("metadata").doc("line_participants");
-      const globalDoc = await globalRef.get();
-      cachedLineParticipants = globalDoc.data() || {};
+      cachedLineParticipants = await getGlobalParticipants("line");
     }
 
     // Gộp và cập nhật tên người gửi mới
@@ -753,7 +748,7 @@ exports.webhook = onRequest(async (req, res) => {
 
     // Lưu bất đồng bộ sang global nếu có dữ liệu mới
     if (hasNewData) {
-      db.collection("metadata").doc("line_participants").set(cachedLineParticipants, { merge: true }).catch(e => console.error("[LINE] Lưu participants lỗi:", e.message));
+      await saveGlobalParticipants("line", cachedLineParticipants);
     }
 
     console.log(`[LINE] Participants map cho Session:`, JSON.stringify(participants));
@@ -773,7 +768,7 @@ exports.webhook = onRequest(async (req, res) => {
     const { text: botMsgText, topic } = processAndExtractProfile(rawMsg, userId, participants);
 
     if (topic) {
-      db.collection("users").doc(sessionId).set({ hotTopic: topic }, { merge: true }).catch(e => console.error("[LINE] Lỗi cập nhật hotTopic:", e.message));
+      await updateSessionMetadata(sessionId, { hotTopic: topic });
     }
 
     // Xây dựng LINE message có proper mention tags
@@ -854,29 +849,30 @@ exports.masterScheduler = onSchedule({
     await sendNotifications("afternoon");
   }
 
-  // 3. Dọn dẹp Lịch sử (Memory Compression): Chạy 1 lần/ngày lúc 3:00 sáng (giảm 92% Firestore reads)
-  if (hour === 3 && minute < 30) {
-    console.log("[Scheduler] Kích hoạt Dọn dẹp Ký Ức (Mỗi 2 tiếng)");
+  // 3. Dọn dẹp Lịch sử (Memory Compression): Chạy mỗi 4 tiếng (0, 4, 8, 12, 16, 20) lúc đầu giờ
+  if (hour % 4 === 0 && minute < 30) {
+    console.log("[Scheduler] Kích hoạt Dọn dẹp Ký Ức (Mỗi 4 tiếng)");
     try {
-      const usersSnap = await db.collection("users").get();
+      const activeSessions = await getActiveSessions();
       let cleanedCount = 0;
       const batch = db.batch();
-      const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
+      const fortyEightHoursAgo = Date.now() - 48 * 60 * 60 * 1000;
 
-      for (const doc of usersSnap.docs) {
-        const data = doc.data();
-        const sessionId = doc.id;
+      for (const sessionId of activeSessions) {
+        const sessionRef = db.collection("users").doc(sessionId);
+        const sessionDoc = await sessionRef.get();
+        const sessionData = sessionDoc.exists ? sessionDoc.data() : {};
         let needsUpdate = false;
         let updateData = {};
 
-        if (data.messages !== undefined) {
+        if (sessionData.messages !== undefined) {
           updateData.messages = FieldValue.delete();
           needsUpdate = true;
         }
 
-        let summaries = data.summaries || [];
+        let summaries = sessionData.summaries || [];
         const oldSummariesLength = summaries.length;
-        summaries = summaries.filter(s => new Date(s.createdAt).getTime() >= twentyFourHoursAgo);
+        summaries = summaries.filter(s => new Date(s.createdAt).getTime() >= fortyEightHoursAgo);
         if (summaries.length !== oldSummariesLength) {
           updateData.summaries = summaries;
           needsUpdate = true;
@@ -884,28 +880,32 @@ exports.masterScheduler = onSchedule({
 
         const rawMessages = await getRawMessages(sessionId);
 
-        if (rawMessages && rawMessages.length > 0) {
-          console.log(`[Cleanup] Đang tóm tắt ${rawMessages.length} tin nhắn thô cho session: ${sessionId}`);
-          const summaryText = await llm.summarizeHistory(rawMessages, sessionId);
+        if (!rawMessages || rawMessages.length === 0) {
+          await deregisterActiveSession(sessionId);
+          continue;
+        }
 
-          if (summaryText) {
-            summaries.push({
-              text: summaryText,
-              createdAt: new Date().toISOString()
-            });
-            updateData.summaries = summaries;
+        console.log(`[Cleanup] Đang tóm tắt ${rawMessages.length} tin nhắn thô cho session: ${sessionId}`);
+        const summaryText = await llm.summarizeHistory(rawMessages, sessionId);
 
-            await clearRawMessages(sessionId);
-            needsUpdate = true;
-          }
+        if (summaryText) {
+          summaries.push({
+            text: summaryText,
+            createdAt: new Date().toISOString()
+          });
+          updateData.summaries = summaries;
 
-          await new Promise(r => setTimeout(r, 4000));
+          await clearRawMessages(sessionId);
+          await deregisterActiveSession(sessionId);
+          needsUpdate = true;
         }
 
         if (needsUpdate && Object.keys(updateData).length > 0) {
-          batch.update(doc.ref, updateData);
+          batch.set(sessionRef, updateData, { merge: true });
           cleanedCount++;
         }
+
+        await new Promise(r => setTimeout(r, 4000));
       }
 
       if (cleanedCount > 0) {

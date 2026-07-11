@@ -75,6 +75,138 @@ const clearRawMessages = async (sessionId) => {
   }
 };
 
+const metadataCache = {};
+
+/**
+ * Đăng ký session đang hoạt động vào danh mục RTDB
+ */
+const registerActiveSession = async (sessionId) => {
+  try {
+    await rtdb.ref(`active_sessions/${sessionId}`).set(true);
+  } catch (error) {
+    console.error(`[RTDB] Lỗi đăng ký active session ${sessionId}:`, error.message);
+  }
+};
+
+/**
+ * Lấy toàn bộ danh sách các session đang hoạt động từ RTDB
+ */
+const getActiveSessions = async () => {
+  try {
+    const snap = await rtdb.ref("active_sessions").once("value");
+    if (!snap.exists()) return [];
+    return Object.keys(snap.val());
+  } catch (error) {
+    console.error(`[RTDB] Lỗi lấy danh sách active sessions:`, error.message);
+    return [];
+  }
+};
+
+/**
+ * Xóa session khỏi danh mục hoạt động trên RTDB
+ */
+const deregisterActiveSession = async (sessionId) => {
+  try {
+    await rtdb.ref(`active_sessions/${sessionId}`).remove();
+  } catch (error) {
+    console.error(`[RTDB] Lỗi hủy đăng ký active session ${sessionId}:`, error.message);
+  }
+};
+
+/**
+ * Lấy Metadata (participants & hotTopic) của Session từ RTDB có Cache RAM 5 phút
+ */
+const getSessionMetadata = async (sessionId) => {
+  try {
+    const now = Date.now();
+    if (metadataCache[sessionId] && now < metadataCache[sessionId].expiresAt) {
+      return metadataCache[sessionId].data;
+    }
+
+    const ref = rtdb.ref(`chats/${sessionId}/metadata`);
+    const snap = await ref.once('value');
+    const data = snap.val() || { participants: {}, hotTopic: "" };
+
+    metadataCache[sessionId] = {
+      data: data,
+      expiresAt: now + 5 * 60 * 1000 // Cache 5 phút
+    };
+    return data;
+  } catch (error) {
+    console.error(`[RTDB] Lỗi lấy metadata cho session ${sessionId}:`, error.message);
+    return { participants: {}, hotTopic: "" };
+  }
+};
+
+/**
+ * Cập nhật Metadata lên RTDB & RAM Cache
+ */
+const updateSessionMetadata = async (sessionId, updateObj) => {
+  try {
+    const ref = rtdb.ref(`chats/${sessionId}/metadata`);
+    await ref.update(updateObj);
+
+    // Cập nhật RAM Cache
+    if (metadataCache[sessionId]) {
+      metadataCache[sessionId].data = {
+        ...metadataCache[sessionId].data,
+        ...updateObj
+      };
+    } else {
+      metadataCache[sessionId] = {
+        data: updateObj,
+        expiresAt: Date.now() + 5 * 60 * 1000
+      };
+    }
+  } catch (error) {
+    console.error(`[RTDB] Lỗi cập nhật metadata cho session ${sessionId}:`, error.message);
+  }
+};
+
+/**
+ * Lấy danh sách participants toàn cục từ RTDB có Cache RAM
+ */
+const getGlobalParticipants = async (platform) => {
+  const cacheKey = `global_${platform}`;
+  const now = Date.now();
+  if (metadataCache[cacheKey] && now < metadataCache[cacheKey].expiresAt) {
+    return metadataCache[cacheKey].data;
+  }
+
+  try {
+    const ref = rtdb.ref(`metadata/${platform}_participants`);
+    const snap = await ref.once('value');
+    const data = snap.val() || {};
+
+    metadataCache[cacheKey] = {
+      data: data,
+      expiresAt: now + 5 * 60 * 1000
+    };
+    return data;
+  } catch (error) {
+    console.error(`[RTDB] Lỗi lấy global participants cho ${platform}:`, error.message);
+    return {};
+  }
+};
+
+/**
+ * Lưu danh sách participants toàn cục vào RTDB
+ */
+const saveGlobalParticipants = async (platform, data) => {
+  const cacheKey = `global_${platform}`;
+  try {
+    const ref = rtdb.ref(`metadata/${platform}_participants`);
+    await ref.set(data);
+
+    metadataCache[cacheKey] = {
+      data: data,
+      expiresAt: Date.now() + 5 * 60 * 1000
+    };
+  } catch (error) {
+    console.error(`[RTDB] Lỗi lưu global participants cho ${platform}:`, error.message);
+  }
+};
+
 const getUserProfile = async (userId) => {
   try {
     const doc = await db.collection("user_profiles").doc(String(userId)).get();
@@ -103,6 +235,13 @@ module.exports = {
   getRawMessages,
   clearRawMessages,
   getUserProfile, 
-  saveUserProfile 
+  saveUserProfile,
+  registerActiveSession,
+  getActiveSessions,
+  deregisterActiveSession,
+  getSessionMetadata,
+  updateSessionMetadata,
+  getGlobalParticipants,
+  saveGlobalParticipants
 };
 

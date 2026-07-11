@@ -14,12 +14,12 @@ const buildSystemPrompt = (webContext = "", groupContext = "", isGroup = false) 
   const currentYear = vnDate.getFullYear();
   const brevityRule = isGroup
     ? "TỐI GIẢN & SÚC TÍCH: VÀO ĐỀ LUÔN, trả lời TRỰC TIẾP. TỐI ĐA 10 CÂU cho mỗi lần trả lời. TUYỆT ĐỐI KHÔNG lặp lại câu hỏi của User. Mọi nội dung giải thích đều phải cực kỳ ngắn gọn."
-    : "VÀO ĐỀ LUÔN, trả lời TRỰC TIẾP. TUYỆT ĐỐI KHÔNG lặp lại câu hỏi của User. Cung cấp thông tin đầy đủ, chi tiết và tận tình.";
+    : "CHI TIẾT, ĐA CHIỀU & CỐT LÕI: Phân tích cặn kẽ bối cảnh, bóc tách rõ mạch logic. Với thông tin dài, phải nêu bật được luận điểm chính, số liệu quan trọng và insight (bản chất vấn đề). Trình bày rành mạch bằng bullet point. TUYỆT ĐỐI KHÔNG lặp lại câu hỏi.";
 
   return `Role: Annie (nữ trợ lý thông minh, ngoan), xưng "em", gọi "anh/chị".
   Style: Tự nhiên, gần gũi. BẮT BUỘC dùng RẤT NHIỀU emoji (có thể dùng thêm ascii art/bảng biểu nếu cần). CẤM trả về định dạng markdown. Chỉ @tên khi khẩn.
   Rules:
-  0. Phân loại theo User Prompt: NẾU câu hỏi MƠ HỒ (thiếu dữ kiện) → BẮT BUỘC: CHỈ xuất 1 câu hỏi lại User kèm dòng <Task mode="ASK" tags="A | B" /> (tối đa 4 từ/tag) chèn ở cuối.
+  0. Phân loại theo User Prompt: CHỈ KHI câu hỏi MƠ HỒ (thiếu dữ kiện) → xuất 1 câu hỏi lại User kèm dòng <Task mode="ASK" tags="A | B" /> (tối đa 4 từ/tag) chèn ở cuối.
   1. Thời gian: ${now}. Chỉ đáp tin [NEW]. CẤM xin lỗi. TRỪ KHI User chỉ định rõ năm trong quá khứ, MẶC ĐỊNH mọi sự kiện đều thuộc năm ${currentYear} trở đi, TUYỆT ĐỐI KHÔNG lấy data cũ để tự suy diễn.
   2. Logic & Data: CHỈ trả lời tin tức/sự kiện DỰA VÀO [THÔNG TIN TỪ INTERNET]. NẾU không có dữ liệu hoặc không khớp, BẮT BUỘC báo "em chưa có thông tin chính xác", TUYỆT ĐỐI KHÔNG tự bịa data. Luôn ĐỐI CHIẾU mốc thời gian trên để suy luận trạng thái (chưa/đang/đã diễn ra).
   3. Profile: NẾU User tiết lộ thông tin mới, chèn: <PROFILE userId="ID" real_name="Tên" gender="nam/nu" public_traits="..." private_traits="..."> ở cuối (chỉ lấy từ lời User).
@@ -89,6 +89,34 @@ const generateSmartQuery = async (lastBotMessage, selectedTag) => {
   }
 };
 
+const isTimeRangeSummaryRequest = (prompt) => {
+  const clean = prompt.toLowerCase();
+  const hasSummaryIntent = /tóm tắt|summary|bản tin/i.test(clean);
+  const hasTimeIndicator = /hôm nay|hôm qua|ngày|tuần|tháng|tiếng|giờ|24h|48h/i.test(clean);
+  return hasSummaryIntent && hasTimeIndicator;
+};
+
+const filterSummariesByIntent = (summaries, prompt) => {
+  if (!summaries || summaries.length === 0) return [];
+  const clean = prompt.toLowerCase();
+  const now = Date.now();
+
+  let rangeMs = 24 * 60 * 60 * 1000;
+  if (/hôm qua/i.test(clean)) {
+    const yesterdayStart = now - 48 * 60 * 60 * 1000;
+    const yesterdayEnd = now - 24 * 60 * 60 * 1000;
+    return summaries.filter(s => {
+      const t = new Date(s.createdAt).getTime();
+      return t >= yesterdayStart && t <= yesterdayEnd;
+    }).map(s => s.text);
+  } else if (/48h|2 ngày/i.test(clean)) {
+    rangeMs = 48 * 60 * 60 * 1000;
+  }
+
+  const startMs = now - rangeMs;
+  return summaries.filter(s => new Date(s.createdAt).getTime() >= startMs).map(s => s.text);
+};
+
 const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown", lineMessageId = null, quoteContext = "", forceIgnoreCheck = false, groupContext = "", isGroup = false, hotTopic = "", isPostback = false, postbackContext = "") => {
   // ★ Fast path: Câu hỏi thuần thời gian — trả lời bằng JS, không gọi bất kỳ API nào
   const cleanPrompt = prompt.replace(/@[^\s]+/g, "").trim();
@@ -97,25 +125,47 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
     return buildTimeReply();
   }
 
-  const sessionRef = db.collection("users").doc(sessionId);
-  const sessionDoc = await sessionRef.get();
-  const sessionData = sessionDoc.data() || {};
-  const summariesArray = sessionData.summaries || [];
-  const messagesArray = await getRawMessages(sessionId, 20);
-
+  const messagesArray = await getRawMessages(sessionId, 25);
   const history = [];
 
-  // Nạp các bản tóm tắt quá khứ vào đầu lịch sử
-  if (summariesArray.length > 0) {
-    const combinedSummaries = summariesArray.map(s => s.text).join("\n\n");
-    history.push({
-      role: "system",
-      content: `[BỘ NHỚ DÀI HẠN (TÓM TẮT CÁC SỰ KIỆN TRƯỚC ĐÓ)]:\n${combinedSummaries}`
-    });
+  // Chỉ đọc Firestore summaries khi sếp hỏi tóm tắt có chỉ định thời gian
+  if (isTimeRangeSummaryRequest(prompt)) {
+    try {
+      const sessionRef = db.collection("users").doc(sessionId);
+      const sessionDoc = await sessionRef.get();
+      if (sessionDoc.exists) {
+        const sessionData = sessionDoc.data() || {};
+        const summariesArray = sessionData.summaries || [];
+        const filteredSummaries = filterSummariesByIntent(summariesArray, prompt);
+        
+        if (filteredSummaries.length > 0) {
+          history.push({
+            role: "system",
+            content: `[BỘ NHỚ DÀI HẠN (TÓM TẮT CÁC SỰ KIỆN TRƯỚC ĐÓ)]:\n${filteredSummaries.join("\n\n")}`
+          });
+        }
+      }
+    } catch (err) {
+      console.error("[Firestore] Lỗi đọc summaries cho prompt:", err.message);
+    }
   }
 
-  // Tải các tin nhắn thô chưa được tóm tắt
+  // Thuật toán gộp các tin nhắn liên tiếp của cùng một sender để tối ưu hóa tokens
+  const mergedMessages = [];
   messagesArray.forEach(msg => {
+    const lastMsg = mergedMessages[mergedMessages.length - 1];
+    const isSameSender = lastMsg && lastMsg.role === msg.role && 
+                         (msg.role === "model" || lastMsg.senderId === msg.senderId);
+    
+    if (isSameSender) {
+      lastMsg.text += ` | ${msg.text}`;
+    } else {
+      mergedMessages.push({ ...msg });
+    }
+  });
+
+  // Tải các tin nhắn đã được gộp gọn gàng vào prompt
+  mergedMessages.forEach(msg => {
     const { role, text, senderName: name } = msg;
     const apiRole = role === "model" ? "assistant" : role;
     const content = apiRole === "user" ? `[${name || "User"}]: ${text}` : text;
