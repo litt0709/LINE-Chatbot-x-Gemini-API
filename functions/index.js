@@ -139,24 +139,33 @@ const processAndExtractProfile = (text, senderId, participants = {}) => {
  * @param {string} sessionId
  */
 const clearSessionHistory = async (sessionId) => {
+  // 1. Xóa Bộ nhớ dài hạn (summaries) ở Document cha
   try {
-    // 1. Xóa Firestore History
-    const chatRef = db.collection("users").doc(sessionId).collection("history");
-    const snapshot = await chatRef.get();
-    const batch = db.batch();
-    snapshot.forEach(doc => batch.delete(doc.ref));
-    await batch.commit();
-    console.log(`[Firestore] Đã xóa lịch sử chat: ${sessionId}`);
+    await db.collection("users").doc(sessionId).update({
+      summaries: FieldValue.delete(),
+      hotTopic: FieldValue.delete()
+    }).catch(err => {
+      if (err.code !== 5) throw err;
+    });
+    console.log(`[Firestore] Đã xóa summaries ở document cha: ${sessionId}`);
+  } catch (error) {
+    console.error(`[Reset Session] Lỗi xóa summaries ${sessionId}:`, error.message);
+  }
 
-    // 2. Xóa RTDB Raw Messages
+  // 2. Xóa RTDB Raw Messages
+  try {
     await clearRawMessages(sessionId);
     console.log(`[RTDB] Đã xóa tin nhắn thô: ${sessionId}`);
+  } catch (error) {
+    console.error(`[Reset Session] Lỗi xóa tin nhắn thô ${sessionId}:`, error.message);
+  }
 
-    // 3. Xóa Metadata (participants, hotTopic) trên RTDB & Cache
+  // 3. Xóa Metadata (participants, hotTopic) trên RTDB & Cache
+  try {
     await updateSessionMetadata(sessionId, { participants: {}, hotTopic: "" });
     console.log(`[RTDB/Cache] Đã reset metadata: ${sessionId}`);
   } catch (error) {
-    console.error(`[Reset Session] Lỗi xóa lịch sử chat ${sessionId}:`, error.message);
+    console.error(`[Reset Session] Lỗi reset metadata ${sessionId}:`, error.message);
   }
 };
 
@@ -827,14 +836,19 @@ exports.webhook = onRequest(async (req, res) => {
           }
         } else if (isDirectlyTargeted || isImplicitlyTargeted) {
           console.log(`[LINE] Quoted message không có trong history, thử tải on-demand file/ảnh (ID: ${quotedId})...`);
-          const localPath = await line.downloadMessageFile(quotedId, "quoted_media");
-          if (localPath) {
-            const fileDesc = await llm.analyzeDocument(localPath);
-            quoteContext = `[NỘI DUNG FILE/ẢNH ĐƯỢC TRÍCH DẪN]:\n"${fileDesc.trim()}"\n`;
+          try {
+            const localPath = await line.downloadMessageFile(quotedId, "quoted_media");
+            if (localPath) {
+              const fileDesc = await llm.analyzeDocument(localPath);
+              quoteContext = `[NỘI DUNG FILE/ẢNH ĐƯỢC TRÍCH DẪN]:\n"${fileDesc.trim()}"\n`;
+            }
+          } catch (downloadErr) {
+            console.log(`[LINE] Quoted message không phải file/ảnh hoặc không thể truy cập. Gán fallback context.`);
+            quoteContext = `[HỆ THỐNG BÁO LỖI: Người dùng đang reply một tin nhắn chữ được gửi trước khi bot vào group, bot không thể đọc được nội dung đó do giới hạn của LINE API. Hãy phản hồi người dùng là em không thể đọc được tin nhắn cũ này.]\n`;
           }
         }
       } catch (err) {
-        console.error("[LINE] Lỗi tra cứu quoted message:", err.message);
+        console.error("[LINE] Lỗi tra cứu quoted message tổng quát:", err.message);
       }
     }
 

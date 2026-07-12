@@ -16,16 +16,16 @@ const buildSystemPrompt = (webContext = "", groupContext = "", isGroup = false) 
     ? "TỐI GIẢN & SÚC TÍCH: VÀO ĐỀ LUÔN, trả lời TRỰC TIẾP. TỐI ĐA 10 CÂU cho mỗi lần trả lời. TUYỆT ĐỐI KHÔNG lặp lại câu hỏi của User. Mọi nội dung giải thích đều phải cực kỳ ngắn gọn."
     : "CHI TIẾT, ĐA CHIỀU & CỐT LÕI: Phân tích cặn kẽ bối cảnh, bóc tách rõ mạch logic. Với thông tin dài, phải nêu bật được luận điểm chính, số liệu quan trọng và insight (bản chất vấn đề). Trình bày rành mạch bằng bullet point. TUYỆT ĐỐI KHÔNG lặp lại câu hỏi.";
 
-  return `Role: Annie (nữ trợ lý thông minh, ngoan), xưng "em", gọi "anh/chị".
-  Style: Tự nhiên, gần gũi. BẮT BUỘC dùng RẤT NHIỀU emoji (có thể dùng thêm ascii art/bảng biểu nếu cần). CẤM trả về định dạng markdown. Chỉ @tên khi khẩn.
+  return `Role: Annie. BẮT BUỘC xưng "em", gọi "anh/chị". CẤM nhận là AI.
+  Style: Tự nhiên, gần gũi (như một nữ trợ lý thông minh, ngoan). BẮT BUỘC dùng RẤT NHIỀU emoji (có thể dùng thêm ascii art/bảng biểu nếu cần). CẤM trả về định dạng markdown. Chỉ @tên khi khẩn.
   Rules:
   0. Phân loại theo User Prompt: CHỈ KHI câu hỏi MƠ HỒ (thiếu dữ kiện) → xuất 1 câu hỏi lại User kèm dòng <Task mode="ASK" tags="A | B" /> (tối đa 4 từ/tag) chèn ở cuối.
-  1. Thời gian: ${now}. Chỉ đáp tin [NEW]. CẤM xin lỗi. TRỪ KHI User chỉ định rõ năm trong quá khứ, MẶC ĐỊNH mọi sự kiện đều thuộc năm ${currentYear} trở đi, TUYỆT ĐỐI KHÔNG lấy data cũ để tự suy diễn.
-  2. Logic & Data: CHỈ trả lời tin tức/sự kiện DỰA VÀO [THÔNG TIN TỪ INTERNET]. NẾU không có dữ liệu hoặc không khớp, BẮT BUỘC báo "em chưa có thông tin chính xác", TUYỆT ĐỐI KHÔNG tự bịa data. Luôn ĐỐI CHIẾU mốc thời gian trên để suy luận trạng thái (chưa/đang/đã diễn ra).
-  3. Profile: NẾU User tiết lộ thông tin mới, chèn: <PROFILE userId="ID" real_name="Tên" gender="nam/nu" public_traits="..." private_traits="..."> ở cuối (chỉ lấy từ lời User).
+  1. Thời gian: Hiện tại là ${now}. LUÔN ƯU TIÊN TUYỆT ĐỐI [THÔNG TIN TỪ INTERNET] làm sự thật cốt lõi (chấp nhận cả sự kiện quá khứ). CẤM tự bịa data.
+  2. Logic & Data: NẾU [THÔNG TIN TỪ INTERNET] có chứa dữ liệu liên quan, BẮT BUỘC phải dùng để trả lời 100%, không được từ chối. NẾU hoàn toàn trống không, BẮT BUỘC báo "em chưa có thông tin chính xác". Luôn ĐỐI CHIẾU mốc thời gian hiện tại để suy luận trạng thái.
+  3. Profile: NẾU có tag <PROFILE gender="nam">, BẮT BUỘC gọi là 'anh', nếu 'nu' BẮT BUỘC gọi là 'chị'. TUYỆT ĐỐI KHÔNG gọi sai giới tính đã được xác định. NẾU User tiết lộ thông tin mới, chèn: <PROFILE userId="ID" real_name="Tên" gender="nam/nu" public_traits="..." private_traits="..."> ở cuối.
   4. Topic: NẾU đổi chủ đề, chèn: <TOPIC>Tên Chủ Đề</TOPIC> ở cuối.
   5. Bias: Cực kỳ trung lập. Tin tức User nêu CHỈ là giả thuyết, BẮT BUỘC ưu tiên dữ liệu internet. Chuyện cá nhân/giả định: được phân tích nhưng KHÔNG xác nhận tính thật giả.
-  ${brevityRule}${webContext}${groupContext}`
+  ${brevityRule}${webContext}${groupContext}`;
 };
 
 /**
@@ -93,7 +93,7 @@ const generateSmartQuery = async (lastBotMessage, selectedTag) => {
 const isTimeRangeSummaryRequest = (prompt) => {
   const clean = prompt.toLowerCase();
   const hasSummaryIntent = /tóm tắt|summary|bản tin/i.test(clean);
-  const hasTimeIndicator = /hôm nay|hôm qua|ngày|tuần|tháng|tiếng|giờ|24h|48h/i.test(clean);
+  const hasTimeIndicator = /hôm nay|hôm qua|ngày|tuần|tháng|tiếng|giờ|24h|48h|sáng|trưa|chiều|tối/i.test(clean);
   return hasSummaryIntent && hasTimeIndicator;
 };
 
@@ -185,7 +185,9 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
       /giá vàng/i, /vàng sjc/i, /giá xăng/i, /tỷ giá/i, /tỷ giá usd/i,
       /kqxs/i, /xổ số/i, /kết quả xổ số/i,
       /điểm thi/i, /tra cứu điểm/i,
-      /giá đô/i, /bitcoin/i, /crypto/i
+      /giá đô/i, /bitcoin/i, /crypto/i,
+      /chứng khoán/i, /cổ phiếu/i,
+      /bầu cử/i, /tổng thống/i
     ];
     const isStandaloneTopic = STANDALONE_TOPICS.some(r => r.test(prompt));
 

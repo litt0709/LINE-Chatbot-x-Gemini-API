@@ -33,7 +33,7 @@ const extractSearchQuery = async (contextualPrompt) => {
   const hasCapitalized = /[A-ZĐ]/.test(query.substring(1));
   
   // Check các từ khóa đặc biệt
-  const specialKeywords = ["lịch", "tỷ số", "tỉ số", "kết quả", "kqxs", "giá", "thời tiết", "bóng đá", "tứ kết", "bán kết", "chung kết", "trận", "tin tức", "điểm thi"];
+  const specialKeywords = ["lịch", "tỷ số", "tỉ số", "kết quả", "kqxs", "giá", "thời tiết", "bóng đá", "tứ kết", "bán kết", "chung kết", "trận", "tin tức", "điểm thi", "bầu cử", "chứng khoán", "vàng sjc"];
   const hasSpecial = specialKeywords.some(kw => query.toLowerCase().includes(kw));
 
   const has_entity = hasCapitalized || hasSpecial;
@@ -55,7 +55,8 @@ const SEARCH_KEYWORDS = [
   "mua ở đâu", "tại sao", "như thế nào", "là ai", "là cái gì", "là gì",
   "đội", "trận", "thắng", "thua", "vô địch", "bàn thắng", "ghi bàn", "tỉ số",
   "tin hot", "fact check", "kiểm chứng", "sự thật", "tin chuẩn", "tin thật",
-  "thông tin", "tổng hợp", "chi tiết", "tiểu sử", "tác giả", "scandal", "drama", "phốt", "hướng dẫn"
+  "thông tin", "tổng hợp", "chi tiết", "chi tiế", "tiểu sử", "tác giả", "scandal", "drama", "phốt", "hướng dẫn",
+  "vàng sjc", "bầu cử", "tổng thống mỹ", "thị trường chứng khoán", "chứng khoán"
 ];
 
 // ─── Mẫu câu hỏi về giờ/ngày hiện tại — KHAI KHÔNG search (bot tự biết từ system prompt) ───
@@ -63,7 +64,8 @@ const SKIP_SEARCH_PATTERNS = [
   /bây giờ (là )?(mấy giờ|ngày mấy)/i,
   /mấy giờ rồi/i, /giờ mấy rồi/i,
   /hôm nay là ngày mấy/i, /ngày mấy rồi/i,
-  /bây giờ là bao nhiêu giờ/i
+  /bây giờ là bao nhiêu giờ/i,
+  /ngủ/i
 ];
 
 const QUESTION_PATTERNS = [
