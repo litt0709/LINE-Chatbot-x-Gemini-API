@@ -216,30 +216,38 @@ const processAndExtractProfile = async (text, senderId, participants = {}, sessi
     cleanedText = cleanedText.replace(/<TOPIC>.*?<\/TOPIC>/gi, "");
   }
 
-  const regex = /<PROFILE(?: action="([^"]*)")?(?: trait="([^"]*)")?(?: old_trait="([^"]*)")?(?: new_trait="([^"]*)")?(?: userId="([^"]*)")?(?: real_name="([^"]*)")?(?: gender="([^"]*)")?(?: public_traits="([^"]*)")?(?: private_traits="([^"]*)")?[^>]*>/gi;
+  const profileRegex = /<PROFILE\s+([^>]*)\/?>/gi;
   let match;
 
-  while ((match = regex.exec(text)) !== null) {
-    let uid = match[5] || senderId; // match[5] là userId
+  while ((match = profileRegex.exec(text)) !== null) {
+    const attrStr = match[1];
+    const getAttr = (name) => {
+      const r = new RegExp(`${name}=["']([^"']*)["']`, "i");
+      const m = attrStr.match(r);
+      return m ? m[1] : null;
+    };
 
-    if (match[5]) {
-      const lowerUid = removeAccents(match[5].trim().toLowerCase());
+    const action = (getAttr("action") || "").toUpperCase();
+    const trait = getAttr("trait");
+    const old_trait = getAttr("old_trait");
+    const new_trait = getAttr("new_trait");
+    const userIdAttr = getAttr("userId");
+    const real_name = getAttr("real_name");
+    const gender = getAttr("gender");
+    const public_traits = getAttr("public_traits");
+    const private_traits = getAttr("private_traits");
+
+    let uid = userIdAttr || senderId;
+
+    if (userIdAttr) {
+      const lowerUid = removeAccents(userIdAttr.trim().toLowerCase());
       if (participants[lowerUid]) {
         uid = participants[lowerUid];
-        console.log(`[Profile] Phân giải tên "${match[5]}" thành ID thực: ${uid}`);
+        console.log(`[Profile] Phân giải tên "${userIdAttr}" thành ID thực: ${uid}`);
       } else {
-        console.log(`[Profile] Không tìm thấy ID thực cho "${match[5]}", dùng tạm làm ID.`);
+        console.log(`[Profile] Không tìm thấy ID thực cho "${userIdAttr}", dùng tạm làm ID.`);
       }
     }
-
-    const action = match[1]?.toUpperCase();
-    const trait = match[2];
-    const old_trait = match[3];
-    const new_trait = match[4];
-    const real_name = match[6];
-    const gender = match[7];
-    const public_traits = match[8];
-    const private_traits = match[9];
 
     if (action || real_name || gender || public_traits || private_traits) {
       const existing = userProfileCache.get(uid) || {};
