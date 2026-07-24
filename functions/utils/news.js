@@ -21,7 +21,10 @@ const generateDailyNewsDigest = async (type = "afternoon") => {
     searchPrompt = "Sự kiện lịch sử nổi bật ngày hôm nay, danh nhân sinh ngày hôm nay, câu nói hay truyền cảm hứng";
     
     let webContext = "";
-    try { webContext = await resolveWebContext(searchPrompt); } 
+    try { 
+      const result = await resolveWebContext(searchPrompt);
+      webContext = result.context;
+    } 
     catch (err) { console.error("[News] resolveWebContext lỗi:", err.message); }
 
     systemPrompt = `Vai trò: Annie (nữ trợ lý dễ thương, xưng "em", gọi "anh/chị"). Giờ VN: ${now}.
@@ -39,7 +42,10 @@ ${webContext}`;
     searchPrompt = "tổng hợp tin tức nóng hổi, thời sự, giải trí nổi bật nhất ngày hôm nay ở Việt Nam và Thế giới";
     
     let webContext = "";
-    try { webContext = await resolveWebContext(searchPrompt); } 
+    try { 
+      const result = await resolveWebContext(searchPrompt);
+      webContext = result.context;
+    } 
     catch (err) { console.error("[News] resolveWebContext lỗi:", err.message); }
 
     systemPrompt = `Vai trò: Annie (nữ trợ lý dễ thương, xưng "em", gọi "anh/chị"). Giờ VN: ${now}.

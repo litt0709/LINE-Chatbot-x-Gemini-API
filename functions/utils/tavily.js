@@ -11,6 +11,52 @@ const TODAY_KEYWORDS = [
   "kết quả", "tỉ số", "tỷ số"
 ];
 
+const getDomainName = (url) => {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase();
+    const domain = hostname.replace("www.", "");
+    
+    const domainMap = {
+      "vnexpress.net": "VnExpress",
+      "wikipedia.org": "Wikipedia",
+      "vov.vn": "VOV",
+      "dantri.com.vn": "Dân Trí",
+      "tuoitre.vn": "Tuổi Trẻ",
+      "thanhnien.vn": "Thanh Niên",
+      "cafef.vn": "CafeF",
+      "vietnamnet.vn": "VietNamNet",
+      "laodong.vn": "Lao Động",
+      "vtv.vn": "VTV",
+      "cand.com.vn": "Báo Công an Nhân dân",
+      "baochinhphu.vn": "Báo Chính phủ",
+      "tienphong.vn": "Tiền Phong",
+      "soha.vn": "Soha",
+      "plo.vn": "Pháp luật TP.HCM",
+      "sggp.org.vn": "Sài Gòn Giải Phóng",
+      "baotintuc.vn": "Báo Tin Tức",
+      "zingnews.vn": "Zing News",
+      "znews.vn": "ZNews",
+      "spiderum.com": "Spiderum",
+      "facebook.com": "Facebook",
+      "youtube.com": "YouTube",
+      "github.com": "GitHub"
+    };
+
+    for (const [key, value] of Object.entries(domainMap)) {
+      if (domain.includes(key)) return value;
+    }
+
+    const parts = domain.split(".");
+    if (parts.length > 0) {
+      const name = parts[0];
+      return name.charAt(0).toUpperCase() + name.slice(1);
+    }
+    return "Internet";
+  } catch (e) {
+    return "Internet";
+  }
+};
+
 /**
  * Tìm kiếm thông tin trên internet bằng Tavily API.
  * @param {string} query
@@ -73,13 +119,15 @@ const searchTavily = async (query, options = {}) => {
 
     let summary = "Thông tin thực tế từ Internet (Tavily):\n";
     if (answer) summary += `[Tóm tắt]: ${answer}\n\n`;
+    const urls = [];
     if (results.length > 0) {
       summary += "[Nguồn tham khảo]:\n";
       results.forEach((r, i) => {
-        summary += `[${i + 1}] ${r.title}\n${r.url}\n${r.content}\n\n`;
+        summary += `[Nguồn: ${getDomainName(r.url)}] ${r.title}\nURL: ${r.url}\nNội dung: ${r.content}\n\n`;
+        urls.push(r.url);
       });
     }
-    return summary;
+    return { summary, urls };
   } catch (error) {
     const status = error?.response?.status;
     // Rate limit (429) hoặc Server down (5xx) hoặc network timeout — re-throw để search.js fallback sang Exa

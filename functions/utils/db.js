@@ -226,6 +226,52 @@ const saveUserProfile = async (userId, data) => {
   }
 };
 
+const saveFact = async (type, targetId, factId, topic, keywords, content, link = "") => {
+  try {
+    const basePath = type === "global" ? "facts/global" : `facts/users/${targetId}`;
+    
+    // Lưu Index
+    await rtdb.ref(`${basePath}/index/${factId}`).set({
+      topic,
+      keywords: Array.isArray(keywords) ? keywords : [keywords]
+    });
+    
+    // Lưu Detail
+    const detailData = {
+      content,
+      createdAt: Date.now()
+    };
+    if (link) detailData.link = link;
+    await rtdb.ref(`${basePath}/detail/${factId}`).set(detailData);
+    
+    console.log(`[RTDB] Đã lưu fact ${factId} (${type} - ${targetId || "global"})`);
+  } catch (error) {
+    console.error(`[RTDB] Lỗi lưu fact ${factId}:`, error.message);
+  }
+};
+
+const getFactsIndex = async (type, targetId) => {
+  try {
+    const basePath = type === "global" ? "facts/global" : `facts/users/${targetId}`;
+    const snap = await rtdb.ref(`${basePath}/index`).once("value");
+    return snap.exists() ? snap.val() : {};
+  } catch (error) {
+    console.error(`[RTDB] Lỗi lấy facts index (${type} - ${targetId || "global"}):`, error.message);
+    return {};
+  }
+};
+
+const getFactDetail = async (type, targetId, factId) => {
+  try {
+    const basePath = type === "global" ? "facts/global" : `facts/users/${targetId}`;
+    const snap = await rtdb.ref(`${basePath}/detail/${factId}`).once("value");
+    return snap.exists() ? snap.val() : null;
+  } catch (error) {
+    console.error(`[RTDB] Lỗi lấy fact detail (${factId}):`, error.message);
+    return null;
+  }
+};
+
 module.exports = { 
   db, 
   rtdb,
@@ -242,6 +288,10 @@ module.exports = {
   getSessionMetadata,
   updateSessionMetadata,
   getGlobalParticipants,
-  saveGlobalParticipants
+  saveGlobalParticipants,
+  saveFact,
+  getFactsIndex,
+  getFactDetail
 };
+
 

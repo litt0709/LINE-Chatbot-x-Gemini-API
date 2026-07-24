@@ -39,22 +39,59 @@ const reply = async (chatId, text) => {
     };
   }
 
+  // Luôn dọn dẹp sạch sẽ mọi thẻ <Task> còn sót lại (kể cả tag lỗi cấu trúc không khớp regex)
+  rawText = rawText.replace(/<Task[^>]*>/gi, "").replace(/<\/Task>/gi, "").trim();
+
   // 1. Chuyển đổi <br> (nếu có) thành \n
   let safeText = rawText.replace(/<br\s*\/?>/gi, "\n");
   // 2. Escape các ký tự HTML nguy hiểm để tránh lỗi parse_mode của Telegram
   safeText = safeText.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  // 3. Phục hồi định dạng in đậm từ Markdown sang HTML <b>
-  let htmlText = safeText.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>");
+  
+  // 3. Băm nhỏ tin nhắn (Message Chunking) nếu quá 2000 ký tự
+  // Thuật toán: Thay thế ** thành <b></b> sẽ làm chuỗi dài ra (tối đa x1.75 lần). 
+  // Nên chọn MAX_LEN = 2000 để đảm bảo 2000 * 1.75 = 3500 (luôn < 4096 ký tự an toàn của Telegram).
+  const MAX_LEN = 2000;
+  const chunks = [];
+  let currentChunk = "";
 
-  try {
-    await axios.post(`${TELEGRAM_BASE_URL}/sendMessage`, {
-      chat_id: chatId,
-      text: htmlText,
-      parse_mode: "HTML",
-      ...(reply_markup && { reply_markup })
-    });
-  } catch (error) {
-    console.error("[Telegram] Lỗi gửi tin nhắn:", error?.response?.data || error.message);
+  const lines = safeText.split("\n");
+  for (const line of lines) {
+    if ((currentChunk.length + line.length + 1) <= MAX_LEN) {
+      currentChunk += (currentChunk ? "\n" : "") + line;
+    } else {
+      if (currentChunk) chunks.push(currentChunk);
+      
+      // Nếu 1 dòng đơn lẻ dài hơn MAX_LEN, buộc phải cắt cứng
+      let remaining = line;
+      while (remaining.length > MAX_LEN) {
+        chunks.push(remaining.substring(0, MAX_LEN));
+        remaining = remaining.substring(MAX_LEN);
+      }
+      currentChunk = remaining;
+    }
+  }
+  if (currentChunk) chunks.push(currentChunk);
+
+  // 4. Gửi tuần tự từng Chunk
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    // Phục hồi định dạng in đậm từ Markdown sang HTML <b> TRÊN TỪNG CHUNK
+    // Việc này đảm bảo không có thẻ <b> bị cắt đôi gây lỗi HTML parser
+    let htmlText = chunk.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>");
+    
+    // Chỉ đính kèm bàn phím inline ở chunk CUỐI CÙNG
+    const isLast = (i === chunks.length - 1);
+    
+    try {
+      await axios.post(`${TELEGRAM_BASE_URL}/sendMessage`, {
+        chat_id: chatId,
+        text: htmlText,
+        parse_mode: "HTML",
+        ...(isLast && reply_markup && { reply_markup })
+      });
+    } catch (error) {
+      console.error("[Telegram] Lỗi gửi tin nhắn chunk:", error?.response?.data || error.message);
+    }
   }
 };
 
@@ -141,4 +178,71 @@ const downloadMessageFile = async (fileId, fileName) => {
   return localPath;
 };
 
-module.exports = { reply, getImageBinary, downloadMessageFile, leaveChat, push: reply, editMessageReplyMarkup };
+/**
+ * Gửi reaction cho tin nhắn.
+ * @param {number|string} chatId 
+ * @param {number} messageId 
+ * @param {string} emoji 
+ */
+const setMessageReaction = async (chatId, messageId, emoji) => {
+  if (!TELEGRAM_TOKEN || !emoji) return;
+  try {
+    await axios.post(`${TELEGRAM_BASE_URL}/setMessageReaction`, {
+      chat_id: chatId,
+      message_id: messageId,
+      reaction: [{ type: "emoji", emoji }]
+    });
+  } catch (error) {
+    console.error("[Telegram] Lỗi gửi reaction:", error?.response?.data || error.message);
+  }
+};
+
+/**
+ * Gửi tin nhắn kèm bàn phím inline tùy chỉnh.
+ * @param {number|string} chatId 
+ * @param {string} text 
+ * @param {Object} replyMarkup 
+ */
+const sendInlineMarkup = async (chatId, text, replyMarkup) => {
+  if (!TELEGRAM_TOKEN) return;
+  try {
+    let safeText = text.replace(/<br\s*\/?>/gi, "\n");
+    let htmlText = safeText.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>");
+    
+    await axios.post(`${TELEGRAM_BASE_URL}/sendMessage`, {
+      chat_id: chatId,
+      text: htmlText,
+      parse_mode: "HTML",
+      reply_markup: replyMarkup
+    });
+  } catch (error) {
+    console.error("[Telegram] Lỗi gửi sendInlineMarkup:", error?.response?.data || error.message);
+  }
+};
+
+/**
+ * Cập nhật nội dung văn bản của một tin nhắn cũ.
+ * @param {number|string} chatId 
+ * @param {number} messageId 
+ * @param {string} text 
+ */
+const editMessageText = async (chatId, messageId, text) => {
+  if (!TELEGRAM_TOKEN) return;
+  try {
+    let safeText = text.replace(/<br\s*\/?>/gi, "\n");
+    let htmlText = safeText.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>");
+    
+    await axios.post(`${TELEGRAM_BASE_URL}/editMessageText`, {
+      chat_id: chatId,
+      message_id: messageId,
+      text: htmlText,
+      parse_mode: "HTML"
+    });
+  } catch (error) {
+    console.error("[Telegram] Lỗi sửa tin nhắn văn bản:", error?.response?.data || error.message);
+  }
+};
+
+module.exports = { reply, getImageBinary, downloadMessageFile, leaveChat, push: reply, editMessageReplyMarkup, setMessageReaction, sendInlineMarkup, editMessageText };
+
+

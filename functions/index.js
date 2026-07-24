@@ -1,7 +1,7 @@
 const { onRequest } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const crypto = require("crypto");
-const { db, rtdb, FieldValue, appendRawMessage, getRawMessages, clearRawMessages, getUserProfile, saveUserProfile, registerActiveSession, getActiveSessions, deregisterActiveSession, getSessionMetadata, updateSessionMetadata, getGlobalParticipants, saveGlobalParticipants } = require("./utils/db");
+const { db, rtdb, FieldValue, appendRawMessage, getRawMessages, clearRawMessages, getUserProfile, saveUserProfile, registerActiveSession, getActiveSessions, deregisterActiveSession, getSessionMetadata, updateSessionMetadata, getGlobalParticipants, saveGlobalParticipants, saveFact, getFactsIndex, getFactDetail } = require("./utils/db");
 const line = require("./utils/line");
 const telegram = require("./utils/telegram");
 
@@ -11,6 +11,119 @@ const { generateDailyNewsDigest } = require("./utils/news");
 let cachedTgParticipants = null;
 let cachedLineParticipants = null;
 const userProfileCache = new Map();
+
+// Cache lưu Index của Facts nhằm tối ưu băng thông RTDB
+const globalFactsIndexCache = {
+  data: null,
+  lastUpdate: 0
+};
+const userFactsIndexCache = new Map(); // key: userId/groupId -> { data: {...}, expiresAt: timestamp }
+
+// Cấu hình Cache Idempotency chống lặp retry webhook
+const processedWebhooks = new Set();
+const maxCacheSize = 1000;
+function cacheWebhookId(id) {
+  if (processedWebhooks.size >= maxCacheSize) {
+    const iterator = processedWebhooks.values();
+    processedWebhooks.delete(iterator.next().value);
+  }
+  processedWebhooks.add(id);
+}
+
+// Tích hợp bộ lọc Prompt Leakage bằng JSON Blacklist
+const leakBlacklist = require("./utils/leak_blacklist.json");
+const isPromptLeakAttempt = (query) => {
+  const cleanQuery = removeAccents(query.toLowerCase()).trim();
+  return leakBlacklist.some(keyword => {
+    const cleanKw = removeAccents(keyword.toLowerCase()).trim();
+    return cleanKw && cleanQuery.includes(cleanKw);
+  });
+};
+
+
+const findRelevantFacts = async (targetId, query) => {
+  try {
+    const now = Date.now();
+    const cleanQuery = removeAccents(query.toLowerCase());
+    const matchedFactIds = [];
+
+    // 1. Kiểm tra Global Index Cache (TTL 10 phút)
+    if (!globalFactsIndexCache.data || (now - globalFactsIndexCache.lastUpdate > 10 * 60 * 1000)) {
+      console.log("[Facts Cache] Đang tải mới Global Index từ RTDB...");
+      globalFactsIndexCache.data = await getFactsIndex("global", null);
+      globalFactsIndexCache.lastUpdate = now;
+    }
+
+    const globalIndex = globalFactsIndexCache.data;
+    for (const factId in globalIndex) {
+      const item = globalIndex[factId];
+      if (item.keywords) {
+        const isMatch = item.keywords.some(kw => {
+          const cleanKw = removeAccents(kw.toLowerCase()).trim();
+          if (!cleanKw) return false;
+          if (cleanQuery.includes(cleanKw)) return true;
+          const words = cleanKw.split(/\s+/).filter(w => w.length > 2);
+          if (words.length > 1) {
+            const matchedWords = words.filter(w => cleanQuery.includes(w));
+            if (matchedWords.length / words.length >= 0.7) return true;
+          }
+          return false;
+        });
+        if (isMatch) matchedFactIds.push({ type: "global", targetId: null, factId });
+      }
+    }
+
+    // 2. Kiểm tra User/Group Index Cache (TTL 5 phút)
+    let userCache = userFactsIndexCache.get(targetId);
+    if (!userCache || now > userCache.expiresAt) {
+      console.log(`[Facts Cache] Đang tải mới User Index cho ${targetId} từ RTDB...`);
+      const indexData = await getFactsIndex("users", targetId);
+      userCache = {
+        data: indexData,
+        expiresAt: now + 5 * 60 * 1000
+      };
+      userFactsIndexCache.set(targetId, userCache);
+    }
+
+    const userIndex = userCache.data;
+    for (const factId in userIndex) {
+      const item = userIndex[factId];
+      if (item.keywords) {
+        const isMatch = item.keywords.some(kw => {
+          const cleanKw = removeAccents(kw.toLowerCase()).trim();
+          if (!cleanKw) return false;
+          if (cleanQuery.includes(cleanKw)) return true;
+          const words = cleanKw.split(/\s+/).filter(w => w.length > 2);
+          if (words.length > 1) {
+            const matchedWords = words.filter(w => cleanQuery.includes(w));
+            if (matchedWords.length / words.length >= 0.7) return true;
+          }
+          return false;
+        });
+        if (isMatch) matchedFactIds.push({ type: "users", targetId, factId });
+      }
+    }
+
+    // 3. Tải nội dung chi tiết của các Fact trùng khớp
+    if (matchedFactIds.length === 0) return "";
+
+    console.log(`[Facts Search] Tìm thấy ${matchedFactIds.length} facts liên quan, đang tải chi tiết...`);
+    const detailPromises = matchedFactIds.map(async ({ type, targetId, factId }) => {
+      const detail = await getFactDetail(type, targetId, factId);
+      return detail ? `- ${detail.content}` : null;
+    });
+
+    const details = await Promise.all(detailPromises);
+    const validDetails = details.filter(Boolean);
+
+    if (validDetails.length === 0) return "";
+    return `\n\n[TRI THỨC BỘ NHỚ TỰ HỌC]:\n${validDetails.join("\n")}`;
+  } catch (error) {
+    console.error("[Facts Search] Lỗi tìm kiếm fact:", error.message);
+    return "";
+  }
+};
+
 
 // ─── CẤU HÌNH WHITELIST ──────────────────────────────────────────────────────
 // Đặt "*" để cho phép tất cả mọi người dùng bot.
@@ -44,6 +157,9 @@ const buildGroupProfileContext = async (participantsMap, promptText = "", sender
   const uniqueIds = [...new Set(Object.values(participantsMap))].filter(Boolean);
   const lowerPrompt = promptText.toLowerCase();
 
+  const PROFILE_TRIGGER_KEYWORDS = ["anh", "chị", "tôi", "mình", "em", "nhớ", "quên", "sở thích", "tên gì", "làm gì", "quê", "vợ", "chồng", "con", "hôm trước", "nhà", "biết"];
+  const hasTrigger = PROFILE_TRIGGER_KEYWORDS.some(kw => lowerPrompt.includes(kw));
+
   // Lấy profile song song bằng Promise.all (nhanh hơn ~50% so với for...of tuần tự)
   const results = await Promise.all(uniqueIds.map(async (uid) => {
     const name = Object.keys(participantsMap).find(k => participantsMap[k] === uid) || uid;
@@ -60,10 +176,20 @@ const buildGroupProfileContext = async (participantsMap, promptText = "", sender
 
     const p = [];
     if (profile.gender) p.push(`Giới tính: ${profile.gender}`);
-    if (profile.public_traits) p.push(`Đặc điểm chung: ${profile.public_traits}`);
-    if (!isGroup && profile.private_traits) p.push(`Thông tin riêng tư: ${profile.private_traits}`);
-    if (profile.traits) p.push(`Đặc tính: ${profile.traits}`);
-    return p.length > 0 ? `[${name}: ${p.join(", ")}] ` : null;
+    
+    // Tầng 2: Full Traits (chỉ bơm khi có trigger hoặc bị mention trực tiếp)
+    if (hasTrigger || isMentioned) {
+      if (profile.public_traits) p.push(`Đặc điểm chung: ${profile.public_traits}`);
+      if (!isGroup && profile.private_traits) p.push(`Thông tin riêng tư: ${profile.private_traits}`);
+      
+      if (profile.traits && Array.isArray(profile.traits) && profile.traits.length > 0) {
+        p.push(`Đặc điểm cá nhân: ${profile.traits.join(" | ")}`);
+      } else if (profile.traits && typeof profile.traits === "string") {
+        p.push(`Đặc tính: ${profile.traits}`);
+      }
+    }
+    
+    return p.length > 0 ? `[${name}: ${p.join(", ")}] ` : `[${name}] `;
   }));
 
   const ctx = results.filter(Boolean).join("");
@@ -79,7 +205,7 @@ const removeAccents = (str) => {
     .replace(/Đ/g, "D");
 };
 
-const processAndExtractProfile = (text, senderId, participants = {}) => {
+const processAndExtractProfile = async (text, senderId, participants = {}, sessionId = null, senderName = "User", platform = "Telegram") => {
   let cleanedText = text;
 
   let topic = null;
@@ -90,48 +216,170 @@ const processAndExtractProfile = (text, senderId, participants = {}) => {
     cleanedText = cleanedText.replace(/<TOPIC>.*?<\/TOPIC>/gi, "");
   }
 
-  const regex = /<PROFILE(?: userId="([^"]*)")?(?: real_name="([^"]*)")?(?: gender="([^"]*)")?(?: public_traits="([^"]*)")?(?: private_traits="([^"]*)")?[^>]*>/gi;
+  const regex = /<PROFILE(?: action="([^"]*)")?(?: trait="([^"]*)")?(?: old_trait="([^"]*)")?(?: new_trait="([^"]*)")?(?: userId="([^"]*)")?(?: real_name="([^"]*)")?(?: gender="([^"]*)")?(?: public_traits="([^"]*)")?(?: private_traits="([^"]*)")?[^>]*>/gi;
   let match;
 
   while ((match = regex.exec(text)) !== null) {
-    let uid = match[1] || senderId;
+    let uid = match[5] || senderId; // match[5] là userId
 
-    if (match[1]) {
-      const lowerUid = removeAccents(match[1].trim().toLowerCase());
+    if (match[5]) {
+      const lowerUid = removeAccents(match[5].trim().toLowerCase());
       if (participants[lowerUid]) {
         uid = participants[lowerUid];
-        console.log(`[Profile] Phân giải tên "${match[1]}" thành ID thực: ${uid}`);
+        console.log(`[Profile] Phân giải tên "${match[5]}" thành ID thực: ${uid}`);
       } else {
-        console.log(`[Profile] Không tìm thấy ID thực cho "${match[1]}", dùng tạm làm ID.`);
+        console.log(`[Profile] Không tìm thấy ID thực cho "${match[5]}", dùng tạm làm ID.`);
       }
     }
 
-    const real_name = match[2];
-    const gender = match[3];
-    const public_traits = match[4];
-    const private_traits = match[5];
+    const action = match[1]?.toUpperCase();
+    const trait = match[2];
+    const old_trait = match[3];
+    const new_trait = match[4];
+    const real_name = match[6];
+    const gender = match[7];
+    const public_traits = match[8];
+    const private_traits = match[9];
 
-    if (real_name || gender || public_traits || private_traits) {
+    if (action || real_name || gender || public_traits || private_traits) {
       const existing = userProfileCache.get(uid) || {};
       const updateData = {};
+      let traitsArray = existing.traits ? (Array.isArray(existing.traits) ? [...existing.traits] : [existing.traits]) : [];
 
       if (real_name) updateData.real_name = real_name;
       if (gender) updateData.gender = gender;
 
-      if (public_traits) {
-        updateData.public_traits = existing.public_traits ? existing.public_traits + ", " + public_traits : public_traits;
+      if (public_traits) updateData.public_traits = existing.public_traits ? existing.public_traits + ", " + public_traits : public_traits;
+      if (private_traits) updateData.private_traits = existing.private_traits ? existing.private_traits + ", " + private_traits : private_traits;
+
+      if (action === "ADD" && trait && !traitsArray.includes(trait)) {
+        traitsArray.push(trait);
+      } else if (action === "REMOVE" && trait) {
+        traitsArray = traitsArray.filter(t => !t.toLowerCase().includes(trait.toLowerCase()));
+      } else if (action === "UPDATE" && old_trait && new_trait) {
+        traitsArray = traitsArray.map(t => t.toLowerCase().includes(old_trait.toLowerCase()) ? new_trait : t);
+        if (!traitsArray.includes(new_trait)) traitsArray.push(new_trait);
       }
-      if (private_traits) {
-        updateData.private_traits = existing.private_traits ? existing.private_traits + ", " + private_traits : private_traits;
-      }
+      
+      if (action) updateData.traits = traitsArray;
 
       saveUserProfile(uid, updateData);
       userProfileCache.set(uid, { ...existing, ...updateData });
     }
   }
 
-  cleanedText = cleanedText.replace(/<PROFILE[^>]*>|<\/PROFILE>/gi, "").replace(/\n{3,}/g, "\n\n").trim();
-  return { text: cleanedText, topic };
+  // Bắt tag <FACT>
+  const factTagRegex = /<FACT\s+([^>]*)\/?>/gi;
+  let tagMatch;
+  while ((tagMatch = factTagRegex.exec(text)) !== null) {
+    const attrStr = tagMatch[1];
+    
+    // Helper bóc tách thuộc tính linh hoạt
+    const getAttr = (name) => {
+      const r = new RegExp(`${name}=["']([^"']*)["']`, "i");
+      const m = attrStr.match(r);
+      return m ? m[1] : null;
+    };
+
+    const action = getAttr("action")?.toUpperCase();
+    const topic = getAttr("topic");
+    const keywordsStr = getAttr("keywords");
+    const content = getAttr("content");
+    const link = getAttr("link") || "";
+
+    if (action === "ADD" && content) {
+      const factId = "fact_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5);
+      const keywords = keywordsStr ? keywordsStr.split(",").map(k => k.trim().toLowerCase()) : [];
+      const targetId = sessionId || senderId;
+      
+      // Lưu vào RTDB (mặc định scope users cho session/group hiện tại)
+      await saveFact("users", targetId, factId, topic || "general", keywords, content, link);
+
+      // Cập nhật nóng vào RAM Cache để có tác dụng ngay
+      const userCache = userFactsIndexCache.get(targetId);
+      if (userCache) {
+        userCache.data[factId] = {
+          topic: topic || "general",
+          keywords
+        };
+      } else {
+        userFactsIndexCache.set(targetId, {
+          data: { [factId]: { topic: topic || "general", keywords } },
+          expiresAt: Date.now() + 5 * 60 * 1000
+        });
+      }
+
+      // Lưu pending fact để gửi phê duyệt cho Admin Eddy
+      try {
+        const pendingData = {
+          targetId,
+          topic: topic || "general",
+          keywords,
+          content,
+          link,
+          senderName,
+          platform,
+          createdAt: Date.now()
+        };
+        await rtdb.ref(`facts/pending/${factId}`).set(pendingData);
+        console.log(`[Pending Fact] Đã lưu pending fact ${factId}`);
+
+        const EDDY_TELEGRAM_ID = process.env.TELEGRAM_ADMIN_APPPROVAL_ID || "-1003832428084";
+        const messageText = `💡 <b>Đề xuất Global Fact mới</b>\n` +
+          `• <b>Người dạy:</b> ${senderName} (${platform})\n` +
+          `• <b>Chủ đề:</b> ${topic || "general"}\n` +
+          `• <b>Từ khóa:</b> ${keywords.join(", ")}\n` +
+          `• <b>Nội dung:</b> ${content}\n` +
+          `• <b>Nguồn chứng minh:</b> ${link ? `<a href="${link}">${link}</a>` : "Không có"}\n\n` +
+          `<i>Nhấn nút dưới để phê duyệt làm Global Fact (dùng chung toàn hệ thống):</i>`;
+
+        const replyMarkup = {
+          inline_keyboard: [
+            [
+              { text: "✅ Duyệt Global", callback_data: JSON.stringify({ a: "ap_f", id: factId }) },
+              { text: "❌ Từ chối", callback_data: JSON.stringify({ a: "rj_f", id: factId }) }
+            ]
+          ]
+        };
+
+        await telegram.sendInlineMarkup(EDDY_TELEGRAM_ID, messageText, replyMarkup);
+        console.log(`[Pending Fact] Đã gửi thông báo duyệt cho Admin Eddy.`);
+      } catch (err) {
+        console.error("[Pending Fact] Lỗi lưu pending hoặc gửi duyệt:", err.message);
+      }
+    }
+  }
+
+
+  // Bắt tag <REACT>
+  let reaction = null;
+  const reactMatch = cleanedText.match(/<REACT\s+emoji=["']?([^"'\s>]+)["']?\s*\/?>/i);
+  if (reactMatch) {
+    let rawReaction = reactMatch[1].trim();
+    
+    // Telegram API Supported Reactions (73 emojis)
+    const TELE_REACTS = ["👍", "👎", "❤", "🔥", "🥰", "👏", "😁", "🤔", "🤯", "😱", "🤬", "😢", "🎉", "🤩", "🤮", "💩", "🙏", "👌", "🕊", "🤡", "🥱", "🥴", "😍", "🐳", "❤‍🔥", "🌚", "🌭", "💯", "🤣", "⚡", "🍌", "🏆", "💔", "🤨", "😐", "🍓", "🍾", "💋", "🖕", "😈", "😴", "😭", "🤓", "👻", "👨‍💻", "👀", "🎃", "🙈", "😇", "😨", "🤝", "✍", "🤗", "🫡", "🎅", "🎄", "☃", "💅", "🤪", "🗿", "🆒", "💘", "🙉", "🦄", "😗", "💊", "🙊", "🕶", "👾", "🤷‍♂️", "🤷", "🤷‍♀️", "😡"];
+    
+    if (TELE_REACTS.includes(rawReaction)) {
+      reaction = rawReaction;
+    } else {
+      // Fallback nếu LLM chọn emoji ngoài danh sách (để tránh lỗi 400)
+      reaction = "❤";
+      console.log(`[Reaction] Emoji không hợp lệ: ${rawReaction}, Fallback sang ${reaction}`);
+    }
+    
+    console.log(`[Reaction] Chốt cảm xúc gửi đi: ${reaction}`);
+    cleanedText = cleanedText.replace(/<REACT[^>]*>/gi, "");
+  }
+
+  cleanedText = cleanedText
+    .replace(/<PROFILE[^>]*>|<\/PROFILE>/gi, "")
+    .replace(/<FACT[^>]*>/gi, "")
+    .replace(/\[THÔNG TIN TỪ INTERNET\]/gi, "thông tin trên Internet")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/["']?\s*\/>/g, "") // Dọn dẹp rác " /> do LLM sinh lỗi cú pháp thẻ XML
+    .trim();
+  return { text: cleanedText, topic, reaction };
 };
 
 /**
@@ -237,6 +485,9 @@ const buildLineMessage = (text, participants, isGroup = true, hotTopic = "") => 
     };
   }
 
+  // Luôn dọn dẹp sạch sẽ mọi thẻ <Task> còn sót lại (kể cả tag lỗi cấu trúc không khớp regex)
+  cleanedText = cleanedText.replace(/<Task[^>]*>/gi, "").replace(/<\/Task>/gi, "").trim();
+
   // LINE API không hỗ trợ mentions trong chat 1-1, trả về text thường
   if (!isGroup) {
     return {
@@ -307,8 +558,12 @@ const buildLineMessage = (text, participants, isGroup = true, hotTopic = "") => 
 
 // ─── WEBHOOK ─────────────────────────────────────────────────────────────────
 
-exports.webhook = onRequest(async (req, res) => {
-  const platform = (process.env.PLATFORM || "LINE").toUpperCase();
+exports.webhook = onRequest({
+  timeoutSeconds: 300,
+  memory: "256MiB",
+  maxInstances: 10
+}, async (req, res) => {
+  const isTelegram = req.body && (req.body.message || req.body.callback_query || req.body.edited_message || req.body.channel_post);
 
   if (req.method === "GET") {
     return res.status(200).send("OK GET");
@@ -317,8 +572,14 @@ exports.webhook = onRequest(async (req, res) => {
   if (req.method !== "POST") return res.status(405).send("Method Not Allowed");
 
   // ── TELEGRAM ──────────────────────────────────────────────────────────────
-  if (platform === "TELEGRAM") {
-    // [SECURITY] Xác thực Webhook của Telegram
+  if (isTelegram) {
+    if (req.body && req.body.update_id) {
+      if (processedWebhooks.has(req.body.update_id)) {
+        console.log(`[Telegram] Bỏ qua request bị lặp (update_id: ${req.body.update_id})`);
+        return res.status(200).send("OK");
+      }
+      cacheWebhookId(req.body.update_id);
+    }
     const secretToken = process.env.TELEGRAM_SECRET_TOKEN;
     if (secretToken && req.headers["x-telegram-bot-api-secret-token"] !== secretToken) {
       console.warn("[Telegram] TỪ CHỐI REQUEST: Sai Secret Token. Có dấu hiệu giả mạo Webhook!");
@@ -339,6 +600,75 @@ exports.webhook = onRequest(async (req, res) => {
         // Ẩn bàn phím inline ngay lập tức để User biết đã nhận lệnh
         telegram.editMessageReplyMarkup(message.chat.id, message.message_id, { inline_keyboard: [] });
         message.from = callback_query.from; // Cập nhật người gửi từ callback
+
+        // Phân biệt: Nếu là callback duyệt/từ chối fact của admin Eddy
+        if (callback_query.data) {
+          try {
+            const payload = JSON.parse(callback_query.data);
+            if (payload.a === "ap_f" || payload.a === "rj_f") {
+              const factId = payload.id;
+              
+              // Gọi answerCallbackQuery để Telegram tắt xoay cát loading
+              const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+              const TELEGRAM_BASE_URL = `https://api.telegram.org/bot${TELEGRAM_TOKEN}`;
+              const axios = require("axios");
+              try {
+                await axios.post(`${TELEGRAM_BASE_URL}/answerCallbackQuery`, {
+                  callback_query_id: callback_query.id,
+                  text: payload.a === "ap_f" ? "Đang phê duyệt..." : "Đang từ chối..."
+                });
+              } catch (e) {
+                console.error("[Telegram] Lỗi answerCallbackQuery:", e.message);
+              }
+
+              if (payload.a === "ap_f") {
+                // Duyệt Fact: đọc từ facts/pending/${factId}
+                const pendingSnap = await rtdb.ref(`facts/pending/${factId}`).once("value");
+                if (pendingSnap.exists()) {
+                  const pendingData = pendingSnap.val();
+                  
+                  // Lưu thành global fact
+                  await saveFact("global", null, factId, pendingData.topic, pendingData.keywords, pendingData.content, pendingData.link || "");
+                  
+                  // Xóa khỏi pending
+                  await rtdb.ref(`facts/pending/${factId}`).remove();
+                  
+                  // Reset RAM Cache global
+                  globalFactsIndexCache.data = null;
+                  globalFactsIndexCache.lastUpdate = 0;
+
+                  const updatedText = `✅ <b>ĐÃ PHÊ DUYỆT LÀM GLOBAL FACT!</b>\n\n` +
+                    `• <b>Người dạy:</b> ${pendingData.senderName} (${pendingData.platform})\n` +
+                    `• <b>Chủ đề:</b> ${pendingData.topic}\n` +
+                    `• <b>Nội dung:</b> ${pendingData.content}\n` +
+                    `• <b>Nguồn chứng minh:</b> ${pendingData.link ? `<a href="${pendingData.link}">${pendingData.link}</a>` : "Không có"}`;
+                  await telegram.editMessageText(message.chat.id, message.message_id, updatedText);
+                } else {
+                  await telegram.reply(message.chat.id, `❌ Fact ${factId} không tồn tại hoặc đã được xử lý.`);
+                }
+              } else {
+                // Từ chối Fact
+                const pendingSnap = await rtdb.ref(`facts/pending/${factId}`).once("value");
+                if (pendingSnap.exists()) {
+                  const pendingData = pendingSnap.val();
+                  await rtdb.ref(`facts/pending/${factId}`).remove();
+                  
+                  const updatedText = `❌ <b>ĐÃ TỪ CHỐI THÊM GLOBAL FACT!</b>\n\n` +
+                    `• <b>Người dạy:</b> ${pendingData.senderName} (${pendingData.platform})\n` +
+                    `• <b>Nội dung:</b> ${pendingData.content}\n` +
+                    `• <b>Nguồn chứng minh:</b> ${pendingData.link ? `<a href="${pendingData.link}">${pendingData.link}</a>` : "Không có"}`;
+                  await telegram.editMessageText(message.chat.id, message.message_id, updatedText);
+                } else {
+                  await rtdb.ref(`facts/pending/${factId}`).remove();
+                  await telegram.reply(message.chat.id, `❌ Đã hủy yêu cầu phê duyệt fact.`);
+                }
+              }
+              return res.end();
+            }
+          } catch (e) {
+            // Không phải JSON của duyệt fact, tiếp tục
+          }
+        }
 
         if (callback_query.data && callback_query.data.startsWith('{"ts":')) {
           try {
@@ -546,6 +876,19 @@ exports.webhook = onRequest(async (req, res) => {
 
     // Nếu người dùng reply (trích dẫn) một tin nhắn khác, đính kèm nội dung đó vào prompt
     let cleanPrompt = messageContent;
+
+    // Chặn Prompt Leakage offline để bảo vệ hệ thống & tiết kiệm 100% token/chi phí
+    if (isPromptLeakAttempt(cleanPrompt)) {
+      console.log(`[Prompt Protection] Phát hiện gài bẫy prompt từ ${senderName}: "${cleanPrompt}"`);
+      const secureReply = "Dạ, em không thể tiết lộ cấu hình hệ thống đâu nè! 🤫 Tụi mình trò chuyện chuyện khác vui hơn nha! Chúc anh/chị một ngày vui vẻ! ✨";
+      const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, createdAt: new Date().toISOString() };
+      const botMsgData = { role: "model", text: secureReply, createdAt: new Date().toISOString() };
+      
+      await appendRawMessage(String(chatId), userMsgData, botMsgData);
+      await telegram.reply(chatId, secureReply);
+      return res.end();
+    }
+
     let quoteContext = "";
     if (message.reply_to_message) {
       const replied = message.reply_to_message;
@@ -578,7 +921,8 @@ exports.webhook = onRequest(async (req, res) => {
     const forceIgnoreCheck = (!isDirectlyTargeted && isImplicitlyTargeted);
     const isGroup = chatType !== "private";
     const groupContext = await buildGroupProfileContext(participants, cleanPrompt, userId, isGroup);
-    const rawMsg = await llm.chat(String(chatId), cleanPrompt, senderName, userId, null, quoteContext, forceIgnoreCheck, groupContext, isGroup, hotTopic, isPostback, postbackContext);
+    const factsContext = await findRelevantFacts(String(chatId), cleanPrompt);
+    const rawMsg = await llm.chat(String(chatId), cleanPrompt, senderName, userId, null, quoteContext, forceIgnoreCheck, groupContext, isGroup, hotTopic, isPostback, postbackContext, factsContext);
 
     const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, createdAt: new Date().toISOString() };
 
@@ -587,10 +931,14 @@ exports.webhook = onRequest(async (req, res) => {
       return res.end();
     }
 
-    const { text: botMsgText, topic } = processAndExtractProfile(rawMsg, userId, participants);
+    const { text: botMsgText, topic, reaction } = await processAndExtractProfile(rawMsg, userId, participants, String(chatId), senderName, "Telegram");
 
     if (topic) {
       await updateSessionMetadata(String(chatId), { hotTopic: topic });
+    }
+
+    if (reaction) {
+      await telegram.setMessageReaction(chatId, message.message_id, reaction);
     }
 
     // Convert @name → Telegram HTML mention thực sự
@@ -606,24 +954,35 @@ exports.webhook = onRequest(async (req, res) => {
   }
 
   // ── LINE ──────────────────────────────────────────────────────────────────
-  // [SECURITY] Xác thực Chữ ký Webhook của LINE
-  const channelSecret = process.env.CHANNEL_SECRET;
-  if (channelSecret) {
-    try {
-      const signature = crypto.createHmac("SHA256", channelSecret).update(req.rawBody).digest("base64");
-      if (signature !== req.headers["x-line-signature"]) {
-        console.warn("[LINE] TỪ CHỐI REQUEST: Sai x-line-signature. Có dấu hiệu giả mạo Webhook!");
-        return res.status(401).send("Unauthorized");
+  if (req.body && req.body.events) {
+    // [IDEMPOTENCY] Chống webhook lặp của LINE
+    const retryKey = req.headers["x-line-retry-key"];
+    if (retryKey) {
+      if (processedWebhooks.has(retryKey)) {
+        console.log(`[LINE] Bỏ qua request bị lặp (retry_key: ${retryKey})`);
+        return res.status(200).send("OK");
       }
-    } catch (err) {
-      console.error("[LINE] Lỗi xác thực chữ ký:", err.message);
+      cacheWebhookId(retryKey);
     }
-  }
 
-  const { events } = req.body;
-  if (!events) return res.end();
+    // [SECURITY] Xác thực Chữ ký Webhook của LINE
+    const channelSecret = process.env.CHANNEL_SECRET;
+    if (channelSecret) {
+      try {
+        const signature = crypto.createHmac("SHA256", channelSecret).update(req.rawBody).digest("base64");
+        if (signature !== req.headers["x-line-signature"]) {
+          console.warn("[LINE] TỪ CHỐI REQUEST: Sai x-line-signature. Có dấu hiệu giả mạo Webhook!");
+          return res.status(401).send("Unauthorized");
+        }
+      } catch (err) {
+        console.error("[LINE] Lỗi xác thực chữ ký:", err.message);
+      }
+    }
 
-  for (const event of events) {
+    const { events } = req.body;
+    if (!events) return res.end();
+
+    for (const event of events) {
     if (event.source?.userId) {
       console.log(`[LINE] User: ${event.source.userId} | Type: ${event.source.type}`);
     }
@@ -813,6 +1172,20 @@ exports.webhook = onRequest(async (req, res) => {
 
     // Nếu người dùng reply (trích dẫn) một tin nhắn khác, tìm nội dung trong mảng history
     let cleanPrompt = messageContent;
+
+    // Chặn Prompt Leakage offline để bảo vệ hệ thống & tiết kiệm 100% token/chi phí
+    if (isPromptLeakAttempt(cleanPrompt)) {
+      console.log(`[Prompt Protection] [LINE] Phát hiện gài bẫy prompt từ ${senderName}: "${cleanPrompt}"`);
+      const secureReply = "Dạ, em không thể tiết lộ cấu hình hệ thống đâu nè! 🤫 Tụi mình trò chuyện chuyện khác vui hơn nha! Chúc anh/chị một ngày vui vẻ! ✨";
+      const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, lineMessageId: eventMessageId, createdAt: new Date().toISOString() };
+      const botMsgData = { role: "model", text: secureReply, createdAt: new Date().toISOString() };
+      
+      const lineMsg = { type: "text", text: secureReply };
+      await line.reply(event.replyToken, [lineMsg]);
+      await appendRawMessage(sessionId, userMsgData, botMsgData);
+      continue;
+    }
+
     let quoteContext = "";
     const quotedId = event.message?.quotedMessageId;
     if (quotedId) {
@@ -878,7 +1251,8 @@ exports.webhook = onRequest(async (req, res) => {
     const forceIgnoreCheck = (!isDirectlyTargeted && isImplicitlyTargeted);
     const isGroup = event.source.type !== "user";
     const groupContext = await buildGroupProfileContext(participants, cleanPrompt, userId, isGroup);
-    const rawMsg = await llm.chat(sessionId, cleanPrompt, senderName, userId, eventMessageId, quoteContext, forceIgnoreCheck, groupContext, isGroup, hotTopic, isPostback, postbackContext);
+    const factsContext = await findRelevantFacts(sessionId, cleanPrompt);
+    const rawMsg = await llm.chat(sessionId, cleanPrompt, senderName, userId, eventMessageId, quoteContext, forceIgnoreCheck, groupContext, isGroup, hotTopic, isPostback, postbackContext, factsContext);
 
     const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, lineMessageId: eventMessageId, createdAt: new Date().toISOString() };
 
@@ -887,7 +1261,7 @@ exports.webhook = onRequest(async (req, res) => {
       continue;
     }
 
-    const { text: botMsgText, topic } = processAndExtractProfile(rawMsg, userId, participants);
+    const { text: botMsgText, topic } = await processAndExtractProfile(rawMsg, userId, participants, sessionId, senderName, "LINE");
 
     if (topic) {
       await updateSessionMetadata(sessionId, { hotTopic: topic });
@@ -907,6 +1281,8 @@ exports.webhook = onRequest(async (req, res) => {
     await appendRawMessage(sessionId, userMsgData, botMsgData);
 
     continue;
+  }
+
   }
 
   res.end();
@@ -1018,6 +1394,7 @@ exports.masterScheduler = onSchedule({
           updateData.summaries = summaries;
 
           await clearRawMessages(sessionId);
+          await rtdb.ref(`chats/${sessionId}/metadata/last_links`).remove().catch(() => {});
           await deregisterActiveSession(sessionId);
           needsUpdate = true;
         }
@@ -1040,3 +1417,7 @@ exports.masterScheduler = onSchedule({
     }
   }
 });
+
+// Export helpers for testing/script purposes
+exports.findRelevantFacts = findRelevantFacts;
+exports.processAndExtractProfile = processAndExtractProfile;

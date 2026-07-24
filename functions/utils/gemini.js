@@ -80,7 +80,9 @@ const summarizeHistory = async (messages, sessionId = "unknown") => {
 1. Tóm tắt ngắn gọn các sự kiện chính dưới 1000 chữ. BẮT BUỘC format rõ ràng: dùng ký tự \\n để ngắt dòng, phân các ý bằng gạch đầu dòng (-) hoặc emoji (📌, 👉), và bôi đậm ý chính bằng **text**.
 2. Xác định 01 chủ đề NỔI BẬT NHẤT (VD: World Cup 2026). Nếu không rõ, ghi "None".
 3. Phân tích Audit Keywords: Tìm các từ khóa tìm kiếm user dùng mà hệ thống có thể cần. Đánh giá xem nó có phải sự kiện trong ngày (is_today_sensitive) và phân loại vào (NEWS/FINANCE/DEV/SOCIAL/GENERAL).
-4. Phân tích Audit Issues: Tìm các câu trả lời sai hoặc ngớ ngẩn của bot (Hallucination) so với câu hỏi.
+8. Phân tích Audit Issues: Tìm các câu trả lời sai hoặc ngớ ngẩn của bot (Hallucination) so với câu hỏi.
+9. Phân tích Missed Intents: Tìm những câu/từ khóa mà người dùng dùng để "xin link/nguồn" nhưng bot không hiểu hoặc chưa có link. Tìm những chủ đề/topic mới (như tiền ảo, lãi suất...) mà bot không bắt được để cập nhật vào danh sách topic độc lập.
+10. Phân tích Suggested Stopwords: Tìm các từ dừng/từ đệm tiếng Việt thông dụng, vô nghĩa mà người dùng hay dùng khi chat trong group này (ví dụ: "giùm em", "ơi", "cho", "cái này"...) để hệ thống lọc bỏ trong tương lai.
 
 BẮT BUỘC TRẢ VỀ ĐÚNG ĐỊNH DẠNG JSON SAU (chỉ chứa JSON, được phép dùng \\n và dấu gạch ngang bên trong chuỗi string):
 {
@@ -91,7 +93,10 @@ BẮT BUỘC TRẢ VỀ ĐÚNG ĐỊNH DẠNG JSON SAU (chỉ chứa JSON, đư�
   ],
   "audit_issues": [
     { "user_question": "...", "bot_answer": "...", "issue_type": "hallucination", "severity": "HIGH", "note": "..." }
-  ]
+  ],
+  "missed_link_requests": ["cho xin đường dẫn bài báo", "lấy ở đâu ra đó"],
+  "missed_topics": ["chứng khoán", "lãi suất"],
+  "suggested_stopwords": ["giùm em", "ơi"]
 }
 
 Lịch sử chat thô:
@@ -117,7 +122,11 @@ ${formattedChat}`;
 
     // Ghi Audit Log vào Firestore
     try {
-      if ((jsonObj.audit_keywords && jsonObj.audit_keywords.length > 0) || (jsonObj.audit_issues && jsonObj.audit_issues.length > 0)) {
+      if ((jsonObj.audit_keywords && jsonObj.audit_keywords.length > 0) || 
+          (jsonObj.audit_issues && jsonObj.audit_issues.length > 0) ||
+          (jsonObj.missed_link_requests && jsonObj.missed_link_requests.length > 0) ||
+          (jsonObj.missed_topics && jsonObj.missed_topics.length > 0) ||
+          (jsonObj.suggested_stopwords && jsonObj.suggested_stopwords.length > 0)) {
         const expireAtDate = new Date();
         expireAtDate.setDate(expireAtDate.getDate() + 30); // TTL 30 ngày
         await db.collection("audit_logs").add({
@@ -125,6 +134,9 @@ ${formattedChat}`;
           sessionId: sessionId,
           audit_keywords: jsonObj.audit_keywords || [],
           audit_issues: jsonObj.audit_issues || [],
+          missed_link_requests: jsonObj.missed_link_requests || [],
+          missed_topics: jsonObj.missed_topics || [],
+          suggested_stopwords: jsonObj.suggested_stopwords || [],
           expireAt: expireAtDate
         });
         console.log(`[Audit Log] Ghi log thành công cho session ${sessionId}`);

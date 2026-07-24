@@ -7,6 +7,52 @@ const EXA_API_KEY = process.env.EXA_API_KEY;
 let exaCache = { month: "", count: 0, initialized: false };
 const EXA_MONTHLY_LIMIT = 950;
 
+const getDomainName = (url) => {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase();
+    const domain = hostname.replace("www.", "");
+    
+    const domainMap = {
+      "vnexpress.net": "VnExpress",
+      "wikipedia.org": "Wikipedia",
+      "vov.vn": "VOV",
+      "dantri.com.vn": "Dân Trí",
+      "tuoitre.vn": "Tuổi Trẻ",
+      "thanhnien.vn": "Thanh Niên",
+      "cafef.vn": "CafeF",
+      "vietnamnet.vn": "VietNamNet",
+      "laodong.vn": "Lao Động",
+      "vtv.vn": "VTV",
+      "cand.com.vn": "Báo Công an Nhân dân",
+      "baochinhphu.vn": "Báo Chính phủ",
+      "tienphong.vn": "Tiền Phong",
+      "soha.vn": "Soha",
+      "plo.vn": "Pháp luật TP.HCM",
+      "sggp.org.vn": "Sài Gòn Giải Phóng",
+      "baotintuc.vn": "Báo Tin Tức",
+      "zingnews.vn": "Zing News",
+      "znews.vn": "ZNews",
+      "spiderum.com": "Spiderum",
+      "facebook.com": "Facebook",
+      "youtube.com": "YouTube",
+      "github.com": "GitHub"
+    };
+
+    for (const [key, value] of Object.entries(domainMap)) {
+      if (domain.includes(key)) return value;
+    }
+
+    const parts = domain.split(".");
+    if (parts.length > 0) {
+      const name = parts[0];
+      return name.charAt(0).toUpperCase() + name.slice(1);
+    }
+    return "Internet";
+  } catch (e) {
+    return "Internet";
+  }
+};
+
 /**
  * Tìm kiếm thông tin trên internet bằng Exa API.
  * @param {string} query
@@ -92,12 +138,19 @@ const searchExa = async (query, options = {}) => {
     }, { merge: true }).catch(e => console.error("[Exa] Lỗi cập nhật quota:", e.message));
 
     let summary = "Thông tin thực tế từ Internet (Exa):\n";
+    const urls = [];
     data.results.forEach((r, i) => {
-      summary += `[Exa-${i + 1}] ${r.title}\n${r.url}\n${r.text}\n\n`;
+      summary += `[Nguồn: ${getDomainName(r.url)}] ${r.title}\nURL: ${r.url}\nNội dung: ${r.text}\n\n`;
+      urls.push(r.url);
     });
     
-    return summary;
+    return { summary, urls };
   } catch (error) {
+    const status = error?.response?.status;
+    if (status >= 400) {
+      console.error(`[Exa] Lỗi API nghiêm trọng (${status}), khởi động dự phòng...`);
+      throw error;
+    }
     console.error("[Exa] Lỗi tìm kiếm:", error?.response?.data || error.message);
     return null;
   }

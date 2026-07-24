@@ -1,0 +1,20 @@
+1. Mục tiêu tổng thiểu
+Xây dựng một chatbot tên Annie chạy được trên cả LINE và Telegram
+Chatbot có các tính năng:
+- Có khả năng tìm kiếm thông tin chính xác 100% cho user
+- Fact check được thông tin user cung cấp 
+- Summary được cái bài báo
+- Summary được nội dung chat group
+- Gửi tin nhắn thông báo định kì
+- Có khả năng self-improvement
+- Có khả năng react emoji thể hiện cảm xúc
+- Có khả năng lưu fact để update thông tin tốt hơn
+
+2. Nguyên tắc tối thượng: tiết kiệm chi phí, độ chính xác cực cao
+A. Tiết kiếm chi phí
+- Thiết kế prompt ngắn, tối ưu
+B. Độ chính xác cực cao
+- Đảm bảo thông tin cực kì chính xác, không cảm tính
+
+3. Yêu cầu bổ sung
+- Hệ thống phải có khả năng tự kiểm thử và tối ưu
