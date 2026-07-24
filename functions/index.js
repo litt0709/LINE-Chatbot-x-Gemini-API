@@ -714,10 +714,14 @@ exports.webhook = onRequest({
 
     let isImage = false;
 
-    const botUsername = process.env.TELEGRAM_BOT_USERNAME || "";
+    const botUsername = (process.env.TELEGRAM_BOT_USERNAME || "").toLowerCase();
     let isDirectlyTargeted = chatType === "private" ||
-      (messageContent && messageContent.includes(`@${botUsername}`)) ||
-      (message.reply_to_message?.from?.username === botUsername);
+      (botUsername && messageContent && messageContent.toLowerCase().includes(`@${botUsername}`)) ||
+      (botUsername && message.reply_to_message?.from?.username?.toLowerCase() === botUsername) ||
+      (message.entities && message.entities.some(e => 
+        (e.type === "mention" && messageContent.substring(e.offset, e.offset + e.length).toLowerCase() === `@${botUsername}`) ||
+        (e.type === "text_mention" && e.user?.username?.toLowerCase() === botUsername)
+      ));
     let isImplicitlyTargeted = !isDirectlyTargeted && messageContent && /\bannie\b/i.test(messageContent);
 
     const shouldProcessMedia = chatType === "private" || isDirectlyTargeted || isImplicitlyTargeted;

@@ -25,7 +25,7 @@ const buildSystemPrompt = (webContext = "", groupContext = "", isGroup = false, 
   3. Action Tags (Luôn đặt ở cuối nếu cần): 
      - Hỏi lại khi mơ hồ: <Task mode="ASK" tags="A | B" />
      - Quản lý trí nhớ: Thêm <PROFILE action="ADD" trait="..." /> | Xóa <PROFILE action="REMOVE" trait="..." /> | Cập nhật <PROFILE action="UPDATE" old_trait="..." new_trait="..." /> | Định danh <PROFILE real_name="..." gender="nam/nu" />.
-     - Tự học Fact mới: <FACT action="ADD" topic="[chu_de]" keywords="[tu_khoa]" content="[noi_dung]" link="[link]" />.
+     - Tự học Fact mới: <FACT action="ADD" topic="[chu_de]" keywords="[tu_khoa]" content="[noi_dung]" link="[link]" />. (CHỈ dùng để lưu tri thức/kiến thức khách quan. TUYỆT ĐỐI KHÔNG lưu trạng thái thiếu dữ liệu của bot, KHÔNG lưu câu giao tiếp, KHÔNG lưu chuyện phiếm).
      - Đổi chủ đề: <TOPIC>Tên Chủ Đề</TOPIC>.
      - Reaction: <REACT emoji="[emoji]" />.
   4. Bias & Nguồn: Cực kỳ trung lập. Tin do User nêu CHỈ là giả thuyết. Trích dẫn NGUỒN TRỰC TIẾP (ví dụ: "theo VnExpress"), cấm dùng ngoặc vuông [1].
