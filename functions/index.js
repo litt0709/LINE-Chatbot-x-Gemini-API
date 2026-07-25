@@ -19,9 +19,11 @@ const globalFactsIndexCache = {
 };
 const userFactsIndexCache = new Map(); // key: userId/groupId -> { data: {...}, expiresAt: timestamp }
 
-// Smart Group Chat Caches
+// Smart Group Chat Caches & Config
 const focusModeCache = new Map(); // key: chatId -> { userId, expiresAt }
 const proactiveRateLimitCache = new Map(); // key: chatId -> nextAllowedTimestamp
+const PROACTIVE_TRIGGER_WORDS = ["ai biết", "làm sao", "lỗi gì", "bug", "không chạy", "có cách nào", "bác nào", "mọi người", "xin ý kiến", "chịu"];
+
 // Cấu hình Cache Idempotency chống lặp retry webhook
 const processedWebhooks = new Set();
 const maxCacheSize = 1000;
@@ -851,8 +853,7 @@ exports.webhook = onRequest({
 
     // --- Smart Group Chat: Proactive Intervention ---
     if (chatType !== "private" && !isDirectlyTargeted && !isImplicitlyTargeted && messageContent) {
-      const triggerWords = ["ai biết", "làm sao", "lỗi gì", "bug", "không chạy", "có cách nào", "bác nào", "mọi người", "xin ý kiến", "chịu"];
-      const hasTrigger = messageContent.length > 10 && triggerWords.some(w => messageContent.toLowerCase().includes(w));
+      const hasTrigger = messageContent.length > 10 && PROACTIVE_TRIGGER_WORDS.some(w => messageContent.toLowerCase().includes(w));
       if (hasTrigger) {
         const nextAllowed = proactiveRateLimitCache.get(String(chatId)) || 0;
         if (Date.now() >= nextAllowed) {
