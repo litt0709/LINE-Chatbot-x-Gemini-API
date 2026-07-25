@@ -272,6 +272,58 @@ const getFactDetail = async (type, targetId, factId) => {
   }
 };
 
+const saveSchedule = async (scheduleData) => {
+  try {
+    await rtdb.ref(`schedules/${scheduleData.id}`).set(scheduleData);
+  } catch (error) {
+    console.error(`[RTDB] Lỗi lưu lịch ${scheduleData.id}:`, error.message);
+  }
+};
+
+const getUserSchedules = async (userId) => {
+  try {
+    const snap = await rtdb.ref("schedules").orderByChild("userId").equalTo(String(userId)).once("value");
+    if (!snap.exists()) return [];
+    return Object.values(snap.val());
+  } catch (error) {
+    console.error(`[RTDB] Lỗi lấy danh sách lịch của user ${userId}:`, error.message);
+    return [];
+  }
+};
+
+const getAllSchedules = async () => {
+  try {
+    const snap = await rtdb.ref("schedules").once("value");
+    if (!snap.exists()) return [];
+    return Object.values(snap.val());
+  } catch (error) {
+    console.error("[RTDB] Lỗi lấy toàn bộ danh sách lịch:", error.message);
+    return [];
+  }
+};
+
+const deleteSchedule = async (scheduleId) => {
+  try {
+    await rtdb.ref(`schedules/${scheduleId}`).remove();
+  } catch (error) {
+    console.error(`[RTDB] Lỗi xóa lịch ${scheduleId}:`, error.message);
+  }
+};
+
+const getDueSchedules = async (nowTimestamp) => {
+  try {
+    const snap = await rtdb.ref("schedules")
+      .orderByChild("nextRun")
+      .endAt(nowTimestamp)
+      .once("value");
+    if (!snap.exists()) return [];
+    return Object.values(snap.val());
+  } catch (error) {
+    console.error("[RTDB] Lỗi lấy lịch tới hạn:", error.message);
+    return [];
+  }
+};
+
 module.exports = { 
   db, 
   rtdb,
@@ -291,7 +343,12 @@ module.exports = {
   saveGlobalParticipants,
   saveFact,
   getFactsIndex,
-  getFactDetail
+  getFactDetail,
+  saveSchedule,
+  getUserSchedules,
+  getAllSchedules,
+  deleteSchedule,
+  getDueSchedules
 };
 
 

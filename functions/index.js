@@ -1,7 +1,7 @@
 const { onRequest } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const crypto = require("crypto");
-const { db, rtdb, FieldValue, appendRawMessage, getRawMessages, clearRawMessages, getUserProfile, saveUserProfile, registerActiveSession, getActiveSessions, deregisterActiveSession, getSessionMetadata, updateSessionMetadata, getGlobalParticipants, saveGlobalParticipants, saveFact, getFactsIndex, getFactDetail } = require("./utils/db");
+const { db, rtdb, FieldValue, appendRawMessage, getRawMessages, clearRawMessages, getUserProfile, saveUserProfile, registerActiveSession, getActiveSessions, deregisterActiveSession, getSessionMetadata, updateSessionMetadata, getGlobalParticipants, saveGlobalParticipants, saveFact, getFactsIndex, getFactDetail, saveSchedule, getUserSchedules, getAllSchedules, deleteSchedule, getDueSchedules } = require("./utils/db");
 const line = require("./utils/line");
 const telegram = require("./utils/telegram");
 
@@ -153,7 +153,7 @@ const isUserAllowed = (userId, platform) => {
   else list = ALLOWED_LINE_USERS;
   return list.includes("*") || list.includes(userId);
 };
-const buildGroupProfileContext = async (participantsMap, promptText = "", senderId = "", isGroup = false) => {
+const buildGroupProfileContext = async (participantsMap, promptText = "", senderId = "", isGroup = false, senderName = "") => {
   const uniqueIds = [...new Set(Object.values(participantsMap))].filter(Boolean);
   const lowerPrompt = promptText.toLowerCase();
 
@@ -162,8 +162,11 @@ const buildGroupProfileContext = async (participantsMap, promptText = "", sender
 
   // Lấy profile song song bằng Promise.all (nhanh hơn ~50% so với for...of tuần tự)
   const results = await Promise.all(uniqueIds.map(async (uid) => {
-    const name = Object.keys(participantsMap).find(k => participantsMap[k] === uid) || uid;
+    let name = Object.keys(participantsMap).find(k => participantsMap[k] === uid) || uid;
     const isSender = (uid === senderId);
+    if (isSender && senderName) {
+      name = senderName; // Ưu tiên tên gốc (có viết hoa) cho người gửi
+    }
     const isMentioned = lowerPrompt.includes(name.toLowerCase());
     if (!isSender && !isMentioned) return null;
 
@@ -193,7 +196,8 @@ const buildGroupProfileContext = async (participantsMap, promptText = "", sender
   }));
 
   const ctx = results.filter(Boolean).join("");
-  return ctx ? `\n\nThông tin tập thể: ${ctx.trim()}` : "";
+  const prefix = isGroup ? "Thông tin tập thể" : "Thông tin người dùng";
+  return ctx ? `\n\n${prefix}: ${ctx.trim()}` : "";
 };
 
 const removeAccents = (str) => {
@@ -273,6 +277,90 @@ const processAndExtractProfile = async (text, senderId, participants = {}, sessi
 
       saveUserProfile(uid, updateData);
       userProfileCache.set(uid, { ...existing, ...updateData });
+    }
+  }
+
+  // Bắt tag <SCHEDULE>
+  const scheduleTagRegex = /<SCHEDULE\s+([^>]*)\/?>/gi;
+  let scheduleMatch;
+  while ((scheduleMatch = scheduleTagRegex.exec(text)) !== null) {
+    const attrStr = scheduleMatch[1];
+    const getAttr = (name) => {
+      const r = new RegExp(`${name}=["']([^"']*)["']`, "i");
+      const m = attrStr.match(r);
+      return m ? m[1] : null;
+    };
+
+    const action = getAttr("action")?.toUpperCase();
+    const targetId = sessionId || senderId; // Đặt cho session hoặc user cá nhân
+
+    if (action === "ADD") {
+      const type = getAttr("type") || "ONCE";
+      const timeStr = getAttr("time");
+      const prompt = getAttr("prompt");
+
+      if (timeStr && prompt) {
+        const scheduleId = "sch_" + Math.random().toString(36).substr(2, 5);
+        let nextRun = 0;
+        
+        // Parse timeStr thành timestamp (rất cơ bản, có thể dùng thư viện tốt hơn sau)
+        // Format YYYY-MM-DD HH:mm
+        if (timeStr.length > 5) {
+           const parsedDate = new Date(timeStr + ":00+07:00");
+           if (!isNaN(parsedDate.getTime())) nextRun = parsedDate.getTime();
+        } else if (timeStr.includes(":")) {
+           // HH:mm for today
+           const vnDate = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }));
+           const [h, m] = timeStr.split(":");
+           vnDate.setHours(parseInt(h), parseInt(m), 0, 0);
+           nextRun = vnDate.getTime();
+           if (nextRun < Date.now()) nextRun += 86400000; // Next day
+        }
+
+        if (nextRun > 0) {
+          await saveSchedule({
+            id: scheduleId,
+            userId: targetId,
+            type,
+            timeStr,
+            prompt,
+            nextRun,
+            platform,
+            senderName,
+            createdAt: Date.now()
+          });
+          cleanedText = cleanedText.replace(scheduleMatch[0], `\n[Hệ thống: Đã đặt lịch thành công với mã ${scheduleId}]`);
+        }
+      }
+    } else if (action === "DEL" || action === "DELETE") {
+      const schId = getAttr("id");
+      if (schId) {
+        await deleteSchedule(schId);
+        cleanedText = cleanedText.replace(scheduleMatch[0], `\n[Hệ thống: Đã xóa lịch ${schId}]`);
+      }
+    } else if (action === "LIST") {
+      const schedules = await getUserSchedules(targetId);
+      if (schedules.length === 0) {
+        cleanedText = cleanedText.replace(scheduleMatch[0], `\n[Hệ thống: Không có lịch hẹn nào]`);
+      } else {
+        const listStr = schedules.map(s => `- Mã: ${s.id}, Lịch: ${s.timeStr} (${s.type}), Yêu cầu: ${s.prompt}`).join("\n");
+        cleanedText = cleanedText.replace(scheduleMatch[0], `\n[Hệ thống: Danh sách lịch hẹn]\n${listStr}`);
+      }
+    } else if (action === "ADMIN_LIST") {
+      const TELEGRAM_ADMIN = process.env.TELEGRAM_ADMIN_APPPROVAL_ID || "-1003832428084";
+      const LINE_ADMIN = process.env.LINE_ADMIN_APPPROVAL_ID || "";
+      
+      if (String(senderId) !== String(TELEGRAM_ADMIN) && String(senderId) !== String(LINE_ADMIN)) {
+        cleanedText = cleanedText.replace(scheduleMatch[0], `\n[Hệ thống: Từ chối. Bạn không có quyền Admin để xem toàn bộ lịch hẹn!]`);
+      } else {
+        const schedules = await getAllSchedules();
+        if (schedules.length === 0) {
+          cleanedText = cleanedText.replace(scheduleMatch[0], `\n[Hệ thống: Không có lịch hẹn nào trên toàn hệ thống]`);
+        } else {
+          const listStr = schedules.map(s => `- User: ${s.senderName}, Mã: ${s.id}, Lịch: ${s.timeStr} (${s.type}), Yêu cầu: ${s.prompt}`).join("\n");
+          cleanedText = cleanedText.replace(scheduleMatch[0], `\n[Hệ thống: Danh sách lịch hẹn]\n${listStr}`);
+        }
+      }
     }
   }
 
@@ -932,7 +1020,7 @@ exports.webhook = onRequest({
 
     const forceIgnoreCheck = (!isDirectlyTargeted && isImplicitlyTargeted);
     const isGroup = chatType !== "private";
-    const groupContext = await buildGroupProfileContext(participants, cleanPrompt, userId, isGroup);
+    const groupContext = await buildGroupProfileContext(participants, cleanPrompt, userId, isGroup, senderName);
     const factsContext = await findRelevantFacts(String(chatId), cleanPrompt);
     const rawMsg = await llm.chat(String(chatId), cleanPrompt, senderName, userId, null, quoteContext, forceIgnoreCheck, groupContext, isGroup, hotTopic, isPostback, postbackContext, factsContext);
 
@@ -1262,7 +1350,7 @@ exports.webhook = onRequest({
 
     const forceIgnoreCheck = (!isDirectlyTargeted && isImplicitlyTargeted);
     const isGroup = event.source.type !== "user";
-    const groupContext = await buildGroupProfileContext(participants, cleanPrompt, userId, isGroup);
+    const groupContext = await buildGroupProfileContext(participants, cleanPrompt, userId, isGroup, senderName);
     const factsContext = await findRelevantFacts(sessionId, cleanPrompt);
     const rawMsg = await llm.chat(sessionId, cleanPrompt, senderName, userId, eventMessageId, quoteContext, forceIgnoreCheck, groupContext, isGroup, hotTopic, isPostback, postbackContext, factsContext);
 
@@ -1335,7 +1423,8 @@ const sendNotifications = async (type = "afternoon") => {
 // ─── MASTER CRONJOB (ALL-IN-ONE) ──────────────────────────────────────────────
 // Giảm thiểu tối đa số lượng Job trên Cloud Scheduler để đảm bảo chi phí 0đ
 exports.masterScheduler = onSchedule({
-  schedule: "0,30 * * * *", // Chạy mỗi 30 phút
+  schedule: "*/5 * * * *", // Chạy mỗi 5 phút
+
   timeZone: "Asia/Ho_Chi_Minh",
   timeoutSeconds: 300,
   memory: "512MiB"
@@ -1348,19 +1437,19 @@ exports.masterScheduler = onSchedule({
   const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5;
 
   // 1. Bản tin Sáng: 8:00 (Thứ 2 - Thứ 6)
-  if (isWeekday && hour === 8 && minute < 30) {
+  if (isWeekday && hour === 8 && minute < 5) {
     console.log("[Scheduler] Kích hoạt Bản tin Sáng");
     await sendNotifications("morning");
   }
 
   // 2. Bản tin Chiều: 13:30 (Thứ 2 - Thứ 6)
-  if (isWeekday && hour === 13 && minute >= 30) {
+  if (isWeekday && hour === 13 && minute >= 30 && minute < 35) {
     console.log("[Scheduler] Kích hoạt Bản tin Chiều");
     await sendNotifications("afternoon");
   }
 
   // 3. Dọn dẹp Lịch sử (Memory Compression): Chạy mỗi 4 tiếng (0, 4, 8, 12, 16, 20) lúc đầu giờ
-  if (hour % 4 === 0 && minute < 30) {
+  if (hour % 4 === 0 && minute < 5) {
     console.log("[Scheduler] Kích hoạt Dọn dẹp Ký Ức (Mỗi 4 tiếng)");
     try {
       const activeSessions = await getActiveSessions();
@@ -1427,6 +1516,58 @@ exports.masterScheduler = onSchedule({
     } catch (error) {
       console.error("[Cleanup] Lỗi khi Nén Ký Ức:", error);
     }
+  }
+
+  // 4. Xử lý Lịch hẹn (Smart Scheduler) tới hạn
+  try {
+    const dueSchedules = await getDueSchedules(Date.now());
+    for (const schedule of dueSchedules) {
+      console.log(`[Scheduler] Đang xử lý lịch hẹn: ${schedule.id} cho user ${schedule.userId}`);
+      
+      const prompt = `Đây là lịch hẹn đến hạn cần thực hiện. Nội dung yêu cầu của người dùng là: "${schedule.prompt}". Hãy hoàn thành nội dung này (ví dụ như tạo câu chúc, tóm tắt, báo cáo...) thật tự nhiên và đáng yêu, nhắn trực tiếp cho người dùng. TUYỆT ĐỐI KHÔNG lặp lại câu hỏi. KHÔNG sinh ra thẻ <SCHEDULE>.`;
+      
+      const payload = {
+        model: process.env.DEEPSEEK_MODEL || "deepseek-v4-flash",
+        messages: [
+          { role: "system", content: "Role: Annie. Xưng 'em', gọi 'anh/chị'. Bạn đang đóng vai trò trợ lý tự động gửi kết quả lịch hẹn/nhắc nhở cho người dùng. Trả lời ngay vào kết quả, tự nhiên, vui vẻ." },
+          { role: "user", content: prompt }
+        ]
+      };
+
+      const axios = require("axios");
+      const response = await axios.post("https://api.deepseek.com/chat/completions", payload, {
+        headers: { "Authorization": `Bearer ${process.env.DEEPSEEK_API_KEY}`, "Content-Type": "application/json" }
+      });
+      const botResponse = response.data.choices[0].message.content.trim();
+      const finalMsg = `🔔 Bíp bíp! Đến giờ hẹn của anh/chị rồi nha:\n\n${botResponse}`;
+
+      if (schedule.platform === "Telegram") {
+        await telegram.push(schedule.userId, finalMsg);
+      } else {
+        await line.push(schedule.userId, [{ type: "text", text: finalMsg }]);
+      }
+
+      // Xóa hoặc Update chu kỳ
+      const typeStr = String(schedule.type).toUpperCase();
+      if (typeStr === "ONCE") {
+        await deleteSchedule(schedule.id);
+      } else {
+        let newTime = schedule.nextRun;
+        if (typeStr === "DAILY") newTime += 86400000;
+        else if (typeStr === "WEEKLY") newTime += 7 * 86400000;
+        
+        if (newTime === schedule.nextRun) {
+          // Fallback: If time didn't change (e.g. invalid type), delete to avoid infinite loop
+          await deleteSchedule(schedule.id);
+          console.log(`[Scheduler] Đã xóa lịch ${schedule.id} do loại chu kỳ không hợp lệ: ${schedule.type}`);
+        } else {
+          await saveSchedule({ ...schedule, nextRun: newTime });
+          console.log(`[Scheduler] Đã update lịch ${schedule.id} sang chu kỳ tiếp theo: ${new Date(newTime).toLocaleString("en-US", {timeZone: "Asia/Ho_Chi_Minh"})}`);
+        }
+      }
+    }
+  } catch (error) {
+    console.error("[Scheduler] Lỗi xử lý lịch hẹn tới hạn:", error.message);
   }
 });
 
