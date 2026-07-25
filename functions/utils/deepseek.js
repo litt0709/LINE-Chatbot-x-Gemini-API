@@ -322,11 +322,11 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   if (forceIgnoreCheck) {
     sysContent += "\n\nBẮT BUỘC: Bạn đang ở trong group chat. Người dùng có thể chỉ vô tình nhắc tên bạn khi nói chuyện với người khác. BẠN PHẢI đánh giá xem họ CÓ THỰC SỰ ĐANG NÓI CHUYỆN VỚI BẠN HAY KHÔNG. Nếu họ ĐANG NÓI VỚI NGƯỜI KHÁC (nhắc bạn ở ngôi thứ 3), BẠN PHẢI trả lời chính xác bằng 1 chữ: IGNORE. Tuyệt đối không giải thích thêm. Nếu họ đang hỏi hoặc gọi bạn, hãy trả lời bình thường.";
   }
-  
+
   if (forceProactiveCheck) {
     sysContent += "\n\nBẮT BUỘC: Bạn đang 'nghe lén' group chat. Mọi người KHÔNG gọi bạn, họ đang thảo luận với nhau. BẠN CHỈ ĐƯỢC PHÉP nhảy vào hỗ trợ NẾU họ đang gặp lỗi kỹ thuật, bế tắc, hoặc tranh luận chưa rõ hồi kết MÀ BẠN CÓ THỂ ĐÓNG GÓP Ý KIẾN CHÍNH XÁC. Nếu không, hoặc chủ đề là tán gẫu, BẮT BUỘC xuất ra chữ 'IGNORE'. Nếu quyết định nhảy vào, hãy bắt đầu bằng một câu rụt rè, khiêm tốn (ví dụ: 'Thấy mọi người bàn về... em xin góp ý chút xíu nha').";
   }
-  
+
   const botUsername = process.env.TELEGRAM_BOT_USERNAME ? process.env.TELEGRAM_BOT_USERNAME.toLowerCase() : "";
   const mentionsOtherBot = [...prompt.matchAll(/@\w+bot\b/gi)].some(match => match[0].toLowerCase() !== `@${botUsername}`);
   if (mentionsOtherBot) {
