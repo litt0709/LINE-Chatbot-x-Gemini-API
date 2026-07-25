@@ -15,6 +15,3 @@ A. Tiết kiếm chi phí
 - Thiết kế prompt ngắn, tối ưu
 B. Độ chính xác cực cao
 - Đảm bảo thông tin cực kì chính xác, không cảm tính
-
-3. Yêu cầu bổ sung
-- Hệ thống phải có khả năng tự kiểm thử và tối ưu

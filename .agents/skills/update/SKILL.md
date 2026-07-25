@@ -24,7 +24,7 @@ Khi người dùng gõ lệnh `/update`, bạn (AI) PHẢI thực hiện đúng 
    - Với các câu hỏi gài bẫy prompt phát hiện được ở Bước 2, Agent tiến hành phân tích rút ra các cụm từ khóa gài bẫy cốt lõi, chuẩn hóa về dạng viết thường, không dấu và append (thêm) chúng vào tệp JSON [leak_blacklist.json](file:///Users/snow/Documents/www/LINE-Chatbot/functions/utils/leak_blacklist.json) (không được để trùng lặp trong mảng JSON).
    
 4. **Dọn dẹp (Cleanup - Inbox Zero):**
-   - Hỏi ý kiến người dùng xem có muốn xóa các bản ghi đã xử lý khỏi bảng `audit_keywords` trên Firestore hay không. Nếu người dùng đồng ý, hãy chạy script xóa các Document ID đó.
+   - BẮT BUỘC thực thi script Node.js để xóa các trường dữ liệu `audit_keywords`, `missed_link_requests`, `missed_topics`, `missed_entities` đã xử lý trong các documents thuộc collection `audit_logs` trên Firestore (dùng `FieldValue.delete()`). NẾU document sau khi xóa không còn chứa dữ liệu audit nào khác (ví dụ: `audit_issues`), thì tiến hành xóa luôn Document ID đó để giữ database sạch sẽ.
 
 5. **Báo cáo (Report):**
    - Tóm tắt lại những từ khóa, cụm từ xin link và chủ đề mới nào đã được update vào hệ thống.

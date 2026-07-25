@@ -24,4 +24,4 @@ Khi người dùng gõ lệnh `/audit`, bạn (AI) PHẢI thực hiện đúng q
 
 4. **Trình duyệt (Review):**
    - Trình bày rõ ràng các vấn đề và giải pháp cho Developer (Sếp) duyệt. CHỈ tiến hành sửa code sau khi Sếp đồng ý.
-   - Sau khi fix xong, hỏi Sếp xem có muốn xóa các log đã xử lý khỏi bảng `audit_logs` trên Firestore hay không.
+   - Sau khi fix xong, BẮT BUỘC thực thi script Node.js để xóa trường dữ liệu `audit_issues` đã xử lý trong các documents thuộc collection `audit_logs` trên Firestore (dùng `FieldValue.delete()`). NẾU document sau khi xóa không còn chứa dữ liệu audit nào khác (ví dụ: `audit_keywords`), thì tiến hành xóa luôn Document ID đó để giữ database sạch sẽ.

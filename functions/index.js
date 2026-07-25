@@ -19,6 +19,9 @@ const globalFactsIndexCache = {
 };
 const userFactsIndexCache = new Map(); // key: userId/groupId -> { data: {...}, expiresAt: timestamp }
 
+// Smart Group Chat Caches
+const focusModeCache = new Map(); // key: chatId -> { userId, expiresAt }
+const proactiveRateLimitCache = new Map(); // key: chatId -> nextAllowedTimestamp
 // Cấu hình Cache Idempotency chống lặp retry webhook
 const processedWebhooks = new Set();
 const maxCacheSize = 1000;
@@ -176,6 +179,13 @@ const buildGroupProfileContext = async (participantsMap, promptText = "", sender
       if (profile) userProfileCache.set(uid, profile);
     }
     if (!profile) return null;
+
+    // Phục hồi original casing (viết hoa/viết thường) để LLM match chính xác với chat history
+    if (profile.real_name) {
+      name = profile.real_name;
+    } else if (isSender && senderName) {
+      name = senderName;
+    }
 
     const p = [];
     if (profile.gender) p.push(`Giới tính: ${profile.gender}`);
@@ -808,6 +818,12 @@ exports.webhook = onRequest({
       return res.end();
     }
 
+    // [COST MINIMIZATION] Block direct video/audio processing requests offline
+    if (messageContent && /(lấy text|tổng hợp|tóm tắt|trích xuất|xử lý|đọc).*?\b(video|audio|âm thanh|mp4|mp3|youtube)\b|\b(video|audio|âm thanh|mp4|mp3|youtube)\b.*?(lấy text|tổng hợp|tóm tắt|trích xuất|xử lý|đọc)/i.test(messageContent)) {
+      await telegram.reply(chatId, "Dạ hiện tại em chưa hỗ trợ tính năng trích xuất nội dung trực tiếp từ Video/Audio ạ. 😅");
+      return res.end();
+    }
+
     let isImage = false;
 
     const botUsername = (process.env.TELEGRAM_BOT_USERNAME || "").toLowerCase();
@@ -819,8 +835,34 @@ exports.webhook = onRequest({
         (e.type === "text_mention" && e.user?.username?.toLowerCase() === botUsername)
       ));
     let isImplicitlyTargeted = !isDirectlyTargeted && messageContent && /\bannie\b/i.test(messageContent);
+    let isProactiveTargeted = false;
 
-    const shouldProcessMedia = chatType === "private" || isDirectlyTargeted || isImplicitlyTargeted;
+    // --- Smart Group Chat: Focus Mode ---
+    if (chatType !== "private" && !isDirectlyTargeted && !isImplicitlyTargeted) {
+      const focus = focusModeCache.get(String(chatId));
+      if (focus && focus.userId === String(userId) && Date.now() < focus.expiresAt) {
+        const hasOtherMentions = /@\w+\b/gi.test(messageContent) && !messageContent.toLowerCase().includes(`@${botUsername}`);
+        if (!hasOtherMentions) {
+          isImplicitlyTargeted = true;
+          console.log(`[Focus Mode] Telegram: Bot tự động follow up với User ${userId} trong Group ${chatId}`);
+        }
+      }
+    }
+
+    // --- Smart Group Chat: Proactive Intervention ---
+    if (chatType !== "private" && !isDirectlyTargeted && !isImplicitlyTargeted && messageContent) {
+      const triggerWords = ["ai biết", "làm sao", "lỗi gì", "bug", "không chạy", "có cách nào", "bác nào", "mọi người", "xin ý kiến", "chịu"];
+      const hasTrigger = messageContent.length > 10 && triggerWords.some(w => messageContent.toLowerCase().includes(w));
+      if (hasTrigger) {
+        const nextAllowed = proactiveRateLimitCache.get(String(chatId)) || 0;
+        if (Date.now() >= nextAllowed) {
+          isProactiveTargeted = true;
+          console.log(`[Proactive] Telegram: Triggered in Group ${chatId}`);
+        }
+      }
+    }
+
+    const shouldProcessMedia = chatType === "private" || isDirectlyTargeted || isImplicitlyTargeted || isProactiveTargeted;
     // Lazy Image: Ảnh/file gửi thuần (không kèm caption) → lưu placeholder, không OCR ngay
     const hasCaption = !!(message.caption && message.caption.trim());
     const isRawMedia = (message.photo || message.document) && !hasCaption;
@@ -926,7 +968,7 @@ exports.webhook = onRequest({
 
     // Group chat: lưu background history (ảnh không tag bot đã xử lý ở block isRawMedia trên)
     if (chatType !== "private") {
-      if (!isDirectlyTargeted && !isImplicitlyTargeted) {
+      if (!isDirectlyTargeted && !isImplicitlyTargeted && !isProactiveTargeted) {
         const userMsg = { 
           role: "user", 
           text: messageContent || "", 
@@ -1022,7 +1064,7 @@ exports.webhook = onRequest({
     const isGroup = chatType !== "private";
     const groupContext = await buildGroupProfileContext(participants, cleanPrompt, userId, isGroup, senderName);
     const factsContext = await findRelevantFacts(String(chatId), cleanPrompt);
-    const rawMsg = await llm.chat(String(chatId), cleanPrompt, senderName, userId, null, quoteContext, forceIgnoreCheck, groupContext, isGroup, hotTopic, isPostback, postbackContext, factsContext);
+    const rawMsg = await llm.chat(String(chatId), cleanPrompt, senderName, userId, null, quoteContext, forceIgnoreCheck, groupContext, isGroup, hotTopic, isPostback, postbackContext, factsContext, isProactiveTargeted);
 
     const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, createdAt: new Date().toISOString() };
 
@@ -1047,6 +1089,13 @@ exports.webhook = onRequest({
 
     const botMsgData = { role: "model", text: botMsgText, createdAt: new Date().toISOString() };
     await appendRawMessage(String(chatId), userMsgData, botMsgData);
+
+    if (chatType !== "private") {
+      focusModeCache.set(String(chatId), { userId: String(userId), expiresAt: Date.now() + 3 * 60 * 1000 });
+      if (isProactiveTargeted) {
+        proactiveRateLimitCache.set(String(chatId), Date.now() + 60 * 60 * 1000);
+      }
+    }
 
     return res.end();
 
@@ -1182,6 +1231,12 @@ exports.webhook = onRequest({
 
     if (!messageContent) continue;
 
+    // [COST MINIMIZATION] Block direct video/audio processing requests offline
+    if (/(lấy text|tổng hợp|tóm tắt|trích xuất|xử lý|đọc).*?\b(video|audio|âm thanh|mp4|mp3|youtube)\b|\b(video|audio|âm thanh|mp4|mp3|youtube)\b.*?(lấy text|tổng hợp|tóm tắt|trích xuất|xử lý|đọc)/i.test(messageContent)) {
+      await line.replyMessage(event.replyToken, [{ type: "text", text: "Dạ hiện tại em chưa hỗ trợ tính năng trích xuất nội dung trực tiếp từ Video/Audio ạ. 😅" }]);
+      continue;
+    }
+
     const sessionId = event.source.groupId || event.source.roomId || userId;
 
     // Lệnh reset bộ nhớ
@@ -1307,7 +1362,7 @@ exports.webhook = onRequest({
             const fullText = q.text;
             quoteContext = `[Đang trả lời tin nhắn của ${quotedFrom}: "${fullText}"]\n`;
           }
-        } else if (isDirectlyTargeted || isImplicitlyTargeted) {
+        } else if (isDirectlyTargeted || isImplicitlyTargeted || isProactiveTargeted) {
           console.log(`[LINE] Quoted message không có trong history, thử tải on-demand file/ảnh (ID: ${quotedId})...`);
           try {
             const localPath = await line.downloadMessageFile(quotedId, "quoted_media");
