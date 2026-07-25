@@ -47,6 +47,9 @@ const reply = async (chatId, text) => {
   // 2. Escape các ký tự HTML nguy hiểm để tránh lỗi parse_mode của Telegram
   safeText = safeText.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   
+  // Phục hồi lại thẻ <a> (ví dụ mention user) bị escape
+  safeText = safeText.replace(/&lt;a href="([^"]+)"&gt;(.*?)&lt;\/a&gt;/gi, '<a href="$1">$2</a>');
+  
   // 3. Băm nhỏ tin nhắn (Message Chunking) nếu quá 2000 ký tự
   // Thuật toán: Thay thế ** thành <b></b> sẽ làm chuỗi dài ra (tối đa x1.75 lần). 
   // Nên chọn MAX_LEN = 2000 để đảm bảo 2000 * 1.75 = 3500 (luôn < 4096 ký tự an toàn của Telegram).

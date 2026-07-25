@@ -330,7 +330,7 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   const botUsername = process.env.TELEGRAM_BOT_USERNAME ? process.env.TELEGRAM_BOT_USERNAME.toLowerCase() : "";
   const mentionsOtherBot = [...prompt.matchAll(/@\w+bot\b/gi)].some(match => match[0].toLowerCase() !== `@${botUsername}`);
   if (mentionsOtherBot) {
-    sysContent += "\n\n[LƯU Ý QUAN TRỌNG]: Người dùng đang tag bot khác. Do giới hạn của Telegram, bạn KHÔNG THỂ đọc được tin nhắn của các bot khác. Hãy giao tiếp bình thường và khéo léo nhờ người dùng copy/chuyển lời giúp bạn nếu bot kia có phản hồi nhé.";
+    sysContent += "\n\n[LƯU Ý QUAN TRỌNG]: Người dùng đang tag bot khác. Do giới hạn API, bạn KHÔNG THỂ đọc được tin nhắn của bot khác. Hãy TỰ ĐÁNH GIÁ xem người dùng CÓ ĐANG TRỰC TIẾP HỎI BẠN HAY KHÔNG. Nếu họ chỉ đang nói chuyện với bot kia và nhắc bạn ở ngôi thứ 3 (ví dụ hỏi bot kia về bạn), BẠN BẮT BUỘC trả lời chính xác bằng 1 chữ: IGNORE. Tuyệt đối không giải thích thêm. Nếu họ đang trực tiếp hỏi bạn hoặc nhờ bạn tương tác, hãy giao tiếp bình thường và khéo léo nhờ user chuyển lời giúp nếu bot kia phản hồi.";
   }
 
   history[0].content = sysContent;
