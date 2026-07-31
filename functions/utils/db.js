@@ -1,13 +1,16 @@
 const admin = require("firebase-admin");
 const { FieldValue } = require("firebase-admin/firestore");
 
-if (admin.apps.length === 0) {
-  admin.initializeApp();
-}
+let isInit = false;
+const initAdmin = () => {
+  if (!isInit && admin.apps.length === 0) {
+    admin.initializeApp();
+  }
+  isInit = true;
+};
 
-const db = admin.firestore();
-
-const rtdb = admin.database();
+const db = new Proxy({}, { get: (target, prop) => { initAdmin(); return admin.firestore()[prop]; } });
+const rtdb = { ref: (path) => { initAdmin(); return admin.database().ref(path); } };
 
 /**
  * Thêm một tin nhắn vào mảng lịch sử của phiên (session).

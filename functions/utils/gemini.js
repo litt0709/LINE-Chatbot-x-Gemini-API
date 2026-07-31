@@ -1,7 +1,11 @@
 const { GoogleGenAI } = require("@google/genai");
 const fs = require("fs");
 const { db } = require("./db");
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+let aiInstance = null;
+const getAI = () => {
+  if (!aiInstance) aiInstance = new GoogleGenAI({ apiKey: process.env.API_KEY || "dummy_key_to_bypass_init_error" });
+  return aiInstance;
+};
 const GEMINI_MODEL = "gemini-2.5-flash";
 
 
@@ -11,7 +15,7 @@ const GEMINI_MODEL = "gemini-2.5-flash";
  * @returns {Promise<string>}
  */
 const multimodal = async (imageBinary) => {
-  const response = await ai.models.generateContent({
+  const response = await getAI().models.generateContent({
     model: GEMINI_MODEL,
     contents: [
       {
@@ -39,7 +43,7 @@ const analyzeDocument = async (localFilePath) => {
     // Đợi 2 giây để Google xử lý file nội bộ trước khi gọi generate (tránh lỗi file not ready)
     await new Promise(resolve => setTimeout(resolve, 2000));
 
-    const response = await ai.models.generateContent({
+    const response = await getAI().models.generateContent({
       model: GEMINI_MODEL,
       contents: [
         {
@@ -105,7 +109,7 @@ Lịch sử chat thô:
 ${formattedChat}`;
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await getAI().models.generateContent({
       model: GEMINI_MODEL,
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       config: {

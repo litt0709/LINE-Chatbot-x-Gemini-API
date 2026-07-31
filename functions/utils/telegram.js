@@ -21,7 +21,7 @@ const reply = async (chatId, text) => {
   let reply_markup = undefined;
   let rawText = text;
 
-  const taskMatch = rawText.match(/<Task\s+mode="ASK"\s+tags="([^"]+)"\s*\/?>/i);
+  const taskMatch = rawText.match(/<Task\s+mode=["']?ASK["']?\s+tags=["']([^"']+)["']\s*\/?>/i);
   if (taskMatch) {
     const tags = taskMatch[1].split("|").map(t => t.trim()).filter(Boolean);
     rawText = rawText.replace(/<Task[^>]*>/gi, "").trim();
@@ -39,8 +39,14 @@ const reply = async (chatId, text) => {
     };
   }
 
-  // Luôn dọn dẹp sạch sẽ mọi thẻ <Task> còn sót lại (kể cả tag lỗi cấu trúc không khớp regex)
-  rawText = rawText.replace(/<Task[^>]*>/gi, "").replace(/<\/Task>/gi, "").trim();
+  // Luôn dọn dẹp sạch sẽ mọi thẻ <Task> và các thẻ chức năng khác còn sót lại
+  rawText = rawText.replace(/<Task[^>]*>/gi, "").replace(/<\/Task>/gi, "")
+                   .replace(/<PROFILE[^>]*>|<\/PROFILE>/gi, "")
+                   .replace(/<FACT[^>]*>|<\/FACT>/gi, "")
+                   .replace(/<SCHEDULE[^>]*>|<\/SCHEDULE>/gi, "")
+                   .replace(/<TOPIC[^>]*>.*?<\/TOPIC>|<TOPIC[^>]*>|<\/TOPIC>/gi, "")
+                   .replace(/<REACT[^>]*>|<\/REACT>/gi, "")
+                   .trim();
 
   // 1. Chuyển đổi <br> (nếu có) thành \n
   let safeText = rawText.replace(/<br\s*\/?>/gi, "\n");

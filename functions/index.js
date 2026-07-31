@@ -22,7 +22,7 @@ const userFactsIndexCache = new Map(); // key: userId/groupId -> { data: {...}, 
 // Smart Group Chat Caches & Config
 const focusModeCache = new Map(); // key: chatId -> { userId, expiresAt }
 const proactiveRateLimitCache = new Map(); // key: chatId -> nextAllowedTimestamp
-const PROACTIVE_TRIGGER_WORDS = ["ai biết", "làm sao", "lỗi gì", "bug", "không chạy", "có cách nào", "bác nào", "mọi người", "xin ý kiến", "chịu"];
+const PROACTIVE_TRIGGER_WORDS = ["ai biết", "làm sao", "lỗi gì", "bug", "không chạy", "có cách nào", "bác nào", "mọi người", "xin ý kiến", "chịu", "rén", "hơi thọt", "rủi ro", "không hiểu", "giúp với", "chỉ dùm", "bế tắc", "cần hỗ trợ", "🆘🆘"];
 
 // Cấu hình Cache Idempotency chống lặp retry webhook
 const processedWebhooks = new Set();
@@ -169,7 +169,13 @@ const buildGroupProfileContext = async (participantsMap, promptText = "", sender
     if (isSender && senderName) {
       name = senderName; // Ưu tiên tên gốc (có viết hoa) cho người gửi
     }
-    const isMentioned = lowerPrompt.includes(name.toLowerCase());
+    
+    let isMentioned = lowerPrompt.includes(name.toLowerCase());
+    if (!isMentioned) {
+      const nameWords = name.toLowerCase().split(/\s+/).filter(w => w.length >= 2);
+      isMentioned = nameWords.some(w => lowerPrompt.includes(w));
+    }
+    
     if (!isSender && !isMentioned) return null;
 
     let profile = userProfileCache.get(uid);
@@ -206,7 +212,8 @@ const buildGroupProfileContext = async (participantsMap, promptText = "", sender
 
   const ctx = results.filter(Boolean).join("");
   const prefix = isGroup ? "Thông tin tập thể" : "Thông tin người dùng";
-  return ctx ? `\n\n${prefix}: ${ctx.trim()}` : "";
+  const disclaimer = isGroup && ctx ? "\n[LƯU Ý CỐT LÕI: Chỉ dựa vào các thành viên ở trên, TUYỆT ĐỐI KHÔNG tự suy diễn, liên tưởng tên thành người nổi tiếng/tổ chức bên ngoài.]" : "";
+  return ctx ? `\n\n${prefix}: ${ctx.trim()}${disclaimer}` : "";
 };
 
 const removeAccents = (str) => {
@@ -286,6 +293,7 @@ const processAndExtractProfile = async (text, senderId, participants = {}, sessi
 
       saveUserProfile(uid, updateData);
       userProfileCache.set(uid, { ...existing, ...updateData });
+      cleanedText = cleanedText.replace(match[0], `\n[Hệ thống: Đã cập nhật hồ sơ cá nhân]`);
     }
   }
 
@@ -428,6 +436,7 @@ const processAndExtractProfile = async (text, senderId, participants = {}, sessi
         };
         await rtdb.ref(`facts/pending/${factId}`).set(pendingData);
         console.log(`[Pending Fact] Đã lưu pending fact ${factId}`);
+        cleanedText = cleanedText.replace(tagMatch[0], `\n[Hệ thống: Đã ghi nhận kiến thức mới (đang chờ Admin duyệt)]`);
 
         const EDDY_TELEGRAM_ID = process.env.TELEGRAM_ADMIN_APPPROVAL_ID || "-1003832428084";
         const messageText = `💡 <b>Đề xuất Global Fact mới</b>\n` +
@@ -479,7 +488,10 @@ const processAndExtractProfile = async (text, senderId, participants = {}, sessi
 
   cleanedText = cleanedText
     .replace(/<PROFILE[^>]*>|<\/PROFILE>/gi, "")
-    .replace(/<FACT[^>]*>/gi, "")
+    .replace(/<FACT[^>]*>|<\/FACT>/gi, "")
+    .replace(/<SCHEDULE[^>]*>|<\/SCHEDULE>/gi, "")
+    .replace(/<TOPIC[^>]*>.*?<\/TOPIC>|<TOPIC[^>]*>|<\/TOPIC>/gi, "")
+    .replace(/<REACT[^>]*>|<\/REACT>/gi, "")
     .replace(/\[THÔNG TIN TỪ INTERNET\]/gi, "thông tin trên Internet")
     .replace(/\n{3,}/g, "\n\n")
     .replace(/["']?\s*\/>/g, "") // Dọn dẹp rác " /> do LLM sinh lỗi cú pháp thẻ XML
@@ -569,7 +581,7 @@ const buildLineMessage = (text, participants, isGroup = true, hotTopic = "") => 
   let cleanedText = text.replace(/\*\*/g, ""); // Strip markdown bold
 
   let quickReply = undefined;
-  const taskMatch = cleanedText.match(/<Task\s+mode="ASK"\s+tags="([^"]+)"\s*\/?>/i);
+  const taskMatch = cleanedText.match(/<Task\s+mode=["']?ASK["']?\s+tags=["']([^"']+)["']\s*\/?>/i);
   if (taskMatch) {
     const tags = taskMatch[1].split("|").map(t => t.trim()).filter(Boolean);
     cleanedText = cleanedText.replace(/<Task[^>]*>/gi, "").trim();
@@ -817,11 +829,6 @@ exports.webhook = onRequest({
       return res.end();
     }
 
-    // [COST MINIMIZATION] Block direct video/audio processing requests offline
-    if (messageContent && /(lấy text|tổng hợp|tóm tắt|trích xuất|xử lý|đọc).*?\b(video|audio|âm thanh|mp4|mp3|youtube)\b|\b(video|audio|âm thanh|mp4|mp3|youtube)\b.*?(lấy text|tổng hợp|tóm tắt|trích xuất|xử lý|đọc)/i.test(messageContent)) {
-      await telegram.reply(chatId, "Dạ hiện tại em chưa hỗ trợ tính năng trích xuất nội dung trực tiếp từ Video/Audio ạ. 😅");
-      return res.end();
-    }
 
     let isImage = false;
 
@@ -861,6 +868,15 @@ exports.webhook = onRequest({
     }
 
     const shouldProcessMedia = chatType === "private" || isDirectlyTargeted || isImplicitlyTargeted || isProactiveTargeted;
+    // [COST MINIMIZATION] Block direct video/audio processing requests offline
+    const hasMediaAttachment = message.video || message.audio || message.voice || message.video_note;
+    const hasMediaLink = messageContent && /(https?:\/\/[^\s]+)/i.test(messageContent) && /(youtube|youtu\.be|mp4|mp3|tiktok)/i.test(messageContent);
+    
+    if (shouldProcessMedia && (hasMediaAttachment || (hasMediaLink && /(lấy text|tổng hợp|tóm tắt|trích xuất|xử lý|đọc)/i.test(messageContent)))) {
+      await telegram.reply(chatId, "Dạ hiện tại em chưa hỗ trợ tính năng trích xuất nội dung trực tiếp từ Video/Audio ạ. 😅");
+      return res.end();
+    }
+
     // Lazy Image: Ảnh/file gửi thuần (không kèm caption) → lưu placeholder, không OCR ngay
     const hasCaption = !!(message.caption && message.caption.trim());
     const isRawMedia = (message.photo || message.document) && !hasCaption;
@@ -1229,11 +1245,6 @@ exports.webhook = onRequest({
 
       if (!messageContent) continue;
 
-      // [COST MINIMIZATION] Block direct video/audio processing requests offline
-      if (/(lấy text|tổng hợp|tóm tắt|trích xuất|xử lý|đọc).*?\b(video|audio|âm thanh|mp4|mp3|youtube)\b|\b(video|audio|âm thanh|mp4|mp3|youtube)\b.*?(lấy text|tổng hợp|tóm tắt|trích xuất|xử lý|đọc)/i.test(messageContent)) {
-        await line.replyMessage(event.replyToken, [{ type: "text", text: "Dạ hiện tại em chưa hỗ trợ tính năng trích xuất nội dung trực tiếp từ Video/Audio ạ. 😅" }]);
-        continue;
-      }
 
       const sessionId = event.source.groupId || event.source.roomId || userId;
 
