@@ -1,651 +1,155 @@
 {
   "audit_keywords": [
     {
-      "word": "chính sách mở cty",
-      "is_today_sensitive": false,
-      "suggested_category": "GENERAL",
-      "reason": "Thảo luận về chính sách kinh doanh, quản lý của chính phủ."
-    },
-    {
-      "word": "hạ tầng cơ bản",
-      "is_today_sensitive": false,
-      "suggested_category": "NEWS",
-      "reason": "Chủ đề thời sự về phát triển hạ tầng đất nước."
-    },
-    {
-      "word": "điện đường trường trạm",
-      "is_today_sensitive": false,
-      "suggested_category": "NEWS",
-      "reason": "Các yếu tố cơ bản của hạ tầng được nhắc đến trong bối cảnh phát triển chung."
-    },
-    {
-      "word": "quy hoạch đường xá",
-      "is_today_sensitive": false,
-      "suggested_category": "NEWS",
-      "reason": "Thảo luận về quy hoạch đô thị và giao thông."
-    },
-    {
-      "word": "in tiền",
-      "is_today_sensitive": false,
-      "suggested_category": "FINANCE",
-      "reason": "Đề cập đến chính sách tiền tệ và lo ngại về lạm phát hoặc trục lợi."
-    },
-    {
-      "word": "trục lợi nhóm",
-      "is_today_sensitive": false,
-      "suggested_category": "NEWS",
-      "reason": "Vấn đề xã hội, tham nhũng trong thực thi chính sách."
-    },
-    {
-      "word": "quốc gia thử nghiệm công nghệ",
-      "is_today_sensitive": false,
-      "suggested_category": "DEV",
-      "reason": "Thảo luận về định hướng phát triển công nghệ của quốc gia."
-    },
-    {
-      "word": "hệ sinh thái công nghệ sâu",
-      "is_today_sensitive": false,
-      "suggested_category": "DEV",
-      "reason": "Thuật ngữ chuyên ngành trong phát triển công nghệ."
-    },
-    {
-      "word": "Nghị quyết 19",
-      "is_today_sensitive": false,
-      "suggested_category": "NEWS",
-      "reason": "Tên một văn bản chính sách quan trọng (được bot đưa ra và trở thành chủ đề phụ)."
-    },
-    {
-      "word": "sân bay Long Thành",
-      "is_today_sensitive": false,
-      "suggested_category": "NEWS",
-      "reason": "Dự án hạ tầng trọng điểm quốc gia, có tin tức liên quan được chia sẻ."
-    },
-    {
-      "word": "nhất sếp",
-      "is_today_sensitive": false,
-      "suggested_category": "SOCIAL",
-      "reason": "Đây là một cụm từ biểu thị sự khen ngợi, nịnh bợ trong giao tiếp xã giao."
-    },
-    {
-      "word": "năm lẻ",
-      "is_today_sensitive": false,
-      "suggested_category": "GENERAL",
-      "reason": "Người dùng thắc mắc về một con số hoặc một năm có đặc điểm 'lẻ'."
-    },
-    {
-      "word": "2030",
-      "is_today_sensitive": false,
-      "suggested_category": "GENERAL",
-      "reason": "Một mốc thời gian cụ thể được nhắc đến."
-    },
-    {
-      "word": "tra tấn chó Trung Quốc",
-      "is_today_sensitive": true,
-      "suggested_category": "NEWS",
-      "reason": "Sự kiện gây chấn động, có tính thời sự và xã hội cao."
-    },
-    {
-      "word": "kiến nghị change.org",
-      "is_today_sensitive": true,
-      "suggested_category": "SOCIAL",
-      "reason": "Liên quan trực tiếp đến sự kiện nóng và hoạt động kêu gọi cộng đồng."
-    },
-    {
-      "word": "phim Odyseey review",
-      "is_today_sensitive": false,
-      "suggested_category": "ENTERTAINMENT",
-      "reason": "Đánh giá về một bộ phim đã ra mắt, không có tính thời sự cấp bách."
-    },
-    {
-      "word": "Nourkin tóc bạc",
-      "is_today_sensitive": false,
-      "suggested_category": "HEALTH",
-      "reason": "Thảo luận về sản phẩm sức khỏe cá nhân, không mang tính thời sự."
-    },
-    {
-      "word": "Iran tấn công Amazon Bahrain",
-      "is_today_sensitive": true,
-      "suggested_category": "NEWS",
-      "reason": "Tin tức địa chính trị và công nghệ có tác động lớn, mang tính thời sự cao."
-    },
-    {
-      "word": "Moonshot AI là gì",
-      "is_today_sensitive": true,
-      "suggested_category": "DEV",
-      "reason": "Một chủ đề công nghệ mới nổi, được nhận định là 'hot' và thu hút sự chú ý."
-    },
-    {
-      "word": "bản quyền phim Việt Nam",
-      "is_today_sensitive": false,
-      "suggested_category": "GENERAL",
-      "reason": "Thảo luận về chính sách và tình hình bản quyền, là một vấn đề liên tục chứ không phải sự kiện trong ngày."
-    },
-    {
-      "word": "bánh trung thu 2024",
-      "is_today_sensitive": true,
-      "suggested_category": "GENERAL",
-      "reason": "Thảo luận mang tính mùa vụ, chuẩn bị cho lễ hội sắp tới."
-    },
-    {
-      "word": "self-learning",
-      "is_today_sensitive": false,
-      "suggested_category": "GENERAL",
-      "reason": "Từ khóa chung về quá trình học hỏi của hệ thống."
-    },
-    {
-      "word": "log",
-      "is_today_sensitive": false,
-      "suggested_category": "DEV",
-      "reason": "Liên quan đến việc phân tích nhật ký hệ thống."
-    },
-    {
-      "word": "lỗi bot",
-      "is_today_sensitive": false,
-      "suggested_category": "DEV",
-      "reason": "Mô tả vấn đề của hệ thống bot."
-    },
-    {
-      "word": "Inappropriate proactive interaction",
-      "is_today_sensitive": false,
-      "suggested_category": "DEV",
-      "reason": "Mô tả một loại lỗi tương tác của bot."
-    },
-    {
-      "word": "Hallucination",
-      "is_today_sensitive": false,
-      "suggested_category": "DEV",
-      "reason": "Chỉ lỗi bịa đặt thông tin của bot."
-    },
-    {
-      "word": "Cloud Kitchen",
-      "is_today_sensitive": false,
-      "suggested_category": "FINANCE",
-      "reason": "Một mô hình kinh doanh cụ thể được bot phân tích."
-    },
-    {
-      "word": "phân tích kinh doanh",
-      "is_today_sensitive": false,
-      "suggested_category": "FINANCE",
-      "reason": "Hoạt động phân tích tài chính/kinh doanh do bot thực hiện."
-    },
-    {
-      "word": "biên lợi nhuận",
-      "is_today_sensitive": false,
-      "suggested_category": "FINANCE",
-      "reason": "Thuật ngữ tài chính liên quan đến phân tích kinh doanh."
-    },
-    {
-      "word": "chi phí vận hành",
-      "is_today_sensitive": false,
-      "suggested_category": "FINANCE",
-      "reason": "Thuật ngữ tài chính liên quan đến phân tích kinh doanh."
-    },
-    {
-      "word": "hỗ trợ technical",
-      "is_today_sensitive": false,
-      "suggested_category": "DEV",
-      "reason": "Lĩnh vực bot cam kết tập trung hỗ trợ."
-    },
-    {
-      "word": "Times City chết",
-      "is_today_sensitive": false,
-      "suggested_category": "NEWS",
-      "reason": "Tin tức địa phương về một vụ việc đáng chú ý."
-    },
-    {
-      "word": "Smart City nhảy lầu",
-      "is_today_sensitive": false,
-      "suggested_category": "NEWS",
-      "reason": "Tin tức địa phương về một vụ việc đáng chú ý."
-    },
-    {
-      "word": "khám định kì",
-      "is_today_sensitive": false,
-      "suggested_category": "HEALTH",
-      "reason": "Hoạt động chăm sóc sức khỏe cá nhân."
-    },
-    {
-      "word": "trào ngược dạ dày",
-      "is_today_sensitive": false,
-      "suggested_category": "HEALTH",
-      "reason": "Tình trạng sức khỏe phổ biến và lời khuyên y tế."
-    },
-    {
-      "word": "chế độ ăn uống trào ngược",
-      "is_today_sensitive": false,
-      "suggested_category": "HEALTH",
-      "reason": "Lời khuyên cụ thể về dinh dưỡng cho người bị trào ngược."
-    },
-    {
-      "word": "phim Odyssey",
-      "is_today_sensitive": false,
-      "suggested_category": "SOCIAL",
-      "reason": "Tên một bộ phim được thảo luận."
-    },
-    {
-      "word": "phim Spider-Man",
-      "is_today_sensitive": false,
-      "suggested_category": "SOCIAL",
-      "reason": "Tên một bộ phim sắp chiếu."
-    },
-    {
-      "word": "rạp Lamour private",
-      "is_today_sensitive": false,
-      "suggested_category": "SOCIAL",
-      "reason": "Loại hình rạp chiếu phim đặc biệt."
-    },
-    {
-      "word": "CGV ghế nằm",
-      "is_today_sensitive": false,
-      "suggested_category": "SOCIAL",
-      "reason": "Loại hình rạp chiếu phim đặc biệt."
-    },
-    {
-      "word": "bánh ăn kiêng",
-      "is_today_sensitive": false,
-      "suggested_category": "SOCIAL",
-      "reason": "Người dùng quan tâm đến loại bánh này, đây là một chủ đề cụ thể về thực phẩm."
-    },
-    {
-      "word": "lựa đi",
-      "is_today_sensitive": false,
-      "suggested_category": "SOCIAL",
-      "reason": "Thể hiện hành động chọn lựa trong giao tiếp hàng ngày."
-    },
-    {
-      "word": "nhu cầu",
-      "is_today_sensitive": false,
-      "suggested_category": "GENERAL",
-      "reason": "Từ khóa chung, thể hiện sự quan tâm đến các yêu cầu của người khác."
-    },
-    {
-      "word": "ới tớ",
-      "is_today_sensitive": false,
-      "suggested_category": "SOCIAL",
-      "reason": "Cụm từ mời gọi liên hệ, mang tính xã giao."
-    },
-    {
-      "word": "Vingroup",
-      "is_today_sensitive": true,
-      "suggested_category": "NEWS",
-      "reason": "Tên tập đoàn liên quan đến sự kiện đổi tên sân vận động."
-    },
-    {
-      "word": "VinFast",
-      "is_today_sensitive": true,
-      "suggested_category": "NEWS",
-      "reason": "Tên thương hiệu mới của sân vận động và mục đích quảng bá."
-    },
-    {
-      "word": "sân vận động Hùng Vương",
-      "is_today_sensitive": true,
-      "suggested_category": "NEWS",
-      "reason": "Tên cũ của công trình bị thay đổi."
-    },
-    {
-      "word": "đổi tên sân vận động",
-      "is_today_sensitive": true,
-      "suggested_category": "NEWS",
-      "reason": "Hành động chính được đề cập trong cuộc hội thoại."
-    },
-    {
-      "word": "line oa outage",
-      "is_today_sensitive": true,
-      "suggested_category": "TECH",
-      "reason": "Người dùng tìm kiếm thông tin về một sự cố kỹ thuật cụ thể, được đề cập là xảy ra 'hôm qua'."
-    },
-    {
-      "word": "x.com link",
-      "is_today_sensitive": false,
-      "suggested_category": "SOCIAL",
-      "reason": "Người dùng chia sẻ một đường link từ mạng xã hội X (Twitter)."
-    },
-    {
-      "word": "tiếp thị sản phẩm",
+      "word": "sếp đối tác",
       "is_today_sensitive": false,
       "suggested_category": "BUSINESS",
-      "reason": "Thảo luận về chiến lược kinh doanh và tiếp thị sản phẩm."
+      "reason": "Đề cập đến vai trò trong công việc và mối quan hệ kinh doanh."
     },
     {
-      "word": "bệnh thành tích",
-      "is_today_sensitive": false,
-      "suggested_category": "SOCIAL",
-      "reason": "Phản ánh một vấn đề xã hội phổ biến ở Việt Nam."
-    },
-    {
-      "word": "greennode vng gpu",
-      "is_today_sensitive": true,
-      "suggested_category": "TECH",
-      "reason": "Thảo luận về vị trí đặt một dự án công nghệ lớn (GreenNode của VNG) có thể liên quan đến tin tức hoặc quyết định kinh doanh hiện tại."
-    },
-    {
-      "word": "chính sách bảo hộ vn",
-      "is_today_sensitive": false,
-      "suggested_category": "POLICY",
-      "reason": "Đề cập đến chính sách kinh tế vĩ mô của Việt Nam."
-    },
-    {
-      "word": "aws google alibaba",
-      "is_today_sensitive": false,
-      "suggested_category": "TECH",
-      "reason": "Các công ty công nghệ lớn có liên quan đến việc cạnh tranh thị trường tại Việt Nam."
-    },
-    {
-      "word": "fomo húp trend",
-      "is_today_sensitive": false,
-      "suggested_category": "SOCIAL",
-      "reason": "Mô tả xu hướng hành vi trong kinh doanh và xã hội."
-    },
-    {
-      "word": "Triển vọng Thái Lan trở thành trung tâm AI Công nghệ mới của châu Á",
-      "is_today_sensitive": false,
-      "suggested_category": "NEWS/FINANCE/DEV",
-      "reason": "Chủ đề về công nghệ, đầu tư và định hướng phát triển quốc gia."
-    },
-    {
-      "word": "đầu tư AI và Data Center",
-      "is_today_sensitive": false,
-      "suggested_category": "FINANCE/DEV",
-      "reason": "Liên quan trực tiếp đến xu hướng đầu tư và phát triển hạ tầng công nghệ."
-    },
-    {
-      "word": "Người Pháp nhận xét về tay nghề của thợ An Nam",
-      "is_today_sensitive": false,
-      "suggested_category": "NEWS/SOCIAL/HISTORY",
-      "reason": "Chủ đề lịch sử xã hội, văn hóa và nhận định về con người Việt Nam trong quá khứ."
-    },
-    {
-      "word": "trí thức Việt Nam do sáng tạo, có tư tưởng mới, ý tưởng mới mà dính lao lí",
-      "is_today_sensitive": false,
-      "suggested_category": "NEWS/SOCIAL/HISTORY",
-      "reason": "Liên quan đến lịch sử tư tưởng, các nhân vật có ảnh hưởng và rủi ro trong bối cảnh xã hội cụ thể."
-    },
-    {
-      "word": "Phan Bội Châu",
-      "is_today_sensitive": false,
-      "suggested_category": "NEWS/HISTORY",
-      "reason": "Tên nhân vật lịch sử quan trọng, thường xuất hiện trong các tin tức hoặc tài liệu lịch sử."
-    },
-    {
-      "word": "phá thiên nhiên",
+      "word": "Hải Phòng",
       "is_today_sensitive": false,
       "suggested_category": "GENERAL",
-      "reason": "Ý kiến chung về tác động môi trường từ phát triển đô thị."
+      "reason": "Tên địa danh, có thể liên quan đến thông tin địa phương hoặc kinh tế vùng."
     },
     {
-      "word": "Sapa bê tông",
-      "is_today_sensitive": false,
-      "suggested_category": "NEWS",
-      "reason": "Một ví dụ cụ thể, thường xuyên được đưa tin về sự phát triển quá mức tại Sapa."
-    },
-    {
-      "word": "tiền kỹ thuật số quốc gia Việt Nam",
-      "is_today_sensitive": true,
-      "suggested_category": "NEWS/FINANCE",
-      "reason": "Chủ đề từ bài báo được chia sẻ, có thể là thông tin mới hoặc đang diễn ra."
-    },
-    {
-      "word": "bitcoin",
+      "word": "đội tàu hàng nghìn tỷ",
       "is_today_sensitive": false,
       "suggested_category": "FINANCE",
-      "reason": "Một từ khóa tài chính liên quan được nhắc đến để so sánh."
+      "reason": "Thể hiện giá trị tài sản lớn, liên quan đến kinh tế, tài chính và ngành vận tải biển."
     },
     {
-      "word": "hello",
-      "is_today_sensitive": false,
-      "suggested_category": "GENERAL",
-      "reason": "Đây là một lời chào phổ biến, không mang tính thời sự hay chuyên biệt về một chủ đề nào."
-    },
-    {
-      "word": "LINE Official Account outage",
-      "is_today_sensitive": true,
-      "suggested_category": "NEWS",
-      "reason": "Là sự kiện nóng hổi trong ngày diễn ra cuộc trò chuyện (28/07/2026) và là chủ đề chính."
-    },
-    {
-      "word": "FB với Instagram bị sập",
-      "is_today_sensitive": true,
-      "suggested_category": "NEWS",
-      "reason": "Được nhắc đến là sự kiện xảy ra sáng cùng ngày, có tính thời sự."
-    },
-    {
-      "word": "VnEconomy",
-      "is_today_sensitive": false,
-      "suggested_category": "NEWS",
-      "reason": "Là tên một nguồn tin tức được bot sử dụng để cung cấp thông tin."
-    },
-    {
-      "word": "Yahoo News",
-      "is_today_sensitive": false,
-      "suggested_category": "NEWS",
-      "reason": "Là tên một nguồn tin tức được người dùng Lâm sử dụng để chứng minh."
-    },
-    {
-      "word": "Ngũ đệ",
+      "word": "sinh năm 91",
       "is_today_sensitive": false,
       "suggested_category": "SOCIAL",
-      "reason": "biệt danh cá nhân trong nhóm chat"
+      "reason": "Đề cập đến tuổi tác hoặc thế hệ."
     },
     {
-      "word": "fix bugs",
+      "word": "uống k bao h say",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Mô tả đặc điểm cá nhân hoặc hành vi xã hội."
+    },
+    {
+      "word": "chi phí ở tù tại Mỹ",
+      "is_today_sensitive": false,
+      "suggested_category": "NEWS",
+      "reason": "Thông tin về chính sách và chi phí pháp lý tại Mỹ."
+    },
+    {
+      "word": "án treo ở Việt Nam",
+      "is_today_sensitive": true,
+      "suggested_category": "NEWS",
+      "reason": "Đề xuất dự thảo Bộ luật Hình sự sửa đổi, có ngày cụ thể (19/07/2026) dù là ngày tương lai."
+    },
+    {
+      "word": "bài toán con gà",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Một bài toán tư duy kinh doanh phổ biến."
+    },
+    {
+      "word": "trưởng phòng kinh doanh",
+      "is_today_sensitive": false,
+      "suggested_category": "BUSINESS",
+      "reason": "Liên quan đến vị trí công việc và phỏng vấn trong ngành kinh doanh."
+    },
+    {
+      "word": "chi phí cơ hội",
+      "is_today_sensitive": false,
+      "suggested_category": "FINANCE",
+      "reason": "Thuật ngữ kinh tế học, tài chính."
+    },
+    {
+      "word": "hạch toán kinh doanh",
+      "is_today_sensitive": false,
+      "suggested_category": "FINANCE",
+      "reason": "Thuật ngữ kế toán, tài chính doanh nghiệp."
+    },
+    {
+      "word": "computer vision",
       "is_today_sensitive": false,
       "suggested_category": "DEV",
-      "reason": "hoạt động công việc chuyên môn"
+      "reason": "Từ khóa kỹ thuật liên quan đến công nghệ, phát triển phần mềm."
     },
     {
-      "word": "vững vàng top 4",
-      "is_today_sensitive": false,
-      "suggested_category": "SOCIAL",
-      "reason": "liên quan đến một cuộc thi/đánh giá nội bộ"
-    },
-    {
-      "word": "tay vợt trẻ Trung Quốc đấm vỡ mặt đối thủ",
-      "is_today_sensitive": true,
-      "suggested_category": "NEWS",
-      "reason": "sự kiện thời sự cụ thể, gây chú ý được chia sẻ trong ngày"
-    },
-    {
-      "word": "giải tỉnh Giang Tô",
-      "is_today_sensitive": true,
-      "suggested_category": "NEWS",
-      "reason": "địa điểm cụ thể của sự kiện thời sự"
-    },
-    {
-      "word": "xác suất",
-      "is_today_sensitive": false,
-      "suggested_category": "GENERAL",
-      "reason": "thuật ngữ tính toán, được dùng trong ngữ cảnh giải trí"
-    },
-    {
-      "word": "bún bò",
-      "is_today_sensitive": false,
-      "suggested_category": "GENERAL",
-      "reason": "món ăn, dùng trong ví dụ hài hước của bot"
-    },
-    {
-      "word": "Ngũ đệ",
-      "is_today_sensitive": false,
-      "suggested_category": "GENERAL",
-      "reason": "Là cách gọi vui, mang tính chất lịch sử/văn học, không liên quan đến sự kiện hiện tại cụ thể."
-    },
-    {
-      "word": "tuổi băm",
-      "is_today_sensitive": false,
-      "suggested_category": "GENERAL",
-      "reason": "Chỉ cột mốc tuổi, không phải sự kiện diễn ra hôm nay."
-    },
-    {
-      "word": "sinh nhật",
-      "is_today_sensitive": false,
-      "suggested_category": "SOCIAL",
-      "reason": "Đề cập đến một sự kiện đã xảy ra gần đây, không phải đang diễn ra hôm nay."
-    },
-    {
-      "word": "tổ chức đại tiệc",
-      "is_today_sensitive": false,
-      "suggested_category": "SOCIAL",
-      "reason": "Là hành động đề xuất, chưa phải sự kiện thực tế diễn ra hôm nay."
-    },
-    {
-      "word": "động viên",
-      "is_today_sensitive": false,
-      "suggested_category": "SOCIAL",
-      "reason": "Hành động khuyến khích, không liên quan đến thời gian cụ thể."
-    },
-    {
-      "word": "Trung ương Đảng định hướng 2130",
-      "is_today_sensitive": false,
-      "suggested_category": "NEWS",
-      "reason": "Thông tin về định hướng phát triển đất nước dài hạn."
-    },
-    {
-      "word": "Việt Nam quốc gia xã hội chủ nghĩa phát triển trình độ cao",
-      "is_today_sensitive": false,
-      "suggested_category": "NEWS",
-      "reason": "Mô tả mục tiêu phát triển của Việt Nam theo định hướng."
-    },
-    {
-      "word": "mục tiêu 2130",
-      "is_today_sensitive": false,
-      "suggested_category": "NEWS",
-      "reason": "Từ khóa ngắn gọn liên quan đến mục tiêu phát triển dài hạn."
-    },
-    {
-      "word": "global fact",
+      "word": "camera đường phố",
       "is_today_sensitive": false,
       "suggested_category": "DEV",
-      "reason": "Từ khóa liên quan đến việc cập nhật kiến thức/cấu hình của bot."
+      "reason": "Ứng dụng cụ thể của computer vision, không phải tin tức nóng."
     },
     {
-      "word": "x.com, facebook, youtube",
+      "word": "label boxing",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "Thuật ngữ kỹ thuật trong đào tạo AI/Computer Vision."
+    },
+    {
+      "word": "GPU training",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "Thuật ngữ kỹ thuật trong đào tạo AI/Computer Vision."
+    },
+    {
+      "word": "Warren Buffett",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Tên người nổi tiếng được nhắc đến trong bài báo, không phải sự kiện tin tức nóng trong ngày."
+    },
+    {
+      "word": "giao tiếp",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Kỹ năng mềm, liên quan đến tương tác con người, không phải tin tức thời sự."
+    },
+    {
+      "word": "thời đại AI",
       "is_today_sensitive": false,
       "suggested_category": "TECH",
-      "reason": "Các nền tảng mạng xã hội và công nghệ, liên quan đến khả năng truy cập kỹ thuật của bot."
+      "reason": "Khái niệm rộng về công nghệ và xã hội, không phải sự kiện thời sự cụ thể."
     },
     {
-      "word": "thứ trưởng hoàng trung bị bắt",
+      "word": "phạt nguội",
       "is_today_sensitive": true,
       "suggested_category": "NEWS",
-      "reason": "Tin tức thời sự quan trọng, có ngày tháng cụ thể (dù trong ngữ cảnh chat là 2026)."
+      "reason": "Chủ đề nóng được quan tâm về giao thông và pháp luật tại Việt Nam, có tính thời sự cao."
     },
     {
-      "word": "xuất khẩu sầu riêng",
-      "is_today_sensitive": true,
-      "suggested_category": "NEWS",
-      "reason": "Chủ đề của vụ án tham nhũng, liên quan trực tiếp đến tin tức nóng."
-    },
-    {
-      "word": "nhận hối lộ",
-      "is_today_sensitive": true,
-      "suggested_category": "NEWS",
-      "reason": "Tội danh chính trong vụ án, mang tính thời sự cao."
-    },
-    {
-      "word": "khai trừ Đảng",
-      "is_today_sensitive": true,
-      "suggested_category": "NEWS",
-      "reason": "Thông tin bổ sung quan trọng trong tin tức về Thứ trưởng Hoàng Trung."
-    },
-    {
-      "word": "Vingroup",
-      "is_today_sensitive": false,
-      "suggested_category": "NEWS",
-      "reason": "Tên tập đoàn lớn, thường xuyên có tin tức liên quan đến hoạt động kinh doanh và phát triển."
-    },
-    {
-      "word": "VinFast",
-      "is_today_sensitive": false,
-      "suggested_category": "NEWS",
-      "reason": "Thương hiệu con của Vingroup, có nhiều tin tức về sản phẩm, chiến lược và các hoạt động tài trợ."
-    },
-    {
-      "word": "sân vận động Hùng Vương",
-      "is_today_sensitive": false,
-      "suggested_category": "NEWS",
-      "reason": "Địa điểm cụ thể, tin tức về việc đổi tên hoặc tài trợ là sự kiện báo chí."
-    },
-    {
-      "word": "sân vận động VinFast",
-      "is_today_sensitive": false,
-      "suggested_category": "NEWS",
-      "reason": "Tên mới của sân vận động, liên quan trực tiếp đến sự kiện đổi tên được nhắc đến trong chat."
-    },
-    {
-      "word": "cafef.vn",
+      "word": "tổng hợp",
       "is_today_sensitive": false,
       "suggested_category": "GENERAL",
-      "reason": "Nguồn tin tức kinh tế, tài chính uy tín, thường được dùng để tham chiếu thông tin."
-    },
-    {
-      "word": "công nghệ trong hàng hải",
-      "is_today_sensitive": false,
-      "suggested_category": "GENERAL",
-      "reason": "Chủ đề người dùng đang tìm hiểu, có thể cần thông tin chi tiết."
-    },
-    {
-      "word": "dây thần kinh liên kết",
-      "is_today_sensitive": false,
-      "suggested_category": "GENERAL",
-      "reason": "Người dùng đề cập đến khả năng nhận thức và trí nhớ liên quan đến tuổi tác."
-    },
-    {
-      "word": "LLM",
-      "is_today_sensitive": false,
-      "suggested_category": "DEV",
-      "reason": "Từ viết tắt của Large Language Model, một công cụ công nghệ được đề xuất."
+      "reason": "Lệnh yêu cầu bot tổng hợp thông tin, là từ khóa chức năng."
     },
     {
       "word": "summary",
       "is_today_sensitive": false,
-      "suggested_category": "TECH",
-      "reason": "Chức năng tóm tắt thông tin được đề cập như một giải pháp hỗ trợ."
+      "suggested_category": "GENERAL",
+      "reason": "Lệnh yêu cầu bot tổng hợp thông tin, là từ khóa chức năng."
     },
     {
-      "word": "TTS",
+      "word": "cày bộ này",
       "is_today_sensitive": false,
-      "suggested_category": "DEV",
-      "reason": "Từ viết tắt của Text-to-Speech, một công cụ công nghệ được đề xuất."
+      "suggested_category": "SOCIAL",
+      "reason": "Người dùng thể hiện ý định tiêu thụ một nội dung truyền thông (phim, game, series)."
     },
     {
-      "word": "notebooklm",
+      "word": "táo bón",
       "is_today_sensitive": false,
-      "suggested_category": "TECH",
-      "reason": "Tên một công cụ cụ thể được người dùng giới thiệu."
+      "suggested_category": "SOCIAL",
+      "reason": "Một bình luận mang tính hài hước, cá nhân, không liên quan đến sự kiện nóng."
+    },
+    {
+      "word": "công thần",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Đề cập đến một nhân vật hoặc yếu tố quan trọng, có thể trong ngữ cảnh của nội dung đang được chia sẻ."
     }
   ],
-  "missed_link_requests": [
-    "hóng xem vụ này có thay đổi gì về vụ bảo vệ động không a ơi",
-    "mà h trang nào phim chuẩn anh",
-    "cái Moonshot AI là như nào đấy anh",
-    "Annie lấy thông tin đó ở đâu thế"
-  ],
+  "missed_link_requests": [],
   "missed_topics": [
-    "Nghị quyết 19",
-    "kinh tế dựa trên tri thức",
-    "kinh tế xanh",
-    "kinh tế tuần hoàn",
-    "tự chủ chiến lược",
-    "sân bay Long Thành",
-    "luật bảo vệ động vật",
-    "thị trường AI (Moonshot AI)",
-    "nền tảng xem phim bản quyền",
-    "cafe theo chủ đề (Hầu Gái)",
-    "Tư vấn sức khỏe tiêu hóa (trào ngược dạ dày)",
-    "Đánh giá/Review phim (Odyssey, Spider-Man)",
-    "Thông tin về các loại hình rạp chiếu phim cao cấp/đặc biệt (Lamour private, CGV ghế nằm)",
-    "ăn kiêng",
-    "Line OA outage",
-    "Chính sách phát triển AI quốc gia",
-    "Ảnh hưởng của chế độ xã hội đến tài năng",
-    "Lịch sử nghệ thuật thủ công Việt Nam",
-    "Tiền kỹ thuật số quốc gia",
-    "Bitcoin",
-    "mục tiêu phát triển quốc gia dài hạn",
-    "định hướng xã hội chủ nghĩa",
-    "phát triển kinh tế xã hội 2130",
-    "công nghệ hàng hải",
-    "ảnh hưởng của tuổi tác đến khả năng học tập",
-    "công cụ AI hỗ trợ đọc và tóm tắt thông tin"
+    "Thành công doanh nhân trẻ",
+    "Ngành vận tải biển",
+    "Văn hóa nhậu"
   ],
   "missed_entities": [],
   "prompt_leakage": [],
@@ -659,6 +163,8 @@
     "GeaAFVZXqUCUdiCypkEw",
     "KMR0gKFAF4vTr70GHuRR",
     "Lw3PnJKUqIMecYszw4XB",
+    "MQaZnMT343UzdmDKVFce",
+    "NYg7XMhLF4Tur1mYdeID",
     "P3waBm3XBVBDWU2bfHoo",
     "SYI4HKJmHoHsgBPGvWEa",
     "THi1TvrADzYqs7b8zsOl",
@@ -670,8 +176,10 @@
     "iwZmnSAQkOYSpVLu8A1T",
     "jahfX2vFVmUDWu2m6rYq",
     "jjuXXUMCHXubTbrogDwv",
+    "kSu7FnQ5ZzXAqksi2aUy",
     "lFGA3wPV8cmaYU7OIpCu",
     "nB1o8lTYLz0ZtFR7KfsS",
+    "oHcHLm7bwYcLlgXcp0xT",
     "qFpdm9GwwrPVVu9CXtBc",
     "t1bu87GQTsWgs7O02dzA",
     "uZoK1QlPEinfpnqWAqBS",

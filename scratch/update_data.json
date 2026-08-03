@@ -1,8 +1,720 @@
 {
-  "audit_keywords": [],
-  "missed_link_requests": [],
-  "missed_topics": [],
+  "audit_keywords": [
+    {
+      "word": "fact check",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Từ khóa yêu cầu xác minh thông tin chung."
+    },
+    {
+      "word": "Xavi Hernández",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Tên cầu thủ/huấn luyện viên bóng đá nổi tiếng, thường xuất hiện trong tin tức/bàn luận xã hội."
+    },
+    {
+      "word": "Casemiro",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Tên cầu thủ bóng đá nổi tiếng, thường xuất hiện trong tin tức/bàn luận xã hội."
+    },
+    {
+      "word": "Vua Tự Đức",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Tên nhân vật lịch sử Việt Nam, thường xuất hiện trong các bài viết về văn hóa/lịch sử."
+    },
+    {
+      "word": "Làng Túc Cầu",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Tên một fanpage giải trí bóng đá, cần lưu ý khi đánh giá độ tin cậy của thông tin từ nguồn này."
+    },
+    {
+      "word": "Thích chụp ảnh",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Tên một fanpage, cần lưu ý khi đánh giá độ tin cậy của thông tin từ nguồn này."
+    },
+    {
+      "word": "vụ án mạng Nhật Bản",
+      "is_today_sensitive": true,
+      "suggested_category": "NEWS",
+      "reason": "Đây là tin tức thời sự nóng hổi, liên quan đến một vụ án mạng mới được phát hiện và đang trong quá trình điều tra."
+    },
+    {
+      "word": "người Việt ở Nhật",
+      "is_today_sensitive": true,
+      "suggested_category": "SOCIAL",
+      "reason": "Từ khóa này liên quan đến một nhóm đối tượng cụ thể đang bị ảnh hưởng bởi tin tức trong ngày."
+    },
+    {
+      "word": "ảnh hưởng Việt Nhật",
+      "is_today_sensitive": true,
+      "suggested_category": "NEWS",
+      "reason": "Người dùng muốn đánh giá tác động của một sự kiện hiện tại đến quan hệ hoặc hình ảnh giữa hai quốc gia."
+    },
+    {
+      "word": "nghỉ bên cty",
+      "is_today_sensitive": true,
+      "suggested_category": "SOCIAL",
+      "reason": "Thông tin cá nhân quan trọng về sự thay đổi công việc."
+    },
+    {
+      "word": "làm riêng",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Kế hoạch sự nghiệp cá nhân."
+    },
+    {
+      "word": "hybrid",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Mô hình làm việc."
+    },
+    {
+      "word": "outsource",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "Hình thức hợp tác công việc."
+    },
+    {
+      "word": "món cocahing",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Loại hình dịch vụ/kinh doanh."
+    },
+    {
+      "word": "mối về ioc",
+      "is_today_sensitive": false,
+      "suggested_category": "TECH",
+      "reason": "Cơ hội kinh doanh trong lĩnh vực công nghệ (Internet of Communications/Things?)."
+    },
+    {
+      "word": "profile anh Châu",
+      "is_today_sensitive": false,
+      "suggested_category": "META",
+      "reason": "Yêu cầu quản lý dữ liệu bot."
+    },
+    {
+      "word": "trí nhớ của em",
+      "is_today_sensitive": false,
+      "suggested_category": "META",
+      "reason": "Câu hỏi về khả năng kỹ thuật của bot."
+    },
+    {
+      "word": "bộ nhớ ngắn hạn bị quá tải",
+      "is_today_sensitive": false,
+      "suggested_category": "META",
+      "reason": "Giải thích kỹ thuật về lỗi của bot."
+    },
+    {
+      "word": "cơ chế nào đảm bảo em sẽ cải thiện được",
+      "is_today_sensitive": false,
+      "suggested_category": "META",
+      "reason": "Câu hỏi về cơ chế học và cải tiến của bot."
+    },
+    {
+      "word": "phiên duy trì sửa sai này của em trong bao lâu",
+      "is_today_sensitive": false,
+      "suggested_category": "META",
+      "reason": "Câu hỏi về quản lý ngữ cảnh/phiên chat của bot."
+    },
+    {
+      "word": "spider man brand new day",
+      "is_today_sensitive": false,
+      "suggested_category": "NEWS",
+      "reason": "Là tên một bộ phim được người dùng nhắc đến và yêu cầu đánh giá."
+    },
+    {
+      "word": "phim siêu anh hùng",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Là một thể loại phim được thảo luận về chất lượng kịch bản."
+    },
+    {
+      "word": "kịch bản phim",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Là một yếu tố quan trọng được người dùng đề cập khi đánh giá phim."
+    },
+    {
+      "word": "woke",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Là một chủ đề xã hội được đề cập liên quan đến nội dung phim."
+    },
+    {
+      "word": "LTV QA",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Là một chủ đề mang tính xã hội hoặc nội bộ công ty được người dùng hỏi."
+    },
+    {
+      "word": "llm vision ocr",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Tìm kiếm chung về lĩnh vực LLM vision và OCR."
+    },
+    {
+      "word": "model LLM giá rẻ",
+      "is_today_sensitive": true,
+      "suggested_category": "FINANCE",
+      "reason": "Người dùng tìm các model có giá tốt nhất, thông tin này thay đổi liên tục theo thị trường."
+    },
+    {
+      "word": "PaddleOCR",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "Thư viện mã nguồn mở, thông tin tương đối ổn định."
+    },
+    {
+      "word": "MiniMax M3",
+      "is_today_sensitive": true,
+      "suggested_category": "NEWS",
+      "reason": "Model mới nổi, thông tin về giá và chất lượng được cập nhật gần đây (giữa năm, BestHub)."
+    },
+    {
+      "word": "Qwen3-VL-Flash",
+      "is_today_sensitive": true,
+      "suggested_category": "NEWS",
+      "reason": "Model được so sánh trong các bài test gần đây (21/06/2026), thông tin có thể thay đổi."
+    },
+    {
+      "word": "so sánh chất lượng LLM OCR",
+      "is_today_sensitive": true,
+      "suggested_category": "NEWS",
+      "reason": "Các bài so sánh chất lượng thường có tính thời điểm, dựa trên các benchmark mới nhất."
+    },
+    {
+      "word": "OCR PDF cloud",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "Chủ đề công nghệ chung cho việc OCR PDF trên đám mây."
+    },
+    {
+      "word": "pdfplumber",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "Thư viện Python, thông tin ổn định."
+    },
+    {
+      "word": "cấu trúc response OCR",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "Liên quan đến thiết kế API và cấu trúc dữ liệu, là một chủ đề phát triển."
+    },
+    {
+      "word": "tích hợp PaddleOCR",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "Hướng dẫn kỹ thuật, không phụ thuộc vào thời gian."
+    },
+    {
+      "word": "minoxidil",
+      "is_today_sensitive": false,
+      "suggested_category": "HEALTH",
+      "reason": "Người dùng thảo luận về việc sử dụng thuốc Minoxidil để điều trị rụng tóc và kích thích mọc tóc."
+    },
+    {
+      "word": "tóc con",
+      "is_today_sensitive": false,
+      "suggested_category": "HEALTH",
+      "reason": "Người dùng đề cập đến kết quả mọc tóc con sau khi sử dụng sản phẩm."
+    },
+    {
+      "word": "combo của em",
+      "is_today_sensitive": false,
+      "suggested_category": "HEALTH",
+      "reason": "Người dùng nói về sự kết hợp các phương pháp/sản phẩm chăm sóc tóc của mình."
+    },
+    {
+      "word": "đầu tư mảng gì việt nam 2026",
+      "is_today_sensitive": false,
+      "suggested_category": "FINANCE",
+      "reason": "Câu hỏi tìm kiếm cơ hội đầu tư trong tương lai, không nhạy cảm với thời gian hiện tại."
+    },
+    {
+      "word": "whatsapp việt nam",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Hỏi về mức độ phổ biến của ứng dụng ở Việt Nam, không liên quan đến sự kiện nóng trong ngày."
+    },
+    {
+      "word": "bong bóng tài sản là gì",
+      "is_today_sensitive": true,
+      "suggested_category": "FINANCE",
+      "reason": "Hỏi về khái niệm kinh tế đang là mối quan ngại, liên quan đến các vấn đề thị trường hiện tại."
+    },
+    {
+      "word": "chính phủ giảm giá bất động sản vỡ bong bóng",
+      "is_today_sensitive": true,
+      "suggested_category": "FINANCE",
+      "reason": "Hỏi về chính sách và rủi ro thị trường bất động sản, là chủ đề nóng và có thể thay đổi trong ngày."
+    },
+    {
+      "word": "dự đoán sập bất động sản 42% tín dụng",
+      "is_today_sensitive": true,
+      "suggested_category": "FINANCE",
+      "reason": "Hỏi về dự báo tương lai dựa trên dữ liệu hiện tại về tín dụng bất động sản, nhạy cảm với các biến động kinh tế và chính sách."
+    },
+    {
+      "word": "Vua Tự Đức",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Nhân vật lịch sử, chủ đề chính của cuộc trò chuyện."
+    },
+    {
+      "word": "gửi bài thi sang nhà Thanh chấm",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Chi tiết lịch sử cụ thể cần được xác thực."
+    },
+    {
+      "word": "xác thực chuyện này",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Ý định của người dùng muốn kiểm tra tính đúng sai của thông tin."
+    },
+    {
+      "word": "thông tin trong ảnh này",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Người dùng muốn bot phân tích nội dung từ hình ảnh."
+    },
+    {
+      "word": "giai thoại dân gian",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Đề cập đến một dạng thông tin không chính thức."
+    },
+    {
+      "word": "profile",
+      "is_today_sensitive": true,
+      "suggested_category": "DEV",
+      "reason": "Liên quan đến cơ chế lưu trữ và hoạt động của bot."
+    },
+    {
+      "word": "ChatGPT Library",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "Tính năng của nền tảng ChatGPT được bot nhắc đến."
+    },
+    {
+      "word": "OpenAI APIs",
+      "is_today_sensitive": true,
+      "suggested_category": "DEV",
+      "reason": "Người dùng hỏi trực tiếp về công nghệ nền tảng của bot."
+    },
+    {
+      "word": "Markdown file",
+      "is_today_sensitive": true,
+      "suggested_category": "DEV",
+      "reason": "Người dùng hỏi về định dạng lưu trữ profile của bot."
+    },
+    {
+      "word": "cơ chế định kỳ reload",
+      "is_today_sensitive": true,
+      "suggested_category": "DEV",
+      "reason": "Người dùng hỏi về cách bot refresh thông tin."
+    },
+    {
+      "word": "ngưỡng 5000 ký tự",
+      "is_today_sensitive": true,
+      "suggested_category": "DEV",
+      "reason": "Đề xuất cụ thể của người dùng về ngưỡng hoạt động của bot."
+    },
+    {
+      "word": "file cấu hình",
+      "is_today_sensitive": true,
+      "suggested_category": "DEV",
+      "reason": "Người dùng hỏi về nơi lưu trữ các thông số kỹ thuật của bot."
+    },
+    {
+      "word": "techstack",
+      "is_today_sensitive": true,
+      "suggested_category": "DEV",
+      "reason": "Người dùng yêu cầu thông tin về công nghệ nền tảng của bot."
+    },
+    {
+      "word": "sinh nhật",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Chủ đề xã hội về tặng quà."
+    },
+    {
+      "word": "Pierre Cardin",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Thương hiệu được nhắc đến trong bối cảnh tặng quà."
+    },
+    {
+      "word": "Quà Tặng Thành Phát",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Nguồn thông tin mà bot trích dẫn."
+    },
+    {
+      "word": "Nước hoa mini",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Gợi ý quà tặng cụ thể."
+    },
+    {
+      "word": "Ví da",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Gợi ý quà tặng cụ thể."
+    },
+    {
+      "word": "giá thợ",
+      "is_today_sensitive": false,
+      "suggested_category": "FINANCE",
+      "reason": "Thảo luận về chi phí thuê lao động phổ thông, mức giá thị trường."
+    },
+    {
+      "word": "sửa ống nước",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Đề cập đến một loại công việc sửa chữa vặt, ví dụ minh họa về lao động."
+    },
+    {
+      "word": "lập trình senior",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "So sánh mức thu nhập và vị thế xã hội của lập trình viên với các nghề khác."
+    },
+    {
+      "word": "ly thân",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Thảo luận về vấn đề hôn nhân, quan hệ xã hội trong bối cảnh thay đổi địa vị."
+    },
+    {
+      "word": "giàu đổi chồng sang đổi bạn",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Thành ngữ mô tả sự thay đổi trong các mối quan hệ do địa vị xã hội thay đổi, phản ánh quan điểm cá nhân."
+    },
+    {
+      "word": "thợ giàu",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Phản ánh một quan sát xã hội về thu nhập của người lao động."
+    },
+    {
+      "word": "khó thuê nghề tay chân",
+      "is_today_sensitive": false,
+      "suggested_category": "NEWS",
+      "reason": "Đề cập đến một xu hướng trong thị trường lao động."
+    },
+    {
+      "word": "lương nghề tay chân tăng",
+      "is_today_sensitive": false,
+      "suggested_category": "FINANCE",
+      "reason": "Liên quan đến mức lương và thu nhập của một nhóm ngành."
+    },
+    {
+      "word": "kĩ sư thi công mạng khó thuê",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "Đề cập đến tình hình tuyển dụng trong ngành công nghệ/kỹ thuật."
+    },
+    {
+      "word": "thợ điện khan hiếm",
+      "is_today_sensitive": false,
+      "suggested_category": "NEWS",
+      "reason": "Phản ánh tình trạng cung cầu của một ngành nghề cụ thể."
+    },
+    {
+      "word": "Đất cảng",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Địa danh được nhắc đến như một khu vực có đô thị phát triển."
+    },
+    {
+      "word": "Hạ Long",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Địa danh được nhắc đến và so sánh."
+    },
+    {
+      "word": "Hà Nội",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Địa danh được so sánh về lối sống và môi trường."
+    },
+    {
+      "word": "giới nhà giàu",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Đề cập đến một tầng lớp xã hội và phong cách sống của họ."
+    },
+    {
+      "word": "kẽm bổ sung",
+      "is_today_sensitive": false,
+      "suggested_category": "HEALTH",
+      "reason": "Sản phẩm bổ sung sức khỏe được hỏi đến."
+    },
+    {
+      "word": "sâm alipat",
+      "is_today_sensitive": false,
+      "suggested_category": "HEALTH",
+      "reason": "Sản phẩm bổ sung sức khỏe được đề cập."
+    },
+    {
+      "word": "tình dục sung mãn",
+      "is_today_sensitive": false,
+      "suggested_category": "HEALTH",
+      "reason": "Cụm từ liên quan đến sức khỏe sinh lý nam."
+    },
+    {
+      "word": "ly hôn vợ",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Tình trạng hôn nhân của một người bạn được nhắc đến."
+    },
+    {
+      "word": "trưởng phòng ngân hàng",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Nghề nghiệp/vị trí của một đối tượng được nhắc đến."
+    },
+    {
+      "word": "giày Na Tra",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Mô tả một vật phẩm cá nhân với cái tên đặc biệt, mang tính chất bông đùa, không phải sự kiện tin tức."
+    },
+    {
+      "word": "hạng 4",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Một cụm từ liên quan đến xếp hạng hoặc kết quả của một sự kiện/cuộc thi không cụ thể."
+    },
+    {
+      "word": "thắng",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Từ khóa chỉ kết quả thắng cuộc của một cuộc thi đấu hoặc cạnh tranh."
+    },
+    {
+      "word": "tứ trụ",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Cụm từ ẩn dụ chỉ những người đứng đầu, dùng trong ngữ cảnh trêu chọc về thứ hạng hoặc vị trí xã hội."
+    },
+    {
+      "word": "ngũ đệ",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Cụm từ ẩn dụ chỉ người ở vị trí thấp hơn, dùng trong ngữ cảnh trêu chọc về thứ hạng hoặc vị trí xã hội."
+    },
+    {
+      "word": "mô hình AI",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "Thảo luận chung về các mô hình và xu hướng AI."
+    },
+    {
+      "word": "tool AI",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "Đề cập đến các công cụ phần mềm sử dụng trí tuệ nhân tạo."
+    },
+    {
+      "word": "chính sách chính phủ TQ thúc đẩy AI",
+      "is_today_sensitive": false,
+      "suggested_category": "NEWS",
+      "reason": "Liên quan đến chính sách công nghệ và địa chính trị."
+    },
+    {
+      "word": "AGI Bar Beijing",
+      "is_today_sensitive": true,
+      "suggested_category": "NEWS",
+      "reason": "Một sự kiện/mô hình kinh doanh cụ thể, có thể là tin tức mới nổi."
+    },
+    {
+      "word": "microsoft/fara",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "Một dự án hoặc công cụ mã nguồn mở cụ thể của Microsoft."
+    },
+    {
+      "word": "resize ảnh",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Một tác vụ chỉnh sửa ảnh thông thường."
+    },
+    {
+      "word": "nhân tướng học",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Phương pháp đánh giá tính cách dựa trên đặc điểm ngoại hình, liên quan đến văn hóa xã hội."
+    },
+    {
+      "word": "phù hợp để kết hôn",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Tư vấn hoặc đánh giá mối quan hệ, chủ đề xã hội."
+    },
+    {
+      "word": "lương 200M/tháng",
+      "is_today_sensitive": false,
+      "suggested_category": "FINANCE",
+      "reason": "Thảo luận về thu nhập cá nhân, liên quan đến tài chính và nghề nghiệp."
+    },
+    {
+      "word": "VOZ.VN",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Một diễn đàn trực tuyến phổ biến, liên quan đến văn hóa mạng xã hội."
+    },
+    {
+      "word": "xạo l",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Từ lóng dùng để hỏi về tính xác thực của thông tin, phản ánh nội dung mạng xã hội."
+    },
+    {
+      "word": "nguồn lực cty",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Liên quan đến tài nguyên và chính sách nội bộ công ty."
+    },
+    {
+      "word": "outsource",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Liên quan đến hoạt động thuê ngoài, một khía cạnh của quản lý dự án hoặc tài nguyên."
+    },
+    {
+      "word": "thuê chuyên gia",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Liên quan đến việc tuyển dụng hoặc hợp tác với các chuyên gia bên ngoài."
+    },
+    {
+      "word": "cty mẹ",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Liên quan đến cấu trúc tổ chức và mối quan hệ giữa các công ty."
+    },
+    {
+      "word": "làm ra ngoài",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Liên quan đến chính sách làm việc và giới hạn trách nhiệm của nhân viên."
+    },
+    {
+      "word": "chính sách bds Trung Quốc",
+      "is_today_sensitive": false,
+      "suggested_category": "FINANCE",
+      "reason": "Tìm kiếm về chính sách kinh tế của một quốc gia."
+    },
+    {
+      "word": "bong bóng bds",
+      "is_today_sensitive": false,
+      "suggested_category": "FINANCE",
+      "reason": "Khái niệm kinh tế quan trọng, có thể là chủ đề thời sự nhưng trong đoạn chat là phân tích chung."
+    },
+    {
+      "word": "phân hoá giàu nghèo",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Tìm kiếm về xu hướng xã hội và kinh tế."
+    },
+    {
+      "word": "làm chủ dòng tiền là gì",
+      "is_today_sensitive": false,
+      "suggested_category": "FINANCE",
+      "reason": "Tìm kiếm định nghĩa về tài chính cá nhân."
+    },
+    {
+      "word": "cách theo dõi chi tiêu",
+      "is_today_sensitive": false,
+      "suggested_category": "FINANCE",
+      "reason": "Tìm kiếm hướng dẫn thực hành tài chính cá nhân."
+    },
+    {
+      "word": "lãi suất ngân hàng TQ VN",
+      "is_today_sensitive": false,
+      "suggested_category": "FINANCE",
+      "reason": "Tìm kiếm thông tin so sánh chính sách tiền tệ."
+    },
+    {
+      "word": "ngành hàng hải Việt Nam",
+      "is_today_sensitive": false,
+      "suggested_category": "FINANCE",
+      "reason": "Tìm kiếm thông tin về một ngành kinh tế."
+    },
+    {
+      "word": "cảng biển tự động hóa",
+      "is_today_sensitive": false,
+      "suggested_category": "TECH",
+      "reason": "Tìm kiếm về công nghệ trong logistics."
+    },
+    {
+      "word": "IoT AI trong hàng hải",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "Tìm kiếm về ứng dụng công nghệ mới trong ngành cụ thể."
+    }
+  ],
+  "missed_link_requests": [
+    "cách tích hợp API hay hướng dẫn convert PDF từng trang",
+    "code mẫu cho phần merge",
+    "tài liệu hướng dẫn prompt cho M3",
+    "code mẫu merge dữ liệu từ PaddleOCR + M3",
+    "anh cho em biết thêm bài đăng đó lấy nguồn từ đâu không?",
+    "theo một bài viết trên Quà Tặng Thành Phát"
+  ],
+  "missed_topics": [
+    "kế hoạch tài chính dài hạn",
+    "mô hình kinh doanh độc lập",
+    "công nghệ IOC",
+    "kiến trúc bộ nhớ AI",
+    "quản lý phiên hội thoại AI",
+    "Woke (trong nội dung phim/truyền thông)",
+    "Chất lượng kịch bản phim",
+    "Minoxidil",
+    "Điều trị rụng tóc",
+    "Kích thích mọc tóc",
+    "cơ chế quản lý bộ nhớ của AI",
+    "cấu hình hệ thống chatbot",
+    "đạo đức AI và sự minh bạch",
+    "Lối sống thượng lưu Việt Nam",
+    "So sánh chất lượng sống đô thị",
+    "Sức khỏe sinh lý nam giới",
+    "Thực phẩm chức năng tăng cường sinh lý",
+    "Kẽm cho nam giới",
+    "Sâm Alipas công dụng",
+    "Chính sách công nghệ (AI)",
+    "Văn hóa diễn đàn trực tuyến (VOZ)",
+    "Nhân tướng học ứng dụng",
+    "Tư vấn hôn nhân/tình cảm chuyên sâu",
+    "Đánh giá thu nhập và nghề nghiệp trong ngành công nghệ",
+    "chứng khoán",
+    "chính sách hỗ trợ doanh nghiệp",
+    "cảng biển thông minh"
+  ],
   "missed_entities": [],
-  "prompt_leakage": [],
-  "document_ids": []
+  "missed_proactive_keywords": [
+    "khó mà",
+    "rủi ro cao",
+    "ko thoải mái",
+    "không có lương hưu",
+    "ủa sao k trả lời",
+    "cách nào hiệu quả hơn",
+    "để bọn anh cải thiện",
+    "nâng cấp sửa các lỗ hổng",
+    "ngất rồi à",
+    "cần bỏ qua lịch sử chát",
+    "cái gì thế này",
+    "không hiểu",
+    "giúp với",
+    "làm sao để",
+    "có nên"
+  ],
+  "prompt_leakage_questions": []
 }

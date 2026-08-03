@@ -1,12 +1,12 @@
 const fs = require('fs');
 const path = require('path');
 
-const updateData = JSON.parse(fs.readFileSync(path.join(__dirname, '../functions/update_data.json'), 'utf8'));
+const updateData = JSON.parse(fs.readFileSync(path.join(__dirname, 'update_data.json'), 'utf8'));
 
 // Helper to get keywords for search.js categories
 const getKeywordsByCategory = (cat) => {
   return updateData.audit_keywords
-    .filter(k => k.suggested_category === cat || (cat === 'DEV' && k.suggested_category === 'TECH') || (cat === 'FINANCE' && k.suggested_category === 'BUSINESS') || (cat === 'GENERAL' && k.suggested_category === 'GENERAL'))
+    .filter(k => k.suggested_category === cat || (cat === 'DEV' && k.suggested_category === 'TECH') || (cat === 'FINANCE' && k.suggested_category === 'BUSINESS') || (cat === 'NEWS' && k.suggested_category === 'GENERAL'))
     .map(k => k.word.toLowerCase())
     .join('|');
 };
@@ -27,16 +27,21 @@ if (socialKws) searchJs = searchJs.replace(/SOCIAL: \/(.+?)\/i/, `SOCIAL: /$1|${
 fs.writeFileSync(path.join(__dirname, '../functions/utils/search.js'), searchJs);
 console.log('Updated search.js with new audit keywords.');
 
-// 2. Update deepseek.js (missed_topics)
+// 2. Update deepseek.js (missed_topics and link requests)
+let deepseekJs = fs.readFileSync(path.join(__dirname, '../functions/utils/deepseek.js'), 'utf8');
+
 if (updateData.missed_topics && updateData.missed_topics.length > 0) {
-  let deepseekJs = fs.readFileSync(path.join(__dirname, '../functions/utils/deepseek.js'), 'utf8');
   const newTopics = updateData.missed_topics.map(t => `/${t.toLowerCase().replace(/\//g, '\\/')}/i`).join(', ');
-  
   deepseekJs = deepseekJs.replace(/(\/bảo mật dữ liệu chatbot\/i)\n    \];/, `$1, ${newTopics}\n    ];`);
-  
-  fs.writeFileSync(path.join(__dirname, '../functions/utils/deepseek.js'), deepseekJs);
   console.log('Updated deepseek.js with new missed topics.');
 }
+
+if (updateData.missed_link_requests && updateData.missed_link_requests.length > 0) {
+  const newLinks = updateData.missed_link_requests.map(l => l.toLowerCase()).join('|');
+  deepseekJs = deepseekJs.replace(/(\/xin link\|cho link\|gửi link\|địa chỉ\|url\|link\|cho xin\|ở đâu\|trang nào)([^/]*\/i)/, `$1|${newLinks}$2`);
+  console.log('Updated deepseek.js with new link requests.');
+}
+fs.writeFileSync(path.join(__dirname, '../functions/utils/deepseek.js'), deepseekJs);
 
 // 3. Update index.js (missed_proactive_keywords)
 if (updateData.missed_proactive_keywords && updateData.missed_proactive_keywords.length > 0) {
@@ -51,23 +56,6 @@ if (updateData.missed_proactive_keywords && updateData.missed_proactive_keywords
   
   fs.writeFileSync(path.join(__dirname, '../functions/index.js'), indexJs);
   console.log('Updated index.js with new proactive trigger words.');
-}
-
-// 4. Update leak_blacklist.json (prompt_leakage)
-// Data is empty according to update_data.json, but handled generically just in case.
-if (updateData.prompt_leakage && updateData.prompt_leakage.length > 0) {
-    const leakFile = path.join(__dirname, '../functions/utils/leak_blacklist.json');
-    let leakList = [];
-    if (fs.existsSync(leakFile)) {
-        leakList = JSON.parse(fs.readFileSync(leakFile, 'utf8'));
-    }
-    const removeAccents = (str) => {
-      return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D");
-    };
-    const newLeaks = updateData.prompt_leakage.map(q => removeAccents(q.toLowerCase()).trim());
-    const combined = [...new Set([...leakList, ...newLeaks])];
-    fs.writeFileSync(leakFile, JSON.stringify(combined, null, 2));
-    console.log('Updated leak_blacklist.json');
 }
 
 console.log('Code update script finished successfully.');

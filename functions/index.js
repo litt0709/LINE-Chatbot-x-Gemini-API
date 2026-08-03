@@ -1,3 +1,4 @@
+// Deploy trigger 1
 const { onRequest } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const crypto = require("crypto");
@@ -22,7 +23,7 @@ const userFactsIndexCache = new Map(); // key: userId/groupId -> { data: {...}, 
 // Smart Group Chat Caches & Config
 const focusModeCache = new Map(); // key: chatId -> { userId, expiresAt }
 const proactiveRateLimitCache = new Map(); // key: chatId -> nextAllowedTimestamp
-const PROACTIVE_TRIGGER_WORDS = ["ai biết", "làm sao", "lỗi gì", "bug", "không chạy", "có cách nào", "bác nào", "mọi người", "xin ý kiến", "chịu", "rén", "hơi thọt", "rủi ro", "không hiểu", "giúp với", "chỉ dùm", "bế tắc", "cần hỗ trợ", "🆘🆘"];
+const PROACTIVE_TRIGGER_WORDS = ["ai biết", "làm sao", "lỗi gì", "bug", "không chạy", "có cách nào", "bác nào", "mọi người", "xin ý kiến", "chịu", "rén", "hơi thọt", "rủi ro", "không hiểu", "giúp với", "chỉ dùm", "bế tắc", "cần hỗ trợ", "🆘🆘", "khó mà", "rủi ro cao", "ko thoải mái", "không có lương hưu", "ủa sao k trả lời", "cách nào hiệu quả hơn", "để bọn anh cải thiện", "nâng cấp sửa các lỗ hổng", "ngất rồi à", "cần bỏ qua lịch sử chát", "cái gì thế này", "không hiểu", "giúp với", "làm sao để", "có nên"];
 
 // Cấu hình Cache Idempotency chống lặp retry webhook
 const processedWebhooks = new Set();
@@ -193,7 +194,10 @@ const buildGroupProfileContext = async (participantsMap, promptText = "", sender
     }
 
     const p = [];
-    if (profile.gender) p.push(`Giới tính: ${profile.gender}`);
+    if (profile.gender) {
+      const genderStr = profile.gender.toLowerCase() === 'male' ? 'Nam' : (profile.gender.toLowerCase() === 'female' ? 'Nữ' : profile.gender);
+      p.push(`Giới tính: ${genderStr}`);
+    }
 
     // Tầng 2: Full Traits (chỉ bơm khi có trigger hoặc bị mention trực tiếp)
     if (hasTrigger || isMentioned) {
@@ -491,7 +495,9 @@ const processAndExtractProfile = async (text, senderId, participants = {}, sessi
     .replace(/<FACT[^>]*>|<\/FACT>/gi, "")
     .replace(/<SCHEDULE[^>]*>|<\/SCHEDULE>/gi, "")
     .replace(/<TOPIC[^>]*>.*?<\/TOPIC>|<TOPIC[^>]*>|<\/TOPIC>/gi, "")
+    .replace(/\[TOPIC\].*?\[\/TOPIC\]/gi, "")
     .replace(/<REACT[^>]*>|<\/REACT>/gi, "")
+    .replace(/\[TAGS:.*?\]/gi, "")
     .replace(/\[THÔNG TIN TỪ INTERNET\]/gi, "thông tin trên Internet")
     .replace(/\n{3,}/g, "\n\n")
     .replace(/["']?\s*\/>/g, "") // Dọn dẹp rác " /> do LLM sinh lỗi cú pháp thẻ XML
@@ -581,10 +587,10 @@ const buildLineMessage = (text, participants, isGroup = true, hotTopic = "") => 
   let cleanedText = text.replace(/\*\*/g, ""); // Strip markdown bold
 
   let quickReply = undefined;
-  const taskMatch = cleanedText.match(/<Task\s+mode=["']?ASK["']?\s+tags=["']([^"']+)["']\s*\/?>/i);
+  const taskMatch = cleanedText.match(/<Task\s+mode=["']?ASK["']?\s+tags=["']([^"']+)["']\s*\/?>/i) || cleanedText.match(/\[TAGS:\s*(.+?)\]/i);
   if (taskMatch) {
     const tags = taskMatch[1].split("|").map(t => t.trim()).filter(Boolean);
-    cleanedText = cleanedText.replace(/<Task[^>]*>/gi, "").trim();
+    cleanedText = cleanedText.replace(/<Task[^>]*>/gi, "").replace(/\[TAGS:.*?\]/gi, "").trim();
 
     quickReply = {
       items: tags.map(tag => {
@@ -603,7 +609,7 @@ const buildLineMessage = (text, participants, isGroup = true, hotTopic = "") => 
   }
 
   // Luôn dọn dẹp sạch sẽ mọi thẻ <Task> còn sót lại (kể cả tag lỗi cấu trúc không khớp regex)
-  cleanedText = cleanedText.replace(/<Task[^>]*>/gi, "").replace(/<\/Task>/gi, "").trim();
+  cleanedText = cleanedText.replace(/<Task[^>]*>/gi, "").replace(/<\/Task>/gi, "").replace(/\[TAGS:.*?\]/gi, "").replace(/\[TOPIC\].*?\[\/TOPIC\]/gi, "").trim();
 
   // LINE API không hỗ trợ mentions trong chat 1-1, trả về text thường
   if (!isGroup) {
@@ -1412,8 +1418,19 @@ exports.webhook = onRequest({
 
       console.log(`[LINE] Participants map cho Session:`, JSON.stringify(participants));
 
-      const forceIgnoreCheck = (!isDirectlyTargeted && isImplicitlyTargeted);
+      let forceIgnoreCheck = (!isDirectlyTargeted && isImplicitlyTargeted);
       const isGroup = event.source.type !== "user";
+      
+      // --- Smart Group Chat: Focus Mode ---
+      if (isGroup && !isDirectlyTargeted) {
+        const focus = focusModeCache.get(String(sessionId));
+        if (focus && focus.userId === String(userId) && Date.now() < focus.expiresAt) {
+          isDirectlyTargeted = true;
+          forceIgnoreCheck = false;
+          console.log(`[Focus Mode] LINE: Bot tự động follow up với User ${userId} trong Group ${sessionId}`);
+        }
+      }
+
       const groupContext = await buildGroupProfileContext(participants, cleanPrompt, userId, isGroup, senderName);
       const factsContext = await findRelevantFacts(sessionId, cleanPrompt);
       const rawMsg = await llm.chat(sessionId, cleanPrompt, senderName, userId, eventMessageId, quoteContext, forceIgnoreCheck, groupContext, isGroup, hotTopic, isPostback, postbackContext, factsContext);
@@ -1443,6 +1460,10 @@ exports.webhook = onRequest({
       }
 
       await appendRawMessage(sessionId, userMsgData, botMsgData);
+      
+      if (isGroup) {
+        focusModeCache.set(String(sessionId), { userId: String(userId), expiresAt: Date.now() + 3 * 60 * 1000 });
+      }
 
       continue;
     }

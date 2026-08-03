@@ -21,7 +21,7 @@ const multimodal = async (imageBinary) => {
       {
         role: "user",
         parts: [
-          { text: "Hãy miêu tả chi tiết, khách quan và chính xác những gì bạn thấy trong bức ảnh này." },
+          { text: "Hãy miêu tả chi tiết, khách quan và BÁM SÁT 100% SỰ THẬT trong bức ảnh. TUYỆT ĐỐI KHÔNG TƯỞNG TƯỢNG hay suy diễn thêm chi tiết không có thật (vd: đọc sách, quần áo thanh lịch... nếu thực tế không phải vậy)." },
           { inlineData: { data: imageBinary.toString("base64"), mimeType: "image/jpeg" } }
         ]
       }

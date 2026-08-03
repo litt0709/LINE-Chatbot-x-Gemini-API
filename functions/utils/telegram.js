@@ -21,10 +21,10 @@ const reply = async (chatId, text) => {
   let reply_markup = undefined;
   let rawText = text;
 
-  const taskMatch = rawText.match(/<Task\s+mode=["']?ASK["']?\s+tags=["']([^"']+)["']\s*\/?>/i);
+  const taskMatch = rawText.match(/<Task\s+mode=["']?ASK["']?\s+tags=["']([^"']+)["']\s*\/?>/i) || rawText.match(/\[TAGS:\s*(.+?)\]/i);
   if (taskMatch) {
     const tags = taskMatch[1].split("|").map(t => t.trim()).filter(Boolean);
-    rawText = rawText.replace(/<Task[^>]*>/gi, "").trim();
+    rawText = rawText.replace(/<Task[^>]*>/gi, "").replace(/\[TAGS:.*?\]/gi, "").trim();
     
     reply_markup = {
       inline_keyboard: tags.map(tag => {
@@ -41,12 +41,13 @@ const reply = async (chatId, text) => {
 
   // Luôn dọn dẹp sạch sẽ mọi thẻ <Task> và các thẻ chức năng khác còn sót lại
   rawText = rawText.replace(/<Task[^>]*>/gi, "").replace(/<\/Task>/gi, "")
+                   .replace(/\[TAGS:.*?\]/gi, "")
                    .replace(/<PROFILE[^>]*>|<\/PROFILE>/gi, "")
                    .replace(/<FACT[^>]*>|<\/FACT>/gi, "")
                    .replace(/<SCHEDULE[^>]*>|<\/SCHEDULE>/gi, "")
                    .replace(/<TOPIC[^>]*>.*?<\/TOPIC>|<TOPIC[^>]*>|<\/TOPIC>/gi, "")
-                   .replace(/<REACT[^>]*>|<\/REACT>/gi, "")
-                   .trim();
+                   .replace(/\[TOPIC\].*?\[\/TOPIC\]/gi, "")
+                   .replace(/<REACT[^>]*>|<\/REACT>/gi, "").trim();
 
   // 1. Chuyển đổi <br> (nếu có) thành \n
   let safeText = rawText.replace(/<br\s*\/?>/gi, "\n");

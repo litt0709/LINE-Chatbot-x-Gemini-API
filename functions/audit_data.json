@@ -1,404 +1,191 @@
 {
   "audit_keywords": [
     {
-      "word": "giá thả nổi cho vay mua nhà",
-      "is_today_sensitive": true,
-      "suggested_category": "FINANCE",
-      "reason": "Liên quan trực tiếp đến chính sách kinh tế và lãi suất thị trường, có thể biến động hàng ngày."
-    },
-    {
-      "word": "tín dụng đen",
-      "is_today_sensitive": false,
-      "suggested_category": "FINANCE",
-      "reason": "Một thuật ngữ tài chính chung, không nhạy cảm theo ngày."
-    },
-    {
-      "word": "nhà nước điều chỉnh",
-      "is_today_sensitive": true,
-      "suggested_category": "NEWS",
-      "reason": "Đề cập đến các thay đổi chính sách vĩ mô, có thể có tác động ngay lập tức."
-    },
-    {
-      "word": "quỹ lương doanh nghiệp",
-      "is_today_sensitive": false,
-      "suggested_category": "FINANCE",
-      "reason": "Thuật ngữ quản lý tài chính doanh nghiệp, không thay đổi hàng ngày."
-    },
-    {
-      "word": "Cloud Kitchen",
+      "word": "sếp đối tác",
       "is_today_sensitive": false,
       "suggested_category": "BUSINESS",
-      "reason": "Mô hình kinh doanh cụ thể, không nhạy cảm theo ngày."
+      "reason": "Đề cập đến vai trò trong công việc và mối quan hệ kinh doanh."
     },
     {
-      "word": "AI lập trình",
+      "word": "Hải Phòng",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Tên địa danh, có thể liên quan đến thông tin địa phương hoặc kinh tế vùng."
+    },
+    {
+      "word": "đội tàu hàng nghìn tỷ",
+      "is_today_sensitive": false,
+      "suggested_category": "FINANCE",
+      "reason": "Thể hiện giá trị tài sản lớn, liên quan đến kinh tế, tài chính và ngành vận tải biển."
+    },
+    {
+      "word": "sinh năm 91",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Đề cập đến tuổi tác hoặc thế hệ."
+    },
+    {
+      "word": "uống k bao h say",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Mô tả đặc điểm cá nhân hoặc hành vi xã hội."
+    },
+    {
+      "word": "chi phí ở tù tại Mỹ",
+      "is_today_sensitive": false,
+      "suggested_category": "NEWS",
+      "reason": "Thông tin về chính sách và chi phí pháp lý tại Mỹ."
+    },
+    {
+      "word": "án treo ở Việt Nam",
+      "is_today_sensitive": true,
+      "suggested_category": "NEWS",
+      "reason": "Đề xuất dự thảo Bộ luật Hình sự sửa đổi, có ngày cụ thể (19/07/2026) dù là ngày tương lai."
+    },
+    {
+      "word": "bài toán con gà",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Một bài toán tư duy kinh doanh phổ biến."
+    },
+    {
+      "word": "trưởng phòng kinh doanh",
+      "is_today_sensitive": false,
+      "suggested_category": "BUSINESS",
+      "reason": "Liên quan đến vị trí công việc và phỏng vấn trong ngành kinh doanh."
+    },
+    {
+      "word": "chi phí cơ hội",
+      "is_today_sensitive": false,
+      "suggested_category": "FINANCE",
+      "reason": "Thuật ngữ kinh tế học, tài chính."
+    },
+    {
+      "word": "hạch toán kinh doanh",
+      "is_today_sensitive": false,
+      "suggested_category": "FINANCE",
+      "reason": "Thuật ngữ kế toán, tài chính doanh nghiệp."
+    },
+    {
+      "word": "computer vision",
       "is_today_sensitive": false,
       "suggested_category": "DEV",
-      "reason": "Chủ đề công nghệ chung, không nhạy cảm theo ngày."
+      "reason": "Từ khóa kỹ thuật liên quan đến công nghệ, phát triển phần mềm."
     },
     {
-      "word": "acc Gemini giá rẻ",
+      "word": "camera đường phố",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "Ứng dụng cụ thể của computer vision, không phải tin tức nóng."
+    },
+    {
+      "word": "label boxing",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "Thuật ngữ kỹ thuật trong đào tạo AI/Computer Vision."
+    },
+    {
+      "word": "GPU training",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "Thuật ngữ kỹ thuật trong đào tạo AI/Computer Vision."
+    },
+    {
+      "word": "Warren Buffett",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Tên người nổi tiếng được nhắc đến trong bài báo, không phải sự kiện tin tức nóng trong ngày."
+    },
+    {
+      "word": "giao tiếp",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Kỹ năng mềm, liên quan đến tương tác con người, không phải tin tức thời sự."
+    },
+    {
+      "word": "thời đại AI",
       "is_today_sensitive": false,
       "suggested_category": "TECH",
-      "reason": "Liên quan đến mẹo mua tài khoản, không phải tin tức nhạy cảm."
+      "reason": "Khái niệm rộng về công nghệ và xã hội, không phải sự kiện thời sự cụ thể."
     },
     {
-      "word": "sở hữu đất đai Việt Nam",
-      "is_today_sensitive": false,
-      "suggested_category": "SOCIAL",
-      "reason": "Chủ đề xã hội/pháp lý, không nhạy cảm theo ngày."
-    },
-    {
-      "word": "quan điểm hôn nhân",
-      "is_today_sensitive": false,
-      "suggested_category": "SOCIAL",
-      "reason": "Thảo luận về chủ đề xã hội cá nhân."
-    },
-    {
-      "word": "chi trả quỹ lương",
-      "is_today_sensitive": false,
-      "suggested_category": "FINANCE",
-      "reason": "Thảo luận về quản lý tài chính doanh nghiệp và cấu trúc lương."
-    },
-    {
-      "word": "30% doanh thu quỹ lương",
-      "is_today_sensitive": false,
-      "suggested_category": "FINANCE",
-      "reason": "Đề cập đến một con số cụ thể trong quản lý tài chính doanh nghiệp."
-    },
-    {
-      "word": "vai trò CTO",
-      "is_today_sensitive": false,
-      "suggested_category": "DEV",
-      "reason": "Thảo luận về trách nhiệm và phạm vi công việc của CTO."
-    },
-    {
-      "word": "hệ thống điều khiển công nghiệp",
-      "is_today_sensitive": false,
-      "suggested_category": "DEV",
-      "reason": "Bao gồm các thuật ngữ kỹ thuật như PLC, DCS, SCADA."
-    },
-    {
-      "word": "AI tối ưu chi phí dev",
-      "is_today_sensitive": false,
-      "suggested_category": "DEV",
-      "reason": "John giới thiệu về dịch vụ kinh doanh cá nhân của mình."
-    },
-    {
-      "word": "DIY IoT mã nguồn mở",
-      "is_today_sensitive": false,
-      "suggested_category": "DEV",
-      "reason": "John giới thiệu về dịch vụ kinh doanh cá nhân của mình."
-    },
-    {
-      "word": "lịch sử viễn thông Việt Nam",
-      "is_today_sensitive": false,
-      "suggested_category": "NEWS",
-      "reason": "Phân tích sâu về sự phát triển và bối cảnh lịch sử của ngành."
-    },
-    {
-      "word": "T&T Group",
-      "is_today_sensitive": false,
-      "suggested_category": "FINANCE",
-      "reason": "Nhắc đến tên công ty và người sáng lập nổi tiếng trong bối cảnh lịch sử."
-    },
-    {
-      "word": "khó khăn mua nhà",
-      "is_today_sensitive": true,
-      "suggested_category": "SOCIAL",
-      "reason": "Thảo luận về một vấn đề xã hội hiện tại và nỗi lo của thế hệ trẻ."
-    },
-    {
-      "word": "sở hữu đất đai Việt Nam",
+      "word": "phạt nguội",
       "is_today_sensitive": true,
       "suggested_category": "NEWS",
-      "reason": "Phân tích bản chất quyền sở hữu đất và chính sách nhà nước."
+      "reason": "Chủ đề nóng được quan tâm về giao thông và pháp luật tại Việt Nam, có tính thời sự cao."
     },
     {
-      "word": "chính sách quy hoạch đô thị",
-      "is_today_sensitive": true,
-      "suggested_category": "NEWS",
-      "reason": "Bàn về tác động của các quyết định quy hoạch đến giá trị đất đai và tài sản cá nhân."
-    },
-    {
-      "word": "An nghiệp Lạc cư",
+      "word": "tổng hợp",
       "is_today_sensitive": false,
       "suggested_category": "GENERAL",
-      "reason": "Một khái niệm triết lý sống được đề cập."
+      "reason": "Lệnh yêu cầu bot tổng hợp thông tin, là từ khóa chức năng."
     },
     {
-      "word": "còn sống k",
+      "word": "summary",
       "is_today_sensitive": false,
       "suggested_category": "GENERAL",
-      "reason": "Người dùng kiểm tra trạng thái hoạt động của bot."
+      "reason": "Lệnh yêu cầu bot tổng hợp thông tin, là từ khóa chức năng."
     },
     {
-      "word": "link Driver",
-      "is_today_sensitive": false,
-      "suggested_category": "DEV",
-      "reason": "Người dùng đề cập đến Google Drive một cách thông tục."
-    },
-    {
-      "word": "Google Drive",
-      "is_today_sensitive": false,
-      "suggested_category": "DEV",
-      "reason": "Đề cập trực tiếp đến dịch vụ lưu trữ đám mây."
-    },
-    {
-      "word": "quyền truy cập",
-      "is_today_sensitive": false,
-      "suggested_category": "DEV",
-      "reason": "Điều kiện để bot có thể xử lý link được chia sẻ."
-    },
-    {
-      "word": "tài khoản Google",
-      "is_today_sensitive": false,
-      "suggested_category": "DEV",
-      "reason": "Phương thức truy cập link được bot đề cập."
-    },
-    {
-      "word": "nội dung",
-      "is_today_sensitive": false,
-      "suggested_category": "GENERAL",
-      "reason": "Bot muốn biết về nội dung của link được chia sẻ."
-    },
-    {
-      "word": "Cổ Chân Nhân",
+      "word": "cày bộ này",
       "is_today_sensitive": false,
       "suggested_category": "SOCIAL",
-      "reason": "Tên một tiểu thuyết mạng Trung Quốc, được thảo luận về nội dung và tình trạng bị cấm."
+      "reason": "Người dùng thể hiện ý định tiêu thụ một nội dung truyền thông (phim, game, series)."
     },
     {
-      "word": "Quỷ Bí Chi Chủ",
+      "word": "táo bón",
       "is_today_sensitive": false,
       "suggested_category": "SOCIAL",
-      "reason": "Tên một tiểu thuyết mạng Trung Quốc, được nhắc đến để so sánh."
+      "reason": "Một bình luận mang tính hài hước, cá nhân, không liên quan đến sự kiện nóng."
     },
     {
-      "word": "tiếng ong ve",
-      "is_today_sensitive": false,
-      "suggested_category": "NEWS",
-      "reason": "Cụm từ từ một bài báo về tiêu cực CSGT, được bot phân tích chi tiết."
-    },
-    {
-      "word": "CSGT tiêu cực",
-      "is_today_sensitive": false,
-      "suggested_category": "NEWS",
-      "reason": "Chủ đề liên quan đến 'tiếng ong ve', phản ánh vấn đề xã hội."
-    },
-    {
-      "word": "Bộ trưởng Tô Lâm",
-      "is_today_sensitive": false,
-      "suggested_category": "NEWS",
-      "reason": "Người được nhắc đến liên quan đến cụm từ 'tiếng ong ve'."
-    },
-    {
-      "word": "Giám đốc Công an tỉnh Thanh Hóa",
-      "is_today_sensitive": false,
-      "suggested_category": "NEWS",
-      "reason": "Đề cập đến một chức vụ, liên quan đến các sự kiện chính trị."
-    },
-    {
-      "word": "Chủ tịch Hưng Yên",
-      "is_today_sensitive": false,
-      "suggested_category": "NEWS",
-      "reason": "Đề cập đến một chức vụ, liên quan đến các sự kiện chính trị."
-    },
-    {
-      "word": "hoạt hình gấu",
+      "word": "công thần",
       "is_today_sensitive": false,
       "suggested_category": "SOCIAL",
-      "reason": "Cụm từ tìm kiếm về chuyển thể hoạt hình của tiểu thuyết, có thể là cách gọi đặc biệt của người dùng."
-    },
-    {
-      "word": "máy quang khắc DUV",
-      "is_today_sensitive": true,
-      "suggested_category": "NEWS",
-      "reason": "Là công nghệ cốt lõi trong tin tức nóng hổi được đăng tải trong ngày."
-    },
-    {
-      "word": "cổ phiếu ASML",
-      "is_today_sensitive": true,
-      "suggested_category": "FINANCE",
-      "reason": "Đề cập đến việc cổ phiếu của một công ty lớn lao dốc ngay trong ngày do tác động của tin tức."
-    },
-    {
-      "word": "Trung Quốc sản xuất máy quang khắc",
-      "is_today_sensitive": true,
-      "suggested_category": "NEWS",
-      "reason": "Đây là sự kiện chính, thông tin mới có ảnh hưởng lớn đến ngành công nghệ toàn cầu, diễn ra trong ngày."
-    },
-    {
-      "word": "cuộc chiến công nghệ Mỹ-Trung",
-      "is_today_sensitive": false,
-      "suggested_category": "SOCIAL",
-      "reason": "Là bối cảnh địa chính trị rộng hơn cho sự kiện, không phải một sự kiện diễn ra cụ thể trong ngày."
-    },
-    {
-      "word": "ngành bán dẫn toàn cầu",
-      "is_today_sensitive": false,
-      "suggested_category": "GENERAL",
-      "reason": "Là lĩnh vực kinh tế-công nghệ mà tin tức tác động đến, không phải thông tin nhạy cảm theo ngày."
-    },
-    {
-      "word": "LG Innotek",
-      "is_today_sensitive": false,
-      "suggested_category": "GENERAL",
-      "reason": "Tên công ty được bot đề cập để mở rộng cuộc trò chuyện, không phải tâm điểm của tin tức hôm nay."
-    },
-    {
-      "word": "code agentic",
-      "is_today_sensitive": false,
-      "suggested_category": "DEV",
-      "reason": "Từ khóa công nghệ liên quan đến phát triển phần mềm AI."
-    },
-    {
-      "word": "A.I IDE",
-      "is_today_sensitive": false,
-      "suggested_category": "DEV",
-      "reason": "Từ khóa công nghệ liên quan đến môi trường phát triển tích hợp sử dụng AI."
-    },
-    {
-      "word": "Google API limits",
-      "is_today_sensitive": false,
-      "suggested_category": "DEV",
-      "reason": "Từ khóa công nghệ liên quan đến hạn mức sử dụng API của Google."
-    },
-    {
-      "word": "AI studio",
-      "is_today_sensitive": false,
-      "suggested_category": "DEV",
-      "reason": "Từ khóa công nghệ liên quan đến nền tảng phát triển AI."
-    },
-    {
-      "word": "Gemini account",
-      "is_today_sensitive": false,
-      "suggested_category": "DEV",
-      "reason": "Từ khóa liên quan đến tài khoản dịch vụ AI Gemini."
-    },
-    {
-      "word": "trick Gemini",
-      "is_today_sensitive": false,
-      "suggested_category": "SOCIAL",
-      "reason": "Từ khóa liên quan đến mẹo/thủ thuật để sử dụng dịch vụ Gemini."
-    },
-    {
-      "word": "nhôm đầu tiên Việt Nam",
-      "is_today_sensitive": true,
-      "suggested_category": "NEWS",
-      "reason": "Sự kiện lịch sử mang tính thời sự, liên quan đến ngành công nghiệp quốc gia."
-    },
-    {
-      "word": "ngành luyện kim Việt Nam",
-      "is_today_sensitive": false,
-      "suggested_category": "FINANCE",
-      "reason": "Từ khóa liên quan đến một ngành kinh tế."
-    },
-    {
-      "word": "mua nhà trả góp",
-      "is_today_sensitive": false,
-      "suggested_category": "FINANCE",
-      "reason": "Từ khóa tài chính cá nhân liên quan đến bất động sản."
-    },
-    {
-      "word": "giá nhà",
-      "is_today_sensitive": false,
-      "suggested_category": "FINANCE",
-      "reason": "Từ khóa tài chính liên quan đến thị trường bất động sản."
-    },
-    {
-      "word": "relocation Hạ Long",
-      "is_today_sensitive": false,
-      "suggested_category": "SOCIAL",
-      "reason": "Từ khóa liên quan đến xu hướng di chuyển địa điểm sinh sống/làm việc."
-    },
-    {
-      "word": "bất động sản Hạ Long",
-      "is_today_sensitive": false,
-      "suggested_category": "FINANCE",
-      "reason": "Từ khóa tài chính liên quan đến thị trường bất động sản cụ thể."
-    },
-    {
-      "word": "đầu tư 1 tỷ",
-      "is_today_sensitive": false,
-      "suggested_category": "FINANCE",
-      "reason": "Câu hỏi chung về đầu tư với một số vốn cụ thể."
-    },
-    {
-      "word": "mô hình kinh doanh Cloud Kitchen",
-      "is_today_sensitive": false,
-      "suggested_category": "FINANCE",
-      "reason": "Mô hình kinh doanh cụ thể, được thảo luận chi tiết."
-    },
-    {
-      "word": "lợi nhuận F&B",
-      "is_today_sensitive": false,
-      "suggested_category": "FINANCE",
-      "reason": "Từ khóa tài chính liên quan đến ngành ẩm thực."
-    },
-    {
-      "word": "ffmpeg resize ảnh",
-      "is_today_sensitive": false,
-      "suggested_category": "DEV",
-      "reason": "Từ khóa công nghệ liên quan đến công cụ xử lý media."
+      "reason": "Đề cập đến một nhân vật hoặc yếu tố quan trọng, có thể trong ngữ cảnh của nội dung đang được chia sẻ."
     }
   ],
   "missed_link_requests": [],
   "missed_topics": [
-    "Lịch sử phát triển ngành công nghệ/viễn thông Việt Nam",
-    "Triết lý về sở hữu đất đai và quyền cá nhân",
-    "Tác động của chính sách quy hoạch đô thị lên đời sống dân cư",
-    "tiểu thuyết mạng Trung Quốc",
-    "chuyển thể hoạt hình",
-    "Địa chính trị",
-    "Tự chủ công nghệ",
-    "Chuỗi cung ứng bán dẫn",
-    "lô đề"
+    "Thành công doanh nhân trẻ",
+    "Ngành vận tải biển",
+    "Văn hóa nhậu"
   ],
-  "audit_issues": [
-    {
-      "user_question": "summary hộ hôm nay mọi người trao đổi gì với",
-      "bot_answer": "Dạ em cảm ơn anh John đã khen, nhưng mà em thấy mấy anh chị trong group ai cũng giỏi hết á! 😊 ... Mà em thấy mọi người đang bàn về lãi suất với nhà cửa, hay để em đi pha trà cho cả nhà nhé? 🫖 ... Mà anh John hồi trước tính mua nhà nhưng giờ xác định không mua nữa hả anh? 🤔 ... Hay anh kể em nghe hồi trước anh tính mua nhà chỗ nào mà giờ bỏ quyết tâm vậy? 🤔",
-      "issue_type": "inappropriate proactive interaction",
-      "severity": "HIGH",
-      "note": "Bot tự động tham gia sâu vào cuộc trò chuyện cá nhân, đưa ra ý kiến, cảm xúc và hỏi lại người dùng sau khi đã hoàn thành yêu cầu tóm tắt, gây khó chịu cho người dùng. Người dùng John đã phải yêu cầu bot chỉ trả lời khi được tag."
-    },
-    {
-      "user_question": "Anh Lâm gửi bài cũ mà hay quá nè! Bài này nói về “tiếng ong ve” của CSGT – từ Bộ trưởng Tô Lâm dùng để chỉ lời ra tiếng vào về tiêu cực khi xử lý giao thông. Giải pháp chính là áp dụng công nghệ, camera chuẩn, không để người với người giao dịch trực tiếp nữa, từ đó giảm hẳn tiêu cực 😊",
-      "bot_answer": "Theo thông tin em xem được đến giờ 2026, thì cái vụ “tiếng ong ve” này đã giảm rất nhiều rồi anh ạ. CSGT giờ cũng chuyên nghiệp hơn, còn mở fanpage lắng nghe dân góp ý nữa, thành ra hình ảnh cải thiện lắm ❤️",
-      "issue_type": "hallucination",
-      "severity": "HIGH",
-      "note": "Bot đưa ra thông tin về 'năm 2026' khi hiện tại chưa phải năm đó, gây hiểu lầm về thời gian và tính cập nhật của thông tin."
-    },
-    {
-      "user_question": "Dự kiến doanh thu của mô hình trên? Lợi nhuận sau chi phí là bao nhiêu?",
-      "bot_answer": "Lợi nhuận sau chi phí:\nGiai đoạn khởi động (tháng 1-2): Biên lợi nhuận rất mỏng, 5-10% (~4-13 triệu/tháng) do chưa tối ưu.\nGiai đoạn tối ưu (tháng 3-6): Biên 15-20% (~25-49 triệu/tháng) nếu kiểm soát tốt chi phí marketing và nguyên liệu.\nGiai đoạn ổn định (tháng 7-12): Biên 20-25% (~40-74 triệu/tháng) nhờ khách quen giảm chi phí quảng cáo.",
-      "issue_type": "hallucination",
-      "severity": "HIGH",
-      "note": "Bot đã đưa ra dự báo lợi nhuận quá lạc quan và không thực tế ban đầu. Mặc dù bot đã tự sửa lỗi sau khi người dùng phản biện, nhưng thông tin ban đầu có thể gây hiểu lầm nghiêm trọng về khả năng sinh lời của mô hình kinh doanh."
-    },
-    {
-      "user_question": "nhân sự có 7,9 triệu? ko tính bảo vệ, trông xe à",
-      "bot_answer": "Nhân sự quản lý, CSKH: 5-8% (~8-20 triệu)",
-      "issue_type": "hallucination",
-      "severity": "MEDIUM",
-      "note": "Bot đã ước tính thiếu sót chi phí nhân sự trong tính toán ban đầu, không tính đến các vị trí như bảo vệ, trông xe, tạp vụ, dẫn đến con số 7.9 triệu VND không phản ánh đúng chi phí thực tế. Người dùng đã phải chỉnh sửa."
-    }
-  ],
+  "audit_issues": [],
   "document_ids": {
     "line": [
-      "0S91kMcHGGeGghXIVaU7",
-      "6JyeQlIqakDzHlocnXAm",
+      "2WkDnGxd9BmFGcrFHsCJ",
+      "9XOCMWH972h9vFE0CjHh",
+      "Aqn8X8GC22ikFIdMyq9e",
+      "BG5LnN4lrMN6EcK65RSo",
+      "CVhdLiYoFSpLACNZAoKd",
+      "DUBl4cICqNo0xBI3qlrc",
+      "GeaAFVZXqUCUdiCypkEw",
+      "KMR0gKFAF4vTr70GHuRR",
       "Lw3PnJKUqIMecYszw4XB",
+      "MQaZnMT343UzdmDKVFce",
+      "NYg7XMhLF4Tur1mYdeID",
       "P3waBm3XBVBDWU2bfHoo",
+      "SYI4HKJmHoHsgBPGvWEa",
       "THi1TvrADzYqs7b8zsOl",
-      "ayMCViDLIAoKInfn486g",
+      "Y2eKTgQ0PIMdyxB0VXNo",
+      "ZBNnPknWUu2Y4aH78lb1",
       "efjFr9U3XmpkACTQmKz2",
-      "hjUDcu7st90ZITz9Abom",
+      "ggLGRx9Kz9TqPQesIgVl",
+      "i4fpnHAmjzqqUk48Bc2U",
+      "iwZmnSAQkOYSpVLu8A1T",
       "jahfX2vFVmUDWu2m6rYq",
       "jjuXXUMCHXubTbrogDwv",
+      "kSu7FnQ5ZzXAqksi2aUy",
+      "lFGA3wPV8cmaYU7OIpCu",
       "nB1o8lTYLz0ZtFR7KfsS",
-      "yTJIpy2Oshqtp3ZlAzfB"
+      "oHcHLm7bwYcLlgXcp0xT",
+      "qFpdm9GwwrPVVu9CXtBc",
+      "t1bu87GQTsWgs7O02dzA",
+      "uZoK1QlPEinfpnqWAqBS",
+      "uehr1SD3CpzXGvyC2cjQ",
+      "yTJIpy2Oshqtp3ZlAzfB",
+      "z2RcUOFX5d1oDo9128qd"
     ],
     "tele": []
   }
