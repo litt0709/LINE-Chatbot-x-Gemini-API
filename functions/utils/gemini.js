@@ -75,14 +75,16 @@ const analyzeDocument = async (localFilePath) => {
  * @param {string} sessionId - ID của session/group để track log
  * @returns {Promise<string>} Trả về string tóm tắt theo format cũ
  */
-const summarizeHistory = async (messages, sessionId = "unknown") => {
-  if (!messages || messages.length === 0) return "";
+const summarizeHistory = async (messages, sessionId = "unknown", oldMemory = "") => {
+  if (!messages || messages.length === 0) return { summaryText: "", coreMemory: "" };
   
   const formattedChat = messages.map(m => `[${m.senderName || m.role}]: ${m.text}`).join("\n");
   
   const prompt = `Đây là lịch sử chat của nhóm. Nhiệm vụ của bạn:
 1. Tóm tắt ngắn gọn các sự kiện chính dưới 1000 chữ. BẮT BUỘC format rõ ràng: dùng ký tự \\n để ngắt dòng, phân các ý bằng gạch đầu dòng (-) hoặc emoji (📌, 👉), và bôi đậm ý chính bằng **text**.
-2. Xác định 01 chủ đề NỔI BẬT NHẤT (VD: World Cup 2026). Nếu không rõ, ghi "None".
+2. Tóm lược Cốt lõi (Rolling Summary): Viết đúng 3-4 câu ngắn gọn tóm tắt về thói quen, sở thích, thông tin cá nhân và bối cảnh gần đây nhất của user trong phiên chat. Nếu có bộ nhớ cũ (oldMemory), hãy kết hợp thông minh giữa cũ và mới để không bị mất thông tin quan trọng.
+- Bộ nhớ cũ (oldMemory): "${oldMemory}"
+3. Xác định 01 chủ đề NỔI BẬT NHẤT (VD: World Cup 2026). Nếu không rõ, ghi "None".
 3. Phân tích Audit Keywords: Tìm các từ khóa tìm kiếm user dùng mà hệ thống có thể cần. Đánh giá xem nó có phải sự kiện trong ngày (is_today_sensitive) và phân loại vào (NEWS/FINANCE/DEV/SOCIAL/GENERAL).
 8. Phân tích Audit Issues: Tìm các câu trả lời sai hoặc ngớ ngẩn của bot (Hallucination) so với câu hỏi.
 9. Phân tích Missed Intents: Tìm những câu/từ khóa mà người dùng dùng để "xin link/nguồn" nhưng bot không hiểu hoặc chưa có link. Tìm những chủ đề/topic mới (như tiền ảo, lãi suất...) mà bot không bắt được để cập nhật vào danh sách topic độc lập.
@@ -92,6 +94,7 @@ const summarizeHistory = async (messages, sessionId = "unknown") => {
 BẮT BUỘC TRẢ VỀ ĐÚNG ĐỊNH DẠNG JSON SAU (chỉ chứa JSON, được phép dùng \\n và dấu gạch ngang bên trong chuỗi string):
 {
   "summary": "Nội dung tóm tắt...\\n- 📌 **Sự kiện 1:** ...\\n- 👉 **Sự kiện 2:** ...",
+  "core_memory": "User A thích ăn bún bò, đi ngủ lúc 11h, hôm qua vừa bị sếp mắng...",
   "hot_topic": "World Cup 2026",
   "audit_keywords": [
     { "word": "từ khóa", "is_today_sensitive": false, "suggested_category": "NEWS", "reason": "lý do" }
@@ -154,11 +157,14 @@ ${formattedChat}`;
     }
 
     // Reconstruct the legacy string format so index.js continues to work without changing its regex logic
-    return `${jsonObj.summary || ""}\n\n[HOT_TOPIC: ${jsonObj.hot_topic || "None"}]`;
+    const summaryText = `${jsonObj.summary || ""}\n\n[HOT_TOPIC: ${jsonObj.hot_topic || "None"}]`;
+    const coreMemory = jsonObj.core_memory || "";
+
+    return { summaryText, coreMemory };
 
   } catch (error) {
     console.error("[Gemini] Lỗi nén trí nhớ & audit:", error.message);
-    return "";
+    return { summaryText: "", coreMemory: "" };
   }
 };
 

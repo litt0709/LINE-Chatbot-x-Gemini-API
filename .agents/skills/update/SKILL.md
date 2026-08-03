@@ -17,13 +17,14 @@ Khi người dùng gõ lệnh `/update`, bạn (AI) PHẢI thực hiện đúng 
    - Phân tích các tên riêng/thực thể bị miss trong `missed_entities`.
    - Lọc và chuẩn hóa các cụm từ bế tắc trong `missed_proactive_keywords` (viết thường, loại bỏ trùng lặp).
 
-3. **Cập nhật Source Code (Update Code):**
-   - Bổ sung `audit_keywords` vào đúng cụm Regex của category tương ứng trong `functions/utils/search.js`.
-   - Bổ sung `missed_entities` vào trong lòng Regex `vnSurnamesAndEntities` trong `functions/utils/search.js`.
-   - Bổ sung `missed_link_requests` vào cụm Regex xin link (`/xin link|.../i`) ở đầu hàm `chat()` trong `functions/utils/deepseek.js`.
-   - Bổ sung `missed_topics` vào mảng `STANDALONE_TOPICS` (định dạng regex `/chủ đề/i`) trong `functions/utils/deepseek.js`.
-   - Bổ sung `missed_proactive_keywords` vào mảng hằng số `PROACTIVE_TRIGGER_WORDS` ở phía trên cùng của file `functions/index.js`.
-   - Với các câu hỏi gài bẫy prompt phát hiện được ở Bước 2, Agent tiến hành phân tích rút ra các cụm từ khóa gài bẫy cốt lõi, chuẩn hóa về dạng viết thường, không dấu và append (thêm) chúng vào tệp JSON [leak_blacklist.json](file:///Users/snow/Documents/www/LINE-Chatbot/functions/utils/leak_blacklist.json) (không được để trùng lặp trong mảng JSON).
+3. **Cập nhật Cấu hình Dynamic (Update Config):**
+   - Bổ sung các cấu hình sau thẳng vào Document `bot_config` trong collection `system_configs` trên Firestore (KHÔNG sửa file source code):
+     - Bổ sung `audit_keywords` vào đúng chuỗi Regex của category tương ứng trong trường map `search_keywords` (VD: `search_keywords.NEWS`).
+     - Bổ sung `missed_link_requests` vào chuỗi Regex trong trường `link_requests_regex`.
+     - Bổ sung `missed_topics` vào mảng `standalone_topics`.
+     - Bổ sung `missed_proactive_keywords` vào mảng `proactive_trigger_words`.
+     - Với các câu hỏi gài bẫy prompt phát hiện được ở Bước 2, phân tích rút ra các cụm từ khóa gài bẫy cốt lõi (viết thường, không dấu) và thêm vào mảng `leak_blacklist` trong `bot_config`.
+   - (Lưu ý: Luôn đọc dữ liệu hiện tại của `bot_config` trên Firestore, gộp (merge) khéo léo với dữ liệu mới, rồi mới update lại lên Firestore để tránh mất dữ liệu cũ).
    
 4. **Dọn dẹp (Cleanup - Inbox Zero):**
    - BẮT BUỘC thực thi script Node.js để xóa các trường dữ liệu `audit_keywords`, `missed_link_requests`, `missed_topics`, `missed_entities`, và `missed_proactive_keywords` đã xử lý trong các documents thuộc collection `audit_logs` trên Firestore (dùng `FieldValue.delete()`). NẾU document sau khi xóa không còn chứa dữ liệu audit nào khác (ví dụ: `audit_issues`), thì tiến hành xóa luôn Document ID đó để giữ database sạch sẽ.

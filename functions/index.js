@@ -8,6 +8,7 @@ const telegram = require("./utils/telegram");
 
 const llm = require("./utils/llm");
 const { generateDailyNewsDigest } = require("./utils/news");
+const { getBotConfig } = require("./utils/configCache");
 
 let cachedTgParticipants = null;
 let cachedLineParticipants = null;
@@ -23,7 +24,7 @@ const userFactsIndexCache = new Map(); // key: userId/groupId -> { data: {...}, 
 // Smart Group Chat Caches & Config
 const focusModeCache = new Map(); // key: chatId -> { userId, expiresAt }
 const proactiveRateLimitCache = new Map(); // key: chatId -> nextAllowedTimestamp
-const PROACTIVE_TRIGGER_WORDS = ["ai biết", "làm sao", "lỗi gì", "bug", "không chạy", "có cách nào", "bác nào", "mọi người", "xin ý kiến", "chịu", "rén", "hơi thọt", "rủi ro", "không hiểu", "giúp với", "chỉ dùm", "bế tắc", "cần hỗ trợ", "🆘🆘", "khó mà", "rủi ro cao", "ko thoải mái", "không có lương hưu", "ủa sao k trả lời", "cách nào hiệu quả hơn", "để bọn anh cải thiện", "nâng cấp sửa các lỗ hổng", "ngất rồi à", "cần bỏ qua lịch sử chát", "cái gì thế này", "không hiểu", "giúp với", "làm sao để", "có nên"];
+// PROACTIVE_TRIGGER_WORDS is now fetched from botConfig
 
 // Cấu hình Cache Idempotency chống lặp retry webhook
 const processedWebhooks = new Set();
@@ -502,6 +503,43 @@ const processAndExtractProfile = async (text, senderId, participants = {}, sessi
     .replace(/\n{3,}/g, "\n\n")
     .replace(/["']?\s*\/>/g, "") // Dọn dẹp rác " /> do LLM sinh lỗi cú pháp thẻ XML
     .trim();
+
+  // Bắt tag <RULE> (Phase 4: Self-Reflection)
+  const ruleRegex = /<RULE\s+([^>]*)\/?>(.*?)<\/RULE>|<RULE\s+([^>]*)\/?>(.*?)$|<RULE\s+([^>]*)\/>/gi;
+  let ruleMatch;
+  while ((ruleMatch = ruleRegex.exec(text)) !== null) {
+    const attrStr = ruleMatch[1] || ruleMatch[3] || ruleMatch[5] || "";
+    const getAttr = (name) => {
+      const r = new RegExp(`${name}=["']([^"']*)["']`, "i");
+      const m = attrStr.match(r);
+      return m ? m[1] : null;
+    };
+    const action = (getAttr("action") || "").toUpperCase();
+    let ruleContent = getAttr("rule") || ruleMatch[2] || ruleMatch[4] || "";
+    ruleContent = ruleContent.trim();
+    
+    if (action === "ADD" && ruleContent) {
+      cleanedText = cleanedText.replace(ruleMatch[0], "");
+      try {
+        const sessionRef = db.collection("users").doc(sessionId || senderId);
+        const sessionDoc = await sessionRef.get();
+        let rules = [];
+        if (sessionDoc.exists) {
+           const data = sessionDoc.data();
+           rules = data.rules || [];
+        }
+        if (!rules.includes(ruleContent)) {
+           rules.push(ruleContent);
+           if (rules.length > 20) rules = rules.slice(rules.length - 20); // Giới hạn 20 luật để không phình to DB
+           await sessionRef.set({ rules: rules }, { merge: true });
+           console.log(`[Self-Reflection] Đã thêm luật mới: ${ruleContent}`);
+        }
+      } catch (e) {
+        console.error("[Self-Reflection] Lỗi lưu rule:", e.message);
+      }
+    }
+  }
+
   return { text: cleanedText, topic, reaction };
 };
 
@@ -694,6 +732,8 @@ exports.webhook = onRequest({
 
   if (req.method !== "POST") return res.status(405).send("Method Not Allowed");
 
+  const botConfig = await getBotConfig();
+
   // ── TELEGRAM ──────────────────────────────────────────────────────────────
   if (isTelegram) {
     if (req.body && req.body.update_id) {
@@ -863,7 +903,7 @@ exports.webhook = onRequest({
 
     // --- Smart Group Chat: Proactive Intervention ---
     if (chatType !== "private" && !isDirectlyTargeted && !isImplicitlyTargeted && messageContent) {
-      const hasTrigger = messageContent.length > 10 && PROACTIVE_TRIGGER_WORDS.some(w => messageContent.toLowerCase().includes(w));
+      const hasTrigger = messageContent.length > 10 && (botConfig.proactive_trigger_words || []).some(w => messageContent.toLowerCase().includes(w));
       if (hasTrigger) {
         const nextAllowed = proactiveRateLimitCache.get(String(chatId)) || 0;
         if (Date.now() >= nextAllowed) {
@@ -1570,14 +1610,19 @@ exports.masterScheduler = onSchedule({
         }
 
         console.log(`[Cleanup] Đang tóm tắt ${rawMessages.length} tin nhắn thô cho session: ${sessionId}`);
-        const summaryText = await llm.summarizeHistory(rawMessages, sessionId);
+        const { summaryText, coreMemory } = await llm.summarizeHistory(rawMessages, sessionId, sessionData.Core_Memory || "");
 
-        if (summaryText) {
-          summaries.push({
-            text: summaryText,
-            createdAt: new Date().toISOString()
-          });
-          updateData.summaries = summaries;
+        if (summaryText || coreMemory) {
+          if (summaryText) {
+            summaries.push({
+              text: summaryText,
+              createdAt: new Date().toISOString()
+            });
+            updateData.summaries = summaries;
+          }
+          if (coreMemory) {
+            updateData.Core_Memory = coreMemory;
+          }
 
           await clearRawMessages(sessionId);
           await rtdb.ref(`chats/${sessionId}/metadata/last_links`).remove().catch(() => { });

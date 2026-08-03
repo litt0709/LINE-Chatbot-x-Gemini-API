@@ -1,6 +1,7 @@
 const axios = require("axios");
 const { db, FieldValue, getUserProfile, getRawMessages } = require("./db");
 const { resolveWebContext } = require("./search");
+const { getBotConfig } = require("./configCache");
 
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
@@ -133,8 +134,12 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
     return buildTimeReply();
   }
 
+  const botConfig = await getBotConfig();
+  const linkRequestsRegexStr = botConfig.link_requests_regex || "xin link|cho link|gửi link|địa chỉ|url|link|cho xin|ở đâu|trang nào";
+  const LINK_REQUEST_REGEX = new RegExp(linkRequestsRegexStr, "i");
+
   // ★ Fast path: Xin link
-  if (/xin link|nguồn đâu|link đâu|cho xin nguồn|xin nguồn|xin cho link|share tôi link|xin link github|trang nào tải ebook giống libgen|giống libgen k nhie|cho xin link vụ ông nguyễn bá dương bị tuyên phạt nào|nguồn 1,2,3 là gì\?|cho xin đường dẫn bài báo|lấy ở đâu ra đó|có full k sếp|tài liệu về|nguồn thông tin về|công cụ\/dịch vụ|trang nào phim chuẩn|lấy thông tin đó ở đâu|nguồn ở đâu|phân tích chi tiết về/i.test(cleanPrompt)) {
+  if (LINK_REQUEST_REGEX.test(cleanPrompt)) {
     console.log(`[DeepSeek] Fast path: Xin link nguồn`);
     const linksSnap = await require("./db").rtdb.ref(`chats/${sessionId}/metadata/last_links`).once("value");
     if (linksSnap.exists() && Array.isArray(linksSnap.val()) && linksSnap.val().length > 0) {
@@ -190,73 +195,45 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   const messagesArray = await getRawMessages(sessionId, 25);
   const history = [];
 
-  // Chỉ đọc Firestore summaries khi sếp hỏi tóm tắt có chỉ định thời gian
-  if (isTimeRangeSummaryRequest(prompt)) {
-    try {
-      const sessionRef = db.collection("users").doc(sessionId);
-      const sessionDoc = await sessionRef.get();
-      if (sessionDoc.exists) {
-        const sessionData = sessionDoc.data() || {};
+  let coreMemoryText = "";
+  try {
+    const sessionRef = db.collection("users").doc(sessionId);
+    const sessionDoc = await sessionRef.get();
+    if (sessionDoc.exists) {
+      const sessionData = sessionDoc.data() || {};
+      
+      // Inject Core_Memory if exists
+      
+      if (sessionData.rules && sessionData.rules.length > 0) {
+        coreMemoryText += "\n[LUẬT ĐƯỢC USER DẠY (BẮT BUỘC TUÂN THỦ)]:\n- " + sessionData.rules.join("\n- ") + "\n";
+      }
+
+      if (sessionData.Core_Memory) {
+        coreMemoryText = "\n[TÓM TẮT CỐT LÕI (CORE MEMORY)]:\n" + sessionData.Core_Memory + "\n";
+      }
+
+      // Chỉ đọc Firestore summaries (mảng cũ) khi sếp hỏi tóm tắt có chỉ định thời gian
+      if (isTimeRangeSummaryRequest(prompt)) {
         const summariesArray = sessionData.summaries || [];
         const filteredSummaries = filterSummariesByIntent(summariesArray, prompt);
-
         if (filteredSummaries.length > 0) {
           history.push({
-            role: "system",
-            content: `[BỘ NHỚ DÀI HẠN (TÓM TẮT CÁC SỰ KIỆN TRƯỚC ĐÓ)]:\n${filteredSummaries.join("\n\n")}`
+            role: "model",
+            text: "[TÓM TẮT LỊCH SỬ CŨ TỪ HỆ THỐNG]:\n" + filteredSummaries.join("\n\n") + "\n[HẾT TÓM TẮT]"
           });
+          console.log(`[DeepSeek] Đã bơm ${filteredSummaries.length} summaries vào prompt.`);
         }
       }
-    } catch (err) {
-      console.error("[Firestore] Lỗi đọc summaries cho prompt:", err.message);
     }
+  } catch (e) {
+    console.error("[DeepSeek] Lỗi đọc Firestore data:", e.message);
   }
 
-  // Thuật toán gộp các tin nhắn liên tiếp của cùng một sender để tối ưu hóa tokens
-  const mergedMessages = [];
-  messagesArray.forEach(msg => {
-    const lastMsg = mergedMessages[mergedMessages.length - 1];
-    const isSameSender = lastMsg && lastMsg.role === msg.role &&
-      (msg.role === "model" || lastMsg.senderId === msg.senderId);
-
-    if (isSameSender) {
-      lastMsg.text += ` | ${msg.text}`;
-    } else {
-      mergedMessages.push({ ...msg });
-    }
-  });
-
-  // Tải các tin nhắn đã được gộp gọn gàng vào prompt
-  mergedMessages.forEach(msg => {
-    const { role, text, senderName: name } = msg;
-    const apiRole = role === "model" ? "assistant" : role;
-    const content = apiRole === "user" ? `[${name || "User"}]: ${text}` : text;
-    history.push({ role: apiRole, content });
-  });
-
-  // 2. Lấy ngữ cảnh web (scrape URL hoặc Tavily search nếu cần)
-  let webContext = "";
-  try {
-    let searchPrompt = quoteContext ? `${quoteContext}${prompt}` : prompt;
-
-    // ─── Phát hiện "đổi chủ đề đột ngột" (Topic Switch Detection) ─────────────
-    // Các chủ đề có domain search riêng, KHÔNG liên quan bóng đá/tin tức chung
-    const STANDALONE_TOPICS = [
-      /thời tiết/i, /nhiệt độ/i, /mưa.*hôm nay/i, /nắng.*hôm nay/i,
-      /giá vàng/i, /vàng sjc/i, /giá xăng/i, /tỷ giá/i, /tỷ giá usd/i,
-      /kqxs/i, /xổ số/i, /kết quả xổ số/i,
-      /điểm thi/i, /tra cứu điểm/i,
-      /giá đô/i, /bitcoin/i, /crypto/i,
-      /chứng khoán/i, /cổ phiếu/i,
-      /giảm phát|thị trường nhà|evergrande/i, /agentic ai|reinforcement learning|rl/i, /cờ bạc|martingale|gấp thếp/i, /phân tích roi|tài chính cá nhân|đầu tư mạo hiểm/i,
-      /bầu cử/i, /tổng thống/i,
-      /bot k râu nhí/i,
-      /copa/i, /euro/i, /world cup/i, /bóng đá/i,
-      /nguồn ebook/i, /công cụ dịch thuật/i, /chi phí api\/token/i, /trung tâm dữ liệu tier-3/i, /giá linh kiện máy tính/i, /kiểm tra an ninh mạng doanh nghiệp/i, /tham nhũng/i, /vấn đề xã hội việt nam/i, /thực tiễn phát triển ai/i, /đạo đức ai/i, /lừa đảo trực tuyến mới/i, /chính sách sở hữu chung cư/i, /tác động xã hội của ai/i, /chính trị kinh doanh/i, /chính sách đối ngoại/i, /luật nhà ở/i, /ứng dụng ai dịch thuật/i, /vấn đề bản quyền/i, /lịch sử thất bại của doanh nghiệp nhà nước việt nam \(vinashin, vinaline\)/i, /lịch sử hình thành và phát triển của hanoi telecom/i, /đầu tư vào công ty vệ tinh ở úc/i, /bàn phím cơ/i, /chính sách thu hút nhân tài \(liên quan tô lâm\/hưng\)/i, /pháp luật an ninh mạng/i, /tội phạm công nghệ cao/i, /artificial intelligence \(ai\)/i, /automation/i, /quy định giao dịch tài chính/i, /phát triển\/code ai/i, /dịch thuật sách bằng ai/i, /tìm kiếm\/mua truyện ebook \(epub\)/i, /bot k râu nhí \(context nội bộ\/người dùng\)/i, /chứng khoán quốc tế/i, /ai agents/i, /sách về ai/i, /chiến lược phát triển kinh tế trung quốc/i, /so sánh hệ tư tưởng kinh doanh á-âu/i, /tác động của phân hóa giàu nghèo đến xã hội/i, /cạnh tranh công nghệ ai giữa trung quốc và mỹ/i, /hệ thống tư pháp/i, /minh bạch tư pháp/i, /quy trình điều tra/i, /vai trò của viện kiểm sát/i, /giá trị mạng người/i, /luật bồi thường/i, /chiếm dụng vốn/i, /lừa đảo tài chính/i, /mạng điều khiển công nghiệp/i, /giao thức hàng hải/i, /quy hoạch giao thông quốc gia/i, /hạ tầng đô thị/i, /lừa đảo qua chatbot\/telegram bot/i, /kinh tế trải nghiệm và giá trị thương hiệu/i, /tuân thủ bản quyền phần mềm doanh nghiệp/i, /tự chế sản phẩm theo ý muốn/i, /chính sách công nghiệp/i, /đổi mới sáng tạo trong doanh nghiệp nhà nước/i, /mô hình kinh tế trung quốc/i, /so sánh năng lực cạnh tranh quốc gia/i, /hiện tượng fan hâm mộ và lòng trung thành/i, /bình luận xã hội về các nhóm 'zalo 9 họ'/i, /mã chứng khoán/i, /tài chính/i, /lãi suất/i, /tiền ảo/i,
-      /xử lý video bằng ai/i, /chuyển đổi video sang văn bản/i, /chi phí vận hành mô hình ai lớn/i, /xử lý audio thành text/i, /giải mã\/xác thực mã định danh/i, /api test fact interpretation/i, /vụ việc pháp lý nhân vật công chúng/i, /tin tức về fpt/i, /hệ thống tín nhiệm xã hội/i, /chính sách quản trị quốc gia/i, /chính sách nhập cư/i, /bảo mật dữ liệu chatbot/i, /lịch sử phát triển ngành công nghệ\/viễn thông việt nam/i, /triết lý về sở hữu đất đai và quyền cá nhân/i, /tác động của chính sách quy hoạch đô thị lên đời sống dân cư/i, /tiểu thuyết mạng trung quốc/i, /chuyển thể hoạt hình/i, /địa chính trị/i, /tự chủ công nghệ/i, /chuỗi cung ứng bán dẫn/i, /lô đề/i,
-      /Nghị quyết 19/i, /kinh tế dựa trên tri thức/i, /tự chủ chiến lược/i, /sân bay Long Thành/i, /luật bảo vệ động vật/i, /thị trường AI/i, /Moonshot AI/i, /rạp chiếu phim/i, /CGV ghế nằm/i, /Line OA outage/i, /tiền kỹ thuật số quốc gia/i, /bitcoin/i, /thành công doanh nhân trẻ/i, /ngành vận tải biển/i, /văn hóa nhậu/i
-    ];
-    const isStandaloneTopic = STANDALONE_TOPICS.some(r => r.test(prompt));
+  // ─── Phát hiện "đổi chủ đề đột ngột" (Topic Switch Detection) ─────────────
+  let isStandaloneTopic = false;
+  if (botConfig.standalone_topics && botConfig.standalone_topics.length > 0) {
+    isStandaloneTopic = botConfig.standalone_topics.some(t => new RegExp(t, "i").test(prompt));
+  }
 
     let contextualSearchPrompt = searchPrompt;
     let isPreOptimized = false;
@@ -302,6 +279,7 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
       }
     }
 
+    /* DISABLED FOR ReAct:
     const searchResult = await resolveWebContext(contextualSearchPrompt, isPreOptimized, sessionId);
     webContext = searchResult.context;
     console.log(`[DeepSeek] webContext có nội dung: ${webContext ? webContext.length > 0 : false}`);
@@ -309,9 +287,8 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
     if (searchResult.urls && searchResult.urls.length > 0) {
       require("./db").rtdb.ref(`chats/${sessionId}/metadata/last_links`).set(searchResult.urls).catch(() => { });
     }
-  } catch (err) {
-    console.error("[DeepSeek] resolveWebContext lỗi:", err.message);
-  }
+    */
+
 
   // 3. Build message list
   if (quoteContext) {
@@ -358,6 +335,7 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
     sysContent += "\n\n[LƯU Ý QUAN TRỌNG]: Người dùng đang tag bot khác. Do giới hạn API, bạn KHÔNG THỂ đọc được tin nhắn của bot khác. Hãy TỰ ĐÁNH GIÁ xem người dùng CÓ ĐANG TRỰC TIẾP HỎI BẠN HAY KHÔNG. Nếu họ chỉ đang nói chuyện với bot kia và nhắc bạn ở ngôi thứ 3 (ví dụ hỏi bot kia về bạn), BẠN BẮT BUỘC trả lời chính xác bằng 1 chữ: IGNORE. Tuyệt đối không giải thích thêm. Nếu họ đang trực tiếp hỏi bạn hoặc nhờ bạn tương tác, hãy giao tiếp bình thường và khéo léo nhờ user chuyển lời giúp nếu bot kia phản hồi.";
   }
 
+  sysContent += coreMemoryText;
   history[0].content = sysContent;
 
   const messages = [
@@ -365,21 +343,93 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
     { role: "user", content: userContent }
   ];
 
-  // 4. Gọi DeepSeek API
+  // 4. Gọi DeepSeek API với Tool Calling (Budget-Constrained ReAct)
+  const tools = [
+    {
+      type: "function",
+      function: {
+        name: "google_search",
+        description: "Tìm kiếm thông tin trên Internet. Chỉ dùng khi câu hỏi về thời sự, kiến thức cần độ chính xác cao hoặc bạn thiếu dữ liệu.",
+        parameters: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "Câu truy vấn tìm kiếm ngắn gọn, ví dụ: 'giá vàng sjc hôm nay', 'bầu cử mỹ 2024'"
+            }
+          },
+          required: ["query"]
+        }
+      }
+    }
+  ];
+
+  let searchCount = 0;
+  const MAX_SEARCH_CALLS = 2; // Hard Limit 2 calls
+  let replyText = "";
+  
   try {
-    const { data } = await axios.post(
-      DEEPSEEK_URL,
-      { model: DEEPSEEK_MODEL, messages },
-      { headers: { "Content-Type": "application/json", Authorization: `Bearer ${DEEPSEEK_API_KEY}` } }
-    );
-    let replyText = data.choices[0].message.content;
+    while (true) {
+      const payload = { model: DEEPSEEK_MODEL, messages };
+      
+      // Chỉ gắn tools nếu chưa quá giới hạn và không phải là xin link (fast path heuristic)
+      if (searchCount < MAX_SEARCH_CALLS && !isPreOptimized && !isStandaloneTopic) {
+        payload.tools = tools;
+      }
+      
+      const { data } = await axios.post(
+        DEEPSEEK_URL,
+        payload,
+        { headers: { "Content-Type": "application/json", Authorization: `Bearer ${DEEPSEEK_API_KEY}` } }
+      );
+      
+      const responseMessage = data.choices[0].message;
+      
+      // Nếu có gọi tool
+      if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
+        // Append model's tool call message
+        messages.push(responseMessage);
+        
+        for (const toolCall of responseMessage.tool_calls) {
+          if (toolCall.function.name === "google_search") {
+            searchCount++;
+            let searchResult = "Em tìm không thấy.";
+            try {
+              const args = JSON.parse(toolCall.function.arguments);
+              console.log(`[DeepSeek Tool] LLM gọi search_web lần ${searchCount} với query: "${args.query}"`);
+              
+              const res = await resolveWebContext(args.query, true, sessionId);
+              if (res && res.context) {
+                 searchResult = res.context;
+                 if (res.urls && res.urls.length > 0) {
+                    require("./db").rtdb.ref(`chats/${sessionId}/metadata/last_links`).set(res.urls).catch(() => {});
+                 }
+              }
+            } catch (err) {
+              console.error("[DeepSeek Tool] Lỗi parse hoặc gọi search:", err.message);
+            }
+            
+            messages.push({
+              role: "tool",
+              tool_call_id: toolCall.id,
+              content: searchResult
+            });
+          }
+        }
+        // Gọi lại LLM với kết quả
+        continue;
+      }
+      
+      // Nếu không gọi tool, đó là câu trả lời cuối cùng
+      replyText = responseMessage.content;
+      break; // Thoát vòng lặp
+    }
 
     if (isTimeRangeSummaryRequest(prompt) || /tóm tắt|summary/i.test(cleanPrompt)) {
        replyText = replyText.replace(/[^.!?]+\?\s*$/, "").trim();
     }
 
-    console.log(`[DeepSeek] Phản hồi từ LLM: "${replyText}"`);
-
+    console.log(`[DeepSeek] Phản hồi từ LLM (với ${searchCount} lần search): "${replyText}"`);
     return replyText;
   } catch (error) {
     console.error("[DeepSeek] API Error:", error?.response?.data || error.message);
