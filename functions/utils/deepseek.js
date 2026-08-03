@@ -235,66 +235,12 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
     isStandaloneTopic = botConfig.standalone_topics.some(t => new RegExp(t, "i").test(prompt));
   }
 
-    let contextualSearchPrompt = searchPrompt;
-    let isPreOptimized = false;
-
-    if (isPostback) {
-      // Trường hợp bấm nút (Tags Option): Bỏ qua mọi heuristc lằng nhằng, dùng thẳng LLM Router
-      const lastBotMsg = postbackContext || (messagesArray.filter(m => m.role === "model").pop()?.text || hotTopic);
-      contextualSearchPrompt = await generateSmartQuery(lastBotMsg, prompt);
-      isPreOptimized = true;
-      console.log(`[DeepSeek] LLM Smart Query: "${contextualSearchPrompt}"`);
-    } else {
-      if (!isStandaloneTopic && searchPrompt.split(" ").length < 15) {
-        if (messagesArray && messagesArray.length > 0) {
-          const prevUserMsgs = messagesArray.filter(m => m.role === "user");
-          if (prevUserMsgs.length > 0) {
-            const recentUserMsgs = prevUserMsgs.slice(-4).map(m => m.text.trim());
-            let pinnedMsg = recentUserMsgs[recentUserMsgs.length - 1];
-
-            // Cơ chế Ghim chủ đề: Nếu prompt hiện tại khá ngắn (bấm Quick Reply hoặc hỏi nối)
-            if (searchPrompt.split(" ").length <= 5) {
-              // Quét ngược tìm câu hỏi gốc "nặng ký" (>= 5 từ)
-              for (let i = recentUserMsgs.length - 1; i >= 0; i--) {
-                if (recentUserMsgs[i].split(" ").length >= 5) {
-                  pinnedMsg = recentUserMsgs[i];
-                  break;
-                }
-              }
-            }
-
-            // Tránh duplicate: chỉ bù đắp nếu câu ghim khác hẳn prompt hiện tại
-            const isSameAsCurrentPrompt = pinnedMsg.toLowerCase() === searchPrompt.trim().toLowerCase();
-            if (!isSameAsCurrentPrompt) {
-              contextualSearchPrompt = `${hotTopic ? hotTopic + ". " : ""}${pinnedMsg}. ${searchPrompt}`;
-              console.log(`[DeepSeek] Bù đắp ngữ cảnh (Ghim động): "${contextualSearchPrompt}"`);
-            }
-          }
-        } else if (hotTopic) {
-          contextualSearchPrompt = `${hotTopic}. ${searchPrompt}`;
-          console.log(`[DeepSeek] Bù đắp ngữ cảnh (Tầng 2): "${contextualSearchPrompt}"`);
-        }
-      } else if (isStandaloneTopic) {
-        console.log(`[DeepSeek] Phát hiện đổi chủ đề đột ngột → BỎ QUA bù đắp ngữ cảnh: "${prompt}"`);
-      }
-    }
-
-    /* DISABLED FOR ReAct:
-    const searchResult = await resolveWebContext(contextualSearchPrompt, isPreOptimized, sessionId);
-    webContext = searchResult.context;
-    console.log(`[DeepSeek] webContext có nội dung: ${webContext ? webContext.length > 0 : false}`);
-
-    if (searchResult.urls && searchResult.urls.length > 0) {
-      require("./db").rtdb.ref(`chats/${sessionId}/metadata/last_links`).set(searchResult.urls).catch(() => { });
-    }
-    */
-
-
   // 3. Build message list
   if (quoteContext) {
     history.push({ role: "system", content: quoteContext.trim() });
   }
 
+  let webContext = "";
   // Xử lý chặn Hallucination & Tương tác lỗi bằng logic code (dynamic constraints)
   let guardrails = "";
   if (isTimeRangeSummaryRequest(prompt) || /tóm tắt|summary/i.test(cleanPrompt)) {
@@ -303,10 +249,7 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   if (/(doanh thu|lợi nhuận|chi phí|đầu tư|tài chính|kinh doanh|vốn)/i.test(cleanPrompt)) {
     guardrails += " [SYSTEM: Ước tính tài chính phải khách quan, thực tế, tính đủ chi phí ẩn, CẤM bịa số liệu lạc quan vô căn cứ.]";
   }
-  if (/(tin tức|bài báo|vụ án|sự kiện|xã hội|lỗi|sập|outage|bảo trì|fact check|kiểm chứng)/i.test(cleanPrompt) && !webContext) {
-    console.log("[Code Logic] Chặn LLM do thiếu webContext cho câu hỏi thời sự");
-    return "Dạ hiện tại em không tìm thấy thông tin chính xác trên mạng về vấn đề này ạ. Cần thêm từ khóa để em tra cứu lại nha 😔";
-  }
+  if (false) { }
   if (/(https?:\/\/[^\s"'>\]]+)/i.test(prompt)) {
     const hasUrlContent = webContext && webContext.includes("[NỘI DUNG URL NGƯỜI DÙNG GỬI ĐẾN]");
     const hasInternetInfo = webContext && webContext.includes("[THÔNG TIN TỪ INTERNET]");
@@ -373,7 +316,7 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
       const payload = { model: DEEPSEEK_MODEL, messages };
       
       // Chỉ gắn tools nếu chưa quá giới hạn và không phải là xin link (fast path heuristic)
-      if (searchCount < MAX_SEARCH_CALLS && !isPreOptimized && !isStandaloneTopic) {
+      if (searchCount < MAX_SEARCH_CALLS && !isStandaloneTopic) {
         payload.tools = tools;
       }
       
