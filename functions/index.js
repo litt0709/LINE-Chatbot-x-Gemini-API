@@ -548,17 +548,12 @@ const processAndExtractProfile = async (text, senderId, participants = {}, sessi
  * @param {string} sessionId
  */
 const clearSessionHistory = async (sessionId) => {
-  // 1. Xóa Bộ nhớ dài hạn (summaries) ở Document cha
+  // 1. Xóa toàn bộ Document cha trên Firestore
   try {
-    await db.collection("users").doc(sessionId).update({
-      summaries: FieldValue.delete(),
-      hotTopic: FieldValue.delete()
-    }).catch(err => {
-      if (err.code !== 5) throw err;
-    });
-    console.log(`[Firestore] Đã xóa summaries ở document cha: ${sessionId}`);
+    await db.collection("users").doc(sessionId).delete();
+    console.log(`[Firestore] Đã xóa document cha: ${sessionId}`);
   } catch (error) {
-    console.error(`[Reset Session] Lỗi xóa summaries ${sessionId}:`, error.message);
+    console.error(`[Reset Session] Lỗi xóa document ${sessionId}:`, error.message);
   }
 
   // 2. Xóa RTDB Raw Messages
@@ -1573,6 +1568,13 @@ exports.masterScheduler = onSchedule({
     await sendNotifications("afternoon");
   }
 
+  // Tiến hoá vô hạn (Infinite Evolution Framework): 3:00 AM
+  if (hour === 3 && minute < 5) {
+    console.log("[Scheduler] Kích hoạt Tiến hóa Vô hạn");
+    const { runDailyEvolution } = require("./utils/evolution");
+    await runDailyEvolution();
+  }
+
   // 3. Dọn dẹp Lịch sử (Memory Compression): Chạy mỗi 4 tiếng (0, 4, 8, 12, 16, 20) lúc đầu giờ
   if (hour % 4 === 0 && minute < 5) {
     console.log("[Scheduler] Kích hoạt Dọn dẹp Ký Ức (Mỗi 4 tiếng)");
@@ -1610,9 +1612,9 @@ exports.masterScheduler = onSchedule({
         }
 
         console.log(`[Cleanup] Đang tóm tắt ${rawMessages.length} tin nhắn thô cho session: ${sessionId}`);
-        const { summaryText, coreMemory } = await llm.summarizeHistory(rawMessages, sessionId, sessionData.Core_Memory || "");
+        const { summaryText, coreMemory, psychologicalProfile } = await llm.summarizeHistory(rawMessages, sessionId, sessionData.Core_Memory || "");
 
-        if (summaryText || coreMemory) {
+        if (summaryText || coreMemory || psychologicalProfile) {
           if (summaryText) {
             summaries.push({
               text: summaryText,
@@ -1622,6 +1624,9 @@ exports.masterScheduler = onSchedule({
           }
           if (coreMemory) {
             updateData.Core_Memory = coreMemory;
+          }
+          if (psychologicalProfile) {
+            updateData.psychological_profile = psychologicalProfile;
           }
 
           await clearRawMessages(sessionId);
