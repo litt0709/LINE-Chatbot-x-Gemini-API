@@ -253,6 +253,23 @@ const editMessageText = async (chatId, messageId, text) => {
   }
 };
 
-module.exports = { reply, getImageBinary, downloadMessageFile, leaveChat, push: reply, editMessageReplyMarkup, setMessageReaction, sendInlineMarkup, editMessageText };
+/**
+ * Gửi hành động chat (ví dụ: typing) để báo hiệu bot đang xử lý.
+ * @param {number|string} chatId 
+ * @param {string} action Hành động (mặc định 'typing')
+ */
+const sendChatAction = async (chatId, action = "typing") => {
+  if (!TELEGRAM_TOKEN) return;
+  try {
+    await axios.post(`${TELEGRAM_BASE_URL}/sendChatAction`, {
+      chat_id: chatId,
+      action: action
+    });
+  } catch (error) {
+    console.error("[Telegram] Lỗi sendChatAction:", error?.response?.data || error.message);
+  }
+};
+
+module.exports = { reply, getImageBinary, downloadMessageFile, leaveChat, push: reply, editMessageReplyMarkup, setMessageReaction, sendInlineMarkup, editMessageText, sendChatAction };
 
 

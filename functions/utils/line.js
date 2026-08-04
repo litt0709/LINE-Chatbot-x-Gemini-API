@@ -120,4 +120,24 @@ const downloadMessageFile = async (messageId, fileName) => {
   return localPath;
 };
 
-module.exports = { getImageBinary, downloadMessageFile, reply, getUserProfile, push };
+/**
+ * Hiển thị biểu tượng đang gõ (loading animation) trên LINE.
+ * @param {string} chatId - ID của user/group/room
+ * @param {number} loadingSeconds - Số giây hiển thị (mặc định 5s, tối đa 60s)
+ */
+const showLoadingAnimation = async (chatId, loadingSeconds = 5) => {
+  try {
+    await axios.post(
+      "https://api.line.me/v2/bot/chat/loading/start",
+      {
+        chatId: chatId,
+        loadingSeconds: loadingSeconds
+      },
+      { headers: LINE_HEADER }
+    );
+  } catch (error) {
+    console.error("[LINE] Lỗi showLoadingAnimation:", error?.response?.data || error.message);
+  }
+};
+
+module.exports = { getImageBinary, downloadMessageFile, reply, getUserProfile, push, showLoadingAnimation };

@@ -6,6 +6,21 @@ const { db, rtdb, FieldValue, appendRawMessage, getRawMessages, clearRawMessages
 const line = require("./utils/line");
 const telegram = require("./utils/telegram");
 
+// ─── EQ Empathy Analysis (Phase 7) ─────────────
+const analyzeEmotion = (text) => {
+  if (/(😭|😢|😔|😞|💔|khóc|buồn|sad|cry|thất vọng)/i.test(text)) return "negative";
+  if (/(😡|🤬|😤|tức|giận|mad|angry)/i.test(text)) return "angry";
+  if (/(😍|🥰|😂|🤣|vui|cười|haha|happy|love|tuyệt)/i.test(text)) return "positive";
+  return "neutral";
+};
+const getEmotionSystemPrompt = (emotion) => {
+  if (emotion === "negative") return " [SYSTEM ALERT: Người dùng đang có cảm xúc tiêu cực/buồn bã. Bot cần phản hồi cực kỳ ân cần, thấu cảm, TUYỆT ĐỐI KHÔNG đùa cợt.]";
+  if (emotion === "angry") return " [SYSTEM ALERT: Người dùng đang tức giận. Bot cần phản hồi bình tĩnh, xoa dịu, xin lỗi nếu cần.]";
+  if (emotion === "positive") return " [SYSTEM ALERT: Người dùng đang vui vẻ. Bot có thể đùa vui hoặc hùa theo.]";
+  return "";
+};
+// ──────────────────────────────────────────────
+
 const llm = require("./utils/llm");
 const { generateDailyNewsDigest } = require("./utils/news");
 const { getBotConfig } = require("./utils/configCache");
@@ -867,7 +882,9 @@ exports.webhook = onRequest({
 
     if (!messageContent && message.sticker) {
        const emoji = message.sticker.emoji || "";
-       messageContent = `[Người dùng vừa gửi một Sticker thể hiện cảm xúc: ${emoji}]`.trim();
+       const emotion = analyzeEmotion(emoji);
+       const emotionStr = getEmotionSystemPrompt(emotion);
+       messageContent = `[Người dùng vừa gửi một Sticker thể hiện cảm xúc: ${emoji}]${emotionStr}`.trim();
     }
 
     if (messageContent && messageContent.trim() === "/start") {
@@ -1254,7 +1271,9 @@ exports.webhook = onRequest({
         messageContent = event.message.text;
       } else if (event.message?.type === "sticker") {
         const keywords = event.message.keywords ? event.message.keywords.join(", ") : "";
-        messageContent = `[Người dùng vừa gửi một Sticker biểu cảm: ${keywords}]`.trim();
+        const emotion = analyzeEmotion(keywords);
+        const emotionStr = getEmotionSystemPrompt(emotion);
+        messageContent = `[Người dùng vừa gửi một Sticker biểu cảm: ${keywords}]${emotionStr}`.trim();
       } else if (event.message?.type === "image") {
         const sessionId = event.source.groupId || event.source.roomId || userId;
         const sessionData = await getSessionMetadata(sessionId);
@@ -1671,9 +1690,9 @@ exports.masterScheduler = onSchedule({
         }
 
         console.log(`[Cleanup] Đang tóm tắt ${rawMessages.length} tin nhắn thô cho session: ${sessionId}`);
-        const { summaryText, coreMemory, psychologicalProfile } = await llm.summarizeHistory(rawMessages, sessionId, sessionData.Core_Memory || "");
+        const { summaryText, coreMemory, psychologicalProfile, dynamicRules, hotTopic } = await llm.summarizeHistory(rawMessages, sessionId, sessionData.Core_Memory || "");
 
-        if (summaryText || coreMemory || psychologicalProfile) {
+        if (summaryText || coreMemory || psychologicalProfile || dynamicRules || hotTopic) {
           if (summaryText) {
             summaries.push({
               text: summaryText,
@@ -1686,6 +1705,12 @@ exports.masterScheduler = onSchedule({
           }
           if (psychologicalProfile) {
             updateData.psychological_profile = psychologicalProfile;
+          }
+          if (dynamicRules && dynamicRules.length > 0) {
+            updateData.Dynamic_Rules = dynamicRules;
+          }
+          if (hotTopic && hotTopic !== "None") {
+            updateData.hotTopic = hotTopic;
           }
 
           await clearRawMessages(sessionId);

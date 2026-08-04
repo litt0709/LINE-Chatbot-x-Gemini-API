@@ -226,12 +226,14 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
       
       // Inject Core_Memory if exists
       
-      if (sessionData.rules && sessionData.rules.length > 0) {
-        coreMemoryText += "\n[LUẬT ĐƯỢC USER DẠY (BẮT BUỘC TUÂN THỦ)]:\n- " + sessionData.rules.join("\n- ") + "\n";
+      const dynamicRules = sessionData.Dynamic_Rules || sessionData.rules || [];
+      if (dynamicRules.length > 0) {
+        coreMemoryText += "\n[LUẬT ĐƯỢC USER DẠY (BẮT BUỘC TUÂN THỦ)]:\n- " + dynamicRules.join("\n- ") + "\n";
       }
 
       if (sessionData.Core_Memory) {
-        coreMemoryText = "\n[TÓM TẮT CỐT LÕI (CORE MEMORY)]:\n" + sessionData.Core_Memory + "\n";
+        let cmStr = typeof sessionData.Core_Memory === "object" ? JSON.stringify(sessionData.Core_Memory, null, 2) : sessionData.Core_Memory;
+        coreMemoryText += "\n[TÓM TẮT CỐT LÕI (CORE MEMORY)]:\n" + cmStr + "\n";
       }
 
       // Chỉ đọc Firestore summaries (mảng cũ) khi sếp hỏi tóm tắt có chỉ định thời gian
@@ -334,6 +336,15 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   const MAX_SEARCH_CALLS = 2; // Hard Limit 2 calls
   let replyText = "";
   
+  // ─── Dual-Process Classifier (System 1 vs System 2) ─────────────
+  let targetModel = DEEPSEEK_MODEL;
+  const complexPatterns = [/tại sao/i, /nguyên nhân/i, /phân tích/i, /so sánh/i, /kế hoạch/i, /chiến lược/i, /kiến trúc/i, /code/i, /debug/i, /thuật toán/i];
+  const isComplex = complexPatterns.some(p => p.test(prompt)) || prompt.length > 300;
+  if (isComplex && targetModel.includes("flash")) {
+    targetModel = "deepseek-v4-reasoner";
+    console.log(`[Dual-Process] Câu hỏi phức tạp. Định tuyến sang System 2: ${targetModel}`);
+  }
+  
   try {
     while (true) {
       
@@ -344,7 +355,7 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
           m.role = "assistant";
         }
       });
-      const payload = { model: DEEPSEEK_MODEL, messages };
+      const payload = { model: targetModel, messages };
       
       // Chỉ gắn tools nếu chưa quá giới hạn và không phải là xin link (fast path heuristic)
       if (searchCount < MAX_SEARCH_CALLS && !isStandaloneTopic) {

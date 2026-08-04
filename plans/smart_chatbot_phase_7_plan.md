@@ -34,8 +34,8 @@
 **Chuẩn SOTA 2026**: Decoupling (Phân tách) luồng tư duy nhanh (System 1) và tư duy sâu (System 2).
 
 **Đề xuất giải pháp**:
-- **System 1 (Fast Routing)**: Xử lý 90% hội thoại thông thường (chào hỏi, phiếm luận, hỏi đáp ngắn). Dùng `deepseek-chat` / `gemini-2.5-flash` với prompt cực ngắn gọn để đạt tốc độ phản hồi tức thì và chi phí tiệm cận 0.
-- **System 2 (Deep Reasoning)**: Khi phát hiện câu hỏi mang tính lập kế hoạch, hỏi phân tích chuyên sâu, hoặc user đang gặp vấn đề tâm lý phức tạp, hệ thống tự động switch sang model có khả năng Chain-of-Thought (như `deepseek-reasoner` / `R1`).
+- **System 1 (Fast Routing)**: Xử lý 90% hội thoại thông thường (chào hỏi, phiếm luận, hỏi đáp ngắn). Dùng `deepseek-v4-flash` / `gemini-3.0-flash` với prompt cực ngắn gọn để đạt tốc độ phản hồi tức thì và chi phí tiệm cận 0.
+- **System 2 (Deep Reasoning)**: Khi phát hiện câu hỏi mang tính phân tích chuyên sâu, lập kế hoạch, hoặc có tâm trạng phức tạp, hệ thống tự động switch sang model có khả năng Chain-of-Thought (như `deepseek-v4-reasoner` / `R2`).
 - **Thực thi**: Xây dựng một Classifier rất nhẹ ở Gateway (hoặc Regex pattern) để quyết định sẽ định tuyến câu hỏi vào System 1 hay System 2.
 
 ## 4. Phân tích Mạch ngầm Cảm xúc & EQ (Empathy Sub-text Analysis)

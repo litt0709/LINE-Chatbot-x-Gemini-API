@@ -82,8 +82,8 @@ const summarizeHistory = async (messages, sessionId = "unknown", oldMemory = "")
   
   const prompt = `Đây là lịch sử chat của nhóm. Nhiệm vụ của bạn:
 1. Tóm tắt ngắn gọn các sự kiện chính dưới 1000 chữ. BẮT BUỘC format rõ ràng: dùng ký tự \\n để ngắt dòng, phân các ý bằng gạch đầu dòng (-) hoặc emoji (📌, 👉), và bôi đậm ý chính bằng **text**.
-2. Tóm lược Cốt lõi (Rolling Summary): Viết đúng 3-4 câu ngắn gọn tóm tắt về thói quen, sở thích, thông tin cá nhân và bối cảnh gần đây nhất của user trong phiên chat. Nếu có bộ nhớ cũ (oldMemory), hãy kết hợp thông minh giữa cũ và mới để không bị mất thông tin quan trọng.
-- Bộ nhớ cũ (oldMemory): "${oldMemory}"
+2. Tóm lược Cốt lõi (Rolling Summary): Trích xuất thành JSON cấu trúc thông tin về thói quen, sở thích, thông tin cá nhân và bối cảnh gần đây nhất của user trong phiên chat. Trích xuất cả các rules mà người dùng trực tiếp dạy bot (VD: "Từ nay gọi anh là Sếp", "Đừng nói nhiều nữa").
+- Bộ nhớ cũ (oldMemory): "${typeof oldMemory === 'object' ? JSON.stringify(oldMemory) : oldMemory}"
 3. Hồ sơ Tâm lý (Psychological Profile): Trích xuất 1-2 câu ngắn gọn phân tích tâm lý, tính cách, quan điểm sống, hoặc thái độ giao tiếp của user.
 4. Xác định 01 chủ đề NỔI BẬT NHẤT (VD: World Cup 2026). Nếu không rõ, ghi "None".
 3. Phân tích Audit Keywords: Tìm các từ khóa tìm kiếm user dùng mà hệ thống có thể cần. Đánh giá xem nó có phải sự kiện trong ngày (is_today_sensitive) và phân loại vào (NEWS/FINANCE/DEV/SOCIAL/GENERAL).
@@ -95,8 +95,12 @@ const summarizeHistory = async (messages, sessionId = "unknown", oldMemory = "")
 BẮT BUỘC TRẢ VỀ ĐÚNG ĐỊNH DẠNG JSON SAU (chỉ chứa JSON, được phép dùng \\n và dấu gạch ngang bên trong chuỗi string):
 {
   "summary": "Nội dung tóm tắt...\\n- 📌 **Sự kiện 1:** ...\\n- 👉 **Sự kiện 2:** ...",
-  "core_memory": "User A thích ăn bún bò, đi ngủ lúc 11h, hôm qua vừa bị sếp mắng...",
+  "core_memory": {
+    "user_preferences": ["Thích ăn bún bò", "Đi ngủ lúc 11h"],
+    "relational_facts": ["Hôm qua bị sếp mắng"]
+  },
   "psychological_profile": "User A là người thực tế, thích nói chuyện thẳng thắn...",
+  "dynamic_rules": ["Từ nay gọi là Sếp", "Báo giá ngắn gọn"],
   "hot_topic": "World Cup 2026",
   "audit_keywords": [
     { "word": "từ khóa", "is_today_sensitive": false, "suggested_category": "NEWS", "reason": "lý do" }
@@ -158,13 +162,21 @@ ${formattedChat}`;
       console.error("[Audit Log] Lỗi ghi DB:", dbErr.message);
     }
 
-    // Reconstruct the legacy string format so index.js continues to work without changing its regex logic
-    const summaryText = `${jsonObj.summary || ""}\n\n[HOT_TOPIC: ${jsonObj.hot_topic || "None"}]`;
-    const coreMemory = jsonObj.core_memory || "";
+    const summaryText = jsonObj.summary || "";
+    const coreMemory = jsonObj.core_memory || {};
     const psychologicalProfile = jsonObj.psychological_profile || "";
-
-    return { summaryText, coreMemory, psychologicalProfile };
-
+    const dynamicRules = jsonObj.dynamic_rules || [];
+    const hotTopic = jsonObj.hot_topic || "";
+    const auditData = {
+      audit_keywords: jsonObj.audit_keywords,
+      audit_issues: jsonObj.audit_issues,
+      missed_link_requests: jsonObj.missed_link_requests,
+      missed_topics: jsonObj.missed_topics,
+      suggested_stopwords: jsonObj.suggested_stopwords,
+      missed_proactive_keywords: jsonObj.missed_proactive_keywords
+    };
+    
+    return { summaryText, coreMemory, psychologicalProfile, dynamicRules, hotTopic, auditData };
   } catch (error) {
     console.error("[Gemini] Lỗi nén trí nhớ & audit:", error.message);
     return { summaryText: "", coreMemory: "", psychologicalProfile: "" };
