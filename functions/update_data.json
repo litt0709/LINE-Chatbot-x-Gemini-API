@@ -1,190 +1,638 @@
 {
   "audit_keywords": [
     {
-      "word": "sếp đối tác",
-      "is_today_sensitive": false,
-      "suggested_category": "BUSINESS",
-      "reason": "Đề cập đến vai trò trong công việc và mối quan hệ kinh doanh."
-    },
-    {
-      "word": "Hải Phòng",
-      "is_today_sensitive": false,
-      "suggested_category": "GENERAL",
-      "reason": "Tên địa danh, có thể liên quan đến thông tin địa phương hoặc kinh tế vùng."
-    },
-    {
-      "word": "đội tàu hàng nghìn tỷ",
+      "word": "vay 300 triệu làm ăn",
       "is_today_sensitive": false,
       "suggested_category": "FINANCE",
-      "reason": "Thể hiện giá trị tài sản lớn, liên quan đến kinh tế, tài chính và ngành vận tải biển."
+      "reason": "User hỏi về đánh giá khoản vay kinh doanh cụ thể."
     },
     {
-      "word": "sinh năm 91",
+      "word": "lãi suất ưu đãi 2 năm",
       "is_today_sensitive": false,
-      "suggested_category": "SOCIAL",
-      "reason": "Đề cập đến tuổi tác hoặc thế hệ."
+      "suggested_category": "FINANCE",
+      "reason": "User quan tâm đến điều khoản lãi suất của gói vay."
     },
     {
-      "word": "uống k bao h say",
+      "word": "lãi suất 9.2%/năm",
       "is_today_sensitive": false,
-      "suggested_category": "SOCIAL",
-      "reason": "Mô tả đặc điểm cá nhân hoặc hành vi xã hội."
+      "suggested_category": "FINANCE",
+      "reason": "User cung cấp mức lãi suất cụ thể để phân tích."
     },
     {
-      "word": "chi phí ở tù tại Mỹ",
-      "is_today_sensitive": false,
-      "suggested_category": "NEWS",
-      "reason": "Thông tin về chính sách và chi phí pháp lý tại Mỹ."
-    },
-    {
-      "word": "án treo ở Việt Nam",
+      "word": "Thông tư 29/2026/TT-NHNN",
       "is_today_sensitive": true,
       "suggested_category": "NEWS",
-      "reason": "Đề xuất dự thảo Bộ luật Hình sự sửa đổi, có ngày cụ thể (19/07/2026) dù là ngày tương lai."
+      "reason": "Thông tư có hiệu lực gần đây và ảnh hưởng đến người vay."
     },
     {
-      "word": "bài toán con gà",
-      "is_today_sensitive": false,
-      "suggested_category": "GENERAL",
-      "reason": "Một bài toán tư duy kinh doanh phổ biến."
-    },
-    {
-      "word": "trưởng phòng kinh doanh",
-      "is_today_sensitive": false,
-      "suggested_category": "BUSINESS",
-      "reason": "Liên quan đến vị trí công việc và phỏng vấn trong ngành kinh doanh."
-    },
-    {
-      "word": "chi phí cơ hội",
+      "word": "vay mua xe ô tô",
       "is_today_sensitive": false,
       "suggested_category": "FINANCE",
-      "reason": "Thuật ngữ kinh tế học, tài chính."
+      "reason": "User chuyển sang chủ đề vay mua xe."
     },
     {
-      "word": "hạch toán kinh doanh",
+      "word": "lãi suất vay mua xe ô tô tăng",
       "is_today_sensitive": false,
       "suggested_category": "FINANCE",
-      "reason": "Thuật ngữ kế toán, tài chính doanh nghiệp."
+      "reason": "User muốn biết xu hướng lãi suất vay mua xe."
     },
     {
-      "word": "computer vision",
-      "is_today_sensitive": false,
-      "suggested_category": "DEV",
-      "reason": "Từ khóa kỹ thuật liên quan đến công nghệ, phát triển phần mềm."
-    },
-    {
-      "word": "camera đường phố",
-      "is_today_sensitive": false,
-      "suggested_category": "DEV",
-      "reason": "Ứng dụng cụ thể của computer vision, không phải tin tức nóng."
-    },
-    {
-      "word": "label boxing",
-      "is_today_sensitive": false,
-      "suggested_category": "DEV",
-      "reason": "Thuật ngữ kỹ thuật trong đào tạo AI/Computer Vision."
-    },
-    {
-      "word": "GPU training",
-      "is_today_sensitive": false,
-      "suggested_category": "DEV",
-      "reason": "Thuật ngữ kỹ thuật trong đào tạo AI/Computer Vision."
-    },
-    {
-      "word": "Warren Buffett",
+      "word": "xe điện cũ",
       "is_today_sensitive": false,
       "suggested_category": "GENERAL",
-      "reason": "Tên người nổi tiếng được nhắc đến trong bài báo, không phải sự kiện tin tức nóng trong ngày."
+      "reason": "User quan tâm đến loại hình xe cụ thể."
     },
     {
-      "word": "giao tiếp",
+      "word": "gói 185.000 tỷ đồng",
       "is_today_sensitive": false,
-      "suggested_category": "SOCIAL",
-      "reason": "Kỹ năng mềm, liên quan đến tương tác con người, không phải tin tức thời sự."
+      "suggested_category": "FINANCE",
+      "reason": "Gói hỗ trợ vốn theo ngành nghề."
     },
     {
-      "word": "thời đại AI",
+      "word": "hello",
       "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Lời chào thông thường."
+    },
+    {
+      "word": "chào buổi tối",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Lời chào thông thường."
+    },
+    {
+      "word": "tin mới nhất",
+      "is_today_sensitive": true,
+      "suggested_category": "NEWS",
+      "reason": "Người dùng yêu cầu thông tin cập nhật, thường liên quan đến các sự kiện mới nhất trong ngày."
+    },
+    {
+      "word": "update lại con bot",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "Lâm đang đề cập đến việc cập nhật hệ thống bot."
+    },
+    {
+      "word": "tin tức mới nhất ngày hôm nay",
+      "is_today_sensitive": true,
+      "suggested_category": "NEWS",
+      "reason": "Yêu cầu rõ ràng về tin tức cập nhật hàng ngày."
+    },
+    {
+      "word": "ASEAN Cup 2026",
+      "is_today_sensitive": true,
+      "suggested_category": "NEWS/SPORTS",
+      "reason": "Sự kiện thể thao có thời gian cụ thể."
+    },
+    {
+      "word": "mưa lớn diện rộng",
+      "is_today_sensitive": true,
+      "suggested_category": "NEWS/WEATHER",
+      "reason": "Thông tin thời tiết có tính thời sự."
+    },
+    {
+      "word": "vốn FDI",
+      "is_today_sensitive": true,
+      "suggested_category": "NEWS/FINANCE",
+      "reason": "Tin tức kinh tế, tài chính có tính thời sự."
+    },
+    {
+      "word": "Ông Trump hủy kế hoạch tấn công Iran",
+      "is_today_sensitive": true,
+      "suggested_category": "NEWS/WORLD",
+      "reason": "Tin tức chính trị, thế giới có tính thời sự."
+    },
+    {
+      "word": "techstack của em",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "Câu hỏi về công nghệ và kiến trúc hệ thống của bot."
+    },
+    {
+      "word": "react tin nhắn",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL/SOCIAL",
+      "reason": "Tính năng tương tác trên nền tảng chat."
+    },
+    {
+      "word": "tự nâng cấp",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "Câu hỏi về khả năng và định hướng phát triển của bot."
+    },
+    {
+      "word": "giá vay mua nhà thả nổi",
+      "is_today_sensitive": false,
+      "suggested_category": "FINANCE",
+      "reason": "Thảo luận về thị trường tài chính, bất động sản."
+    },
+    {
+      "word": "vỡ nợ",
+      "is_today_sensitive": false,
+      "suggested_category": "FINANCE",
+      "reason": "Thuật ngữ tài chính liên quan đến nợ nần."
+    },
+    {
+      "word": "Telegram bị xoá khỏi AppStore",
+      "is_today_sensitive": true,
+      "suggested_category": "NEWS",
+      "reason": "Thông tin nóng được user chia sẻ và yêu cầu xác minh ngay lập tức."
+    },
+    {
+      "word": "App Store",
+      "is_today_sensitive": true,
       "suggested_category": "TECH",
-      "reason": "Khái niệm rộng về công nghệ và xã hội, không phải sự kiện thời sự cụ thể."
+      "reason": "Địa điểm chính của vấn đề Telegram, được user và bot nhắc đến liên tục để kiểm tra."
     },
     {
-      "word": "phạt nguội",
+      "word": "coin thủ",
+      "is_today_sensitive": false,
+      "suggested_category": "FINANCE",
+      "reason": "Thuật ngữ chỉ người chơi tiền mã hóa, được dùng để mô tả đối tượng bị ảnh hưởng."
+    },
+    {
+      "word": "fact check",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Hành động yêu cầu kiểm tra thông tin."
+    },
+    {
+      "word": "tin lá cải",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Cách user Hiếu nhận định về thông tin chưa xác thực."
+    },
+    {
+      "word": "chơi coin",
+      "is_today_sensitive": false,
+      "suggested_category": "FINANCE",
+      "reason": "Hành động giao dịch tiền mã hóa."
+    },
+    {
+      "word": "cosplay học sinh cấp 3",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Liên quan đến sở thích cá nhân, văn hóa giải trí."
+    },
+    {
+      "word": "thủy thủ mặt trăng",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Liên quan đến pop culture, anime/manga."
+    },
+    {
+      "word": "tặng đồng nghiệp nữ",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Chủ đề về quy tắc ứng xử, quà tặng trong môi trường công sở."
+    },
+    {
+      "word": "văn hóa công ty",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Chủ đề về quy tắc, môi trường làm việc."
+    },
+    {
+      "word": "tặng bao cao su",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Chủ đề nhạy cảm về quà tặng, giới hạn cá nhân và công sở."
+    },
+    {
+      "word": "phóng khoáng",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Mô tả tính cách, quan điểm."
+    },
+    {
+      "word": "AFF Cup 2026",
       "is_today_sensitive": true,
       "suggested_category": "NEWS",
-      "reason": "Chủ đề nóng được quan tâm về giao thông và pháp luật tại Việt Nam, có tính thời sự cao."
+      "reason": "Sự kiện thể thao nổi bật được nhắc đến với kết quả và lịch thi đấu cập nhật."
     },
     {
-      "word": "tổng hợp",
+      "word": "Chứng khoán",
+      "is_today_sensitive": true,
+      "suggested_category": "FINANCE",
+      "reason": "Tin tức chứng khoán ngày 3/8 được đề cập."
+    },
+    {
+      "word": "Vietcombank",
+      "is_today_sensitive": true,
+      "suggested_category": "FINANCE",
+      "reason": "Được nhắc đến là thương hiệu giá trị nhất năm 2026 theo Brand Finance."
+    },
+    {
+      "word": "PVcomBank",
+      "is_today_sensitive": true,
+      "suggested_category": "FINANCE",
+      "reason": "Được chấp thuận tăng vốn điều lệ."
+    },
+    {
+      "word": "HPG",
+      "is_today_sensitive": true,
+      "suggested_category": "FINANCE",
+      "reason": "User hỏi về hiệu suất cổ phiếu HPG hôm nay."
+    },
+    {
+      "word": "Tin tức về bão",
+      "is_today_sensitive": true,
+      "suggested_category": "NEWS",
+      "reason": "Các thông tin về siêu bão Dolphin, bão Kujira và dự báo mùa bão 2026 là tin tức thời sự."
+    },
+    {
+      "word": "Dự báo thời tiết Hà Nội",
+      "is_today_sensitive": true,
+      "suggested_category": "GENERAL",
+      "reason": "User hỏi về khả năng mưa và thời gian mưa cụ thể cho Hà Nội hôm nay."
+    },
+    {
+      "word": "Giá vàng",
+      "is_today_sensitive": true,
+      "suggested_category": "FINANCE",
+      "reason": "Tin tức về giá vàng thế giới tăng ngày 4/8."
+    },
+    {
+      "word": "Dầu thô",
+      "is_today_sensitive": true,
+      "suggested_category": "FINANCE",
+      "reason": "Tin tức về giá dầu thô giảm mạnh ngày 4/8."
+    },
+    {
+      "word": "Người Nhện 4",
+      "is_today_sensitive": true,
+      "suggested_category": "NEWS",
+      "reason": "Tin tức về doanh thu bán vé sớm của phim 'Người Nhện 4' ngày 4/8."
+    },
+    {
+      "word": "lãi suất thả nổi mua nhà",
+      "is_today_sensitive": true,
+      "suggested_category": "FINANCE/NEWS",
+      "reason": "Chủ đề kinh tế vĩ mô và tài chính cá nhân đang rất nóng."
+    },
+    {
+      "word": "cách làm khôn ngoan nhất",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL/FINANCE",
+      "reason": "Tìm kiếm lời khuyên chiến lược."
+    },
+    {
+      "word": "Telegram bị gỡ khỏi app store",
+      "is_today_sensitive": true,
+      "suggested_category": "NEWS/TECH",
+      "reason": "Tin tức công nghệ nóng trong ngày."
+    },
+    {
+      "word": "buôn tài ko bằng dài vốn",
+      "is_today_sensitive": false,
+      "suggested_category": "FINANCE/GENERAL",
+      "reason": "Nguyên tắc kinh doanh, tài chính."
+    },
+    {
+      "word": "ngân hàng siết tín dụng",
+      "is_today_sensitive": true,
+      "suggested_category": "FINANCE/NEWS",
+      "reason": "Chính sách tiền tệ ảnh hưởng trực tiếp đến thị trường."
+    },
+    {
+      "word": "lịch tứ kết",
       "is_today_sensitive": false,
       "suggested_category": "GENERAL",
-      "reason": "Lệnh yêu cầu bot tổng hợp thông tin, là từ khóa chức năng."
+      "reason": "Yêu cầu thông tin lịch thi đấu chung"
     },
     {
-      "word": "summary",
+      "word": "world cup 2026",
+      "is_today_sensitive": false,
+      "suggested_category": "NEWS",
+      "reason": "Sự kiện thể thao lớn trong tương lai"
+    },
+    {
+      "word": "lịch vòng 1/8",
       "is_today_sensitive": false,
       "suggested_category": "GENERAL",
-      "reason": "Lệnh yêu cầu bot tổng hợp thông tin, là từ khóa chức năng."
+      "reason": "Yêu cầu thông tin lịch thi đấu cụ thể"
     },
     {
-      "word": "cày bộ này",
-      "is_today_sensitive": false,
-      "suggested_category": "SOCIAL",
-      "reason": "Người dùng thể hiện ý định tiêu thụ một nội dung truyền thông (phim, game, series)."
+      "word": "truy thu thuế",
+      "is_today_sensitive": true,
+      "suggested_category": "FINANCE",
+      "reason": "Là một vấn đề thời sự đang gây áp lực cho doanh nghiệp."
     },
     {
-      "word": "táo bón",
-      "is_today_sensitive": false,
-      "suggested_category": "SOCIAL",
-      "reason": "Một bình luận mang tính hài hước, cá nhân, không liên quan đến sự kiện nóng."
+      "word": "truy thu bảo hiểm",
+      "is_today_sensitive": true,
+      "suggested_category": "FINANCE",
+      "reason": "Tương tự truy thu thuế, là vấn đề nóng đang được thực thi chặt chẽ."
     },
     {
-      "word": "công thần",
+      "word": "Giám đốc Sở Khoa học và Công nghệ tỉnh Bắc Ninh bị bắt",
+      "is_today_sensitive": true,
+      "suggested_category": "NEWS",
+      "reason": "Là một tin tức cụ thể về việc bắt bớ quan chức, rất nhạy cảm trong ngày."
+    },
+    {
+      "word": "pháp trị",
       "is_today_sensitive": false,
       "suggested_category": "SOCIAL",
-      "reason": "Đề cập đến một nhân vật hoặc yếu tố quan trọng, có thể trong ngữ cảnh của nội dung đang được chia sẻ."
+      "reason": "Là một khái niệm chính trị xã hội, mặc dù được thảo luận trong bối cảnh hiện tại nhưng không phải sự kiện 'trong ngày'."
+    },
+    {
+      "word": "tăng trưởng kinh tế Hà Tĩnh",
+      "is_today_sensitive": true,
+      "suggested_category": "FINANCE",
+      "reason": "Là thông tin cụ thể về kinh tế địa phương, có tính thời sự trong bối cảnh thảo luận."
+    },
+    {
+      "word": "DN 2 sổ",
+      "is_today_sensitive": false,
+      "suggested_category": "FINANCE",
+      "reason": "Là một thực trạng kinh doanh phổ biến, không phải sự kiện 'trong ngày'."
+    },
+    {
+      "word": "tặng quà nhân viên",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Là một câu hỏi cá nhân, không liên quan đến sự kiện nóng."
+    },
+    {
+      "word": "FatTiger embarrassing",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Bot không hiểu cụm từ này, cho thấy đây có thể là một meme, slang hoặc tham chiếu văn hóa mạng xã hội cụ thể."
+    },
+    {
+      "word": "ngất rồi à",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Cụm từ này đi kèm với 'FatTiger embarrassing' mà bot không hiểu, làm mất ngữ cảnh."
+    },
+    {
+      "word": "thả like",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Yêu cầu tương tác mạng xã hội."
+    },
+    {
+      "word": "Best Author Award",
+      "is_today_sensitive": true,
+      "suggested_category": "NEWS",
+      "reason": "Giải thưởng công nghệ quốc tế quan trọng."
+    },
+    {
+      "word": "Tech-Verse 2026",
+      "is_today_sensitive": true,
+      "suggested_category": "NEWS",
+      "reason": "Sự kiện công nghệ quốc tế."
+    },
+    {
+      "word": "AI Agents Debate",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "Chủ đề chuyên môn về công nghệ AI."
+    },
+    {
+      "word": "LINE Technology Vietnam",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Tên công ty/tổ chức liên quan."
+    },
+    {
+      "word": "tương tác",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Đề cập đến hoạt động trên mạng xã hội."
     }
   ],
   "missed_link_requests": [],
   "missed_topics": [
-    "Thành công doanh nhân trẻ",
-    "Ngành vận tải biển",
-    "Văn hóa nhậu"
+    "mua xe điện cũ",
+    "Vàng",
+    "Dầu thô",
+    "Tìm kiếm liệt sĩ/Lịch sử xã hội",
+    "thị trường bất động sản",
+    "lãi suất vay ngân hàng",
+    "tiền mã hóa",
+    "giao dịch crypto",
+    "dự báo thời tiết chi tiết theo khu vực và thời gian",
+    "lịch thi đấu thể thao trong tương lai",
+    "ảnh hưởng chính trị đến kinh tế địa phương",
+    "áp lực truy thu thuế và bảo hiểm",
+    "memes/internet slang"
   ],
   "missed_entities": [],
-  "prompt_leakage": [],
-  "document_ids": [
-    "2WkDnGxd9BmFGcrFHsCJ",
-    "9XOCMWH972h9vFE0CjHh",
-    "Aqn8X8GC22ikFIdMyq9e",
-    "BG5LnN4lrMN6EcK65RSo",
-    "CVhdLiYoFSpLACNZAoKd",
-    "DUBl4cICqNo0xBI3qlrc",
-    "GeaAFVZXqUCUdiCypkEw",
-    "KMR0gKFAF4vTr70GHuRR",
-    "Lw3PnJKUqIMecYszw4XB",
-    "MQaZnMT343UzdmDKVFce",
-    "NYg7XMhLF4Tur1mYdeID",
-    "P3waBm3XBVBDWU2bfHoo",
-    "SYI4HKJmHoHsgBPGvWEa",
-    "THi1TvrADzYqs7b8zsOl",
-    "Y2eKTgQ0PIMdyxB0VXNo",
-    "ZBNnPknWUu2Y4aH78lb1",
-    "efjFr9U3XmpkACTQmKz2",
-    "ggLGRx9Kz9TqPQesIgVl",
-    "i4fpnHAmjzqqUk48Bc2U",
-    "iwZmnSAQkOYSpVLu8A1T",
-    "jahfX2vFVmUDWu2m6rYq",
-    "jjuXXUMCHXubTbrogDwv",
-    "kSu7FnQ5ZzXAqksi2aUy",
-    "lFGA3wPV8cmaYU7OIpCu",
-    "nB1o8lTYLz0ZtFR7KfsS",
-    "oHcHLm7bwYcLlgXcp0xT",
-    "qFpdm9GwwrPVVu9CXtBc",
-    "t1bu87GQTsWgs7O02dzA",
-    "uZoK1QlPEinfpnqWAqBS",
-    "uehr1SD3CpzXGvyC2cjQ",
-    "yTJIpy2Oshqtp3ZlAzfB",
-    "z2RcUOFX5d1oDo9128qd"
-  ]
+  "missed_proactive_keywords": [
+    "khéo bị sập rồi"
+  ],
+  "prompt_leakages": [],
+  "document_ids": {
+    "line": [
+      "HRJgYT0CM3y0VnKqju9R",
+      "Pjx3qMgiCHxGSBfTZkvd",
+      "SnylZGDVFhaxhnD3CUnL",
+      "ZBqH6ABGGHbtbDUiHGK6",
+      "anm0ystkhuNTQiusI6DM",
+      "fqIV7XWTMouVluqgT1hq",
+      "iuw64YyrrhSPcN8wDl4D",
+      "lgJZxB7ZeF9GdiuDQ2ai",
+      "uLJ7SzVbfYGaXw952hyY",
+      "unuLq8B3qzR64h4vmHEE",
+      "xBdAkV5GGVa26oLygrDK"
+    ],
+    "tele": []
+  },
+  "bot_config": {
+    "search_keywords": {
+      "NEWS": "bóng đá|tứ kết|trận|kết quả|tỉ số|tỷ số|tin tức|thời sự|chính trị|sông nhuệ|sản xuất ô tô|bắt giữ|ăn cắp dữ liệu|giảng viên bk kinh doanh|khu đô thị tod|contagious interview|svg steganography|1 tỷ in sách ông nam|nữ sinh tử vong vĩnh long|khởi tố cựu viện trưởng|lực lượng 47|page chính trị|wc|giày vàng|tỷ số 4-6|lừa đảo chuyển nhầm tiền|chung cư có thời hạn sở hữu|madam châu hanoi telecom|quan hệ thương mại việt - trung - mỹ|u cà|mặt trận uav|nhà xuất bản hội nhà văn|công an ko phải đóng thuế|chung cư có thời hạn|tách thi dh với tốt nghiệp|vinashin, vinaline|nguyễn bá dương|dự án khu đô thị đại kim - định công|tuyên phạt|triệu đà|tô lâm|bộ luật hình sự sửa đổi 2026|elastic security labs|ref9403|contagious interview|ottercookie|supply chain attack|zero detection|contagious interview malware|hacker tấn công dev|thất nghiệp tuổi trung niên|thị trường lao động việt nam|chính sách khuyến khích|hàng giả mạo nhãn hiệu|vi phạm pháp luật|iphone fold|điện thoại gập apple|ốp lưng iphone fold|samsung galaxy z fold 7|con gái chủ tịch|minh hoàng|cụ vượng|thời tiết hn hôm nay|kết quả trận anh argentina|world cup 2026|các nơi sập hết|cầm hoà|tổng bí thư|công an thu bản quyền doanh nghiệp|a05 lưu ý bản quyền|mỹ để ý vn bản quyền|chặn site cá độ wc|người đàn ông bình dương trúng số 5 lần|ps4 pro game hack|ps4 pro game|call of duty: modern warfare iii|marvel's spider-man 2|hogwarts legacy|god of war ragnarök|line yahoo sa thải|line yahoo 40 tuổi|itmedia nhật bản|thời tiết hà nội|world cup 2026|argentina|messi|anh thua|highlights trận france|m10 lên top 1|hiệp sĩ bell|râu con|penalty đầu|argentina vs canada|bán kết 2 copa america 2026|copa america 2026 lịch thi đấu bán kết|usa vs uruguay|jude bellingham|euro 2026|anh đá bán kết với hà lan|bồ đào nha bị loại|world cup đã kết thúc|sự đánh đồng giữa trách nhiệm quản lý với quan điểm cá nhân|nguyễn thành nam|trần việt anh|cuốn sách chuyện với thanh|báo tuổi trẻ|đào quang huy|tổng hợp tin hot nhất chiều nay|công an úp sọt bản quyền doanh nghiệp|robot đại chiến võ thuật|thời tiết hn hôm nay|vị thế tq|long tứ|mất|nytro security|vụ nữ sinh vĩnh long|khởi tố cựu viện trưởng|trung tướng đinh văn nơi|phó bí thư tỉnh ủy an giang|vụ bmw tông nữ sinh|400 triệu giao dịch|cao tốc quốc lộ|vành đai|femboysec intelligence|15tb dữ liệu|dữ liệu chính phủ việt nam|bộ y tế|rò rỉ dữ liệu pii|bộ nông nghiệp và phát triển nông thôn mard|world cup 2026|argentina|tbn|thẻ đỏ|trần việt anh founder spiderum|nguyễn thành nam cựu hiệu trưởng vinuni|nguyễn thành nam bị bắt giữ|llm|bản kiến nghị giả mạo argentina world cup|world cup 2026|thời tiết hà nội tối nay|thành tích tây ban nha world cup 2026|chung kết world cup 2026|messi|cucurella|fifa|tang tan openai|năng lực sản xuất|thị trường ô tô trung quốc|evergreen|cho thuê vỉa hè hà nội|dự thảo nghị quyết cho thuê vỉa hè|world cup|fifa|trump|nguyễn thành nam|vinuni|vnexpress.net|chung kết|tây|tbn|barca|richa|ronaldo nazario|world cup 2026|cristiano ronaldo|vnexpress.net|al nassr|euro 2028|agent i line yahoo|nba free agency|euro 2026|gemini 3.0|chính sách vỉa hè hà nội|sổ đỏ ủy quyền|tham nhũng vặt hành chính|phường xã hội chủ nghĩa|chung cư có thời hạn|nguyễn thành nam chống phá nhà nước|cho thuê vỉa hè hà nội|geleximco cải tạo sông nhuệ|sản xuất ô tô việt nam 6 tháng|linh cảnh hành giả|mại báo tiểu lang quân|thời tiết hà nội tối nay|ông nguyễn thành nam mới bị bắt giữ là ai|đất đai|giá đất|tư nhân hóa đất đai|vinicius|arsenal|jose mourinho|hòa lạc|vneconomy|thời tiết hà nội ngày mai|dềnh nước|ga s1|nhà nước điều chỉnh|lịch sử viễn thông việt nam|sở hữu đất đai việt nam|chính sách quy hoạch đô thị|tiếng ong ve|csgt tiêu cực|bộ trưởng tô lâm|giám đốc công an tỉnh thanh hóa|chủ tịch hưng yên|máy quang khắc duv|trung quốc sản xuất máy quang khắc|nhôm đầu tiên việt nam|hạ tầng cơ bản|điện đường trường trạm|quy hoạch đường xá|trục lợi nhóm|Nghị quyết 19|sân bay Long Thành|tra tấn chó Trung Quốc|Iran tấn công Amazon Bahrain|thứ trưởng hoàng trung bị bắt|xuất khẩu sầu riêng|nhận hối lộ|khai trừ Đảng|chi phí ở tù tại Mỹ|án treo ở Việt Nam|phạt nguội|fact check|vụ án mạng nhật bản|ảnh hưởng việt nhật|hybrid|spider man brand new day|phim siêu anh hùng|llm vision ocr|minimax m3|qwen3-vl-flash|so sánh chất lượng llm ocr|vua tự đức|gửi bài thi sang nhà thanh chấm|xác thực chuyện này|thông tin trong ảnh này|giai thoại dân gian|quà tặng thành phát|sửa ống nước|khó thuê nghề tay chân|thợ điện khan hiếm|đất cảng|hạ long|hà nội|hạng 4|thắng|chính sách chính phủ tq thúc đẩy ai|agi bar beijing|resize ảnh|nguồn lực cty|outsource|thuê chuyên gia|cty mẹ|làm ra ngoài",
+      "FINANCE": "giá vàng|tỷ giá|chứng khoán|cổ phiếu|vnindex|peso|lạm phát|nhập khẩu|thương mại|tuyến đường ven biển 9500 tỷ đồng|giá ram 32gb|tỷ phú ai|chi phí token ai|hutchison đầu tư việt nam|thương vụ evn telecom|vinfast tương lai|nhập siêu tq|tăng lương tối thiểu vùng|thuế thu nhập cá nhân|hùn 20 triệu|500 tỏi|ai tài chính|crypto|quy định chuyển tiền trực tuyến|ai tài chính vibe-trading|ví crypto|chi phí lương cao|giá iphone fold|chuỗi cung ứng bản lề apple|kế nhiệm|tập đoàn|ipo|lợi tức|từ 400 triệu đồng giao dịch chuyển tiền|coin|bds|nợ công|đầu tư công|gdp|fdi|evergrande|trúng số 80 tỷ|vibe-trading|shadow account|giá xăng dầu|chứng khoán quốc tế|mua mã chứng khoán nào|vay vốn|bidv|factor và alpha zoo|backtest|shadow account|bản quyền windows|chaebol|keiretsu|viettel|hộ kinh doanh|tài chính|vinhomes mê linh|trần bá dương thaco|đại quang minh|đồng peso argentina|lạm phát argentina|vnd rủi ro lạm phát|nhập khẩu trung quốc việt nam 2026|phụ thuộc trung quốc việt nam|giá nhà đất|viettel|vnpt|fpt|cho thuê nhà|3 tỷ vnd|roi|vietlott|gấp thếp|martingale|giá thả nổi cho vay mua nhà|tín dụng đen|quỹ lương doanh nghiệp|cloud kitchen|chi trả quỹ lương|30% doanh thu quỹ lương|t&t group|cổ phiếu asml|ngành luyện kim việt nam|mua nhà trả góp|giá nhà|bất động sản hạ long|đầu tư 1 tỷ|mô hình kinh doanh cloud kitchen|lợi nhuận f&b|in tiền|Cloud Kitchen|phân tích kinh doanh|biên lợi nhuận|chi phí vận hành|bitcoin|đội tàu hàng nghìn tỷ|sếp đối tác|trưởng phòng kinh doanh|chi phí cơ hội|hạch toán kinh doanh|model llm giá rẻ|đầu tư mảng gì việt nam 2026|bong bóng tài sản là gì|chính phủ giảm giá bất động sản vỡ bong bóng|dự đoán sập bất động sản 42% tín dụng|giá thợ|lương nghề tay chân tăng|lương 200m/tháng|chính sách bds trung quốc|bong bóng bds|làm chủ dòng tiền là gì|cách theo dõi chi tiêu|lãi suất ngân hàng tq vn|ngành hàng hải việt nam",
+      "DEV": "code|lập trình|lỗi|api|react|nodejs|github|tech-verse|multi-agent|flava|coding|bug prod|tuning bot|bami-translator|token charge phí|app mobile|train a.i.|llm|ubuntu|máy đọc nfc thẻ căn cước công dân|vnpt idc nam thăng long|chứng chỉ tier-3|cmc idc|hitc dc hòa lạc|hệ thống lọc gói tin|deepseek|agent ai|reinforcement learning|llm + tool call|số hóa công ty netnam|bami translator|ai dịch quyển|vibe-trading|ai code|opus|gemini flash|llm|developer|svg steganography|credential trình duyệt|backdoor rat|side job|svg steganography|thích ứng công nghệ|cập nhật kỹ năng|thông số kỹ thuật iphone fold|màn hình gập không nếp gấp|ai code thuật toán|tool dịch sách|tri nam|truy vết người phát tán nội dung độc hại khách sạn|factor layer|backtest layer|structure lên|software development jobs|agentmemory|urkl|ai tự chủ|ai-agent-book|ai agent|ai|llms security|claude code|cơ quan điều tra vks|chatid|mạng điều khiển trên tàu biển|can bus|nmea 2000|kafka|rabbit|tool calling|function calling|stateless|db vector|mcp|realtime|tune những gì|a.i workforce|llm|ocr|text2speech|moe (mixture of experts)|mô hình multimodal|gemini|mixtral|gpt-4v|claude|tesseract|abbyy finereader|ocrmypdf|coqui tts|elevenlabs|ai và robot|huawei|ai lập trình frontend|agentic coding|flava api gateway|quotio tool|quản lý tài khoản ai|guardrail ai|tech-verse 2026|add-on kodi python|stremio api|gemini code|secret token|knowledge base|reinforcement learning|llm|input text|context|tool call|vector|rag|claude fable|pxpipe|âm thanh|spectrogram|tiết kiệm token|ảo giác|moe|image|video|sound|line yahoo ai prototyping|trang này không tồn tại|software development jobs 2026|ai trong dev|multi agent system|self improvement bot|tech-verse 2026 multi-agent debate|flava api gateway agentic coding|real bug prod|ai|testcase|gemma4|whisper|rag|agentic|reinforcement learning|telegram bot api|hallucination|ai lập trình|acc gemini giá rẻ|vai trò cto|hệ thống điều khiển công nghiệp|ai tối ưu chi phí dev|diy iot mã nguồn mở|link driver|google drive|quyền truy cập|tài khoản google|code agentic|a.i ide|google api limits|ai studio|gemini account|ffmpeg resize ảnh|quốc gia thử nghiệm công nghệ|hệ sinh thái công nghệ sâu|Moonshot AI|lỗi bot|Hallucination|Inappropriate proactive interaction|LLM|TTS|computer vision|camera đường phố|label boxing|GPU training|thời đại AI|outsource|mối về ioc|paddleocr|ocr pdf cloud|pdfplumber|cấu trúc response ocr|tích hợp paddleocr|profile|chatgpt library|openai apis|markdown file|cơ chế định kỳ reload|ngưỡng 5000 ký tự|file cấu hình|techstack|lập trình senior|kĩ sư thi công mạng khó thuê|mô hình ai|tool ai|microsoft/fara|cảng biển tự động hóa|iot ai trong hàng hải",
+      "SOCIAL": "drama|phốt|cộng đồng mạng|twitter|x\\b|ronaldo|cầu thủ|văn hoá|eq|đại học|quán bình dân|sugar baby|sở hữu đất đai việt nam|quan điểm hôn nhân|khó khăn mua nhà|cổ chân nhân|quỷ bí chi chủ|hoạt hình gấu|cuộc chiến công nghệ mỹ-trung|trick gemini|relocation hạ long|nhất sếp|kiến nghị change.org|phim Odyseey|phim Spider-Man|CGV ghế nằm|sinh năm 91|uống k bao h say|giao tiếp|cày bộ này|táo bón|công thần|xavi hernández|casemiro|vua tự đức|làng túc cầu|thích chụp ảnh|người việt ở nhật|nghỉ bên cty|làm riêng|món cocahing|kịch bản phim|woke|ltv qa|whatsapp việt nam|sinh nhật|pierre cardin|nước hoa mini|ví da|ly thân|giàu đổi chồng sang đổi bạn|thợ giàu|giới nhà giàu|ly hôn vợ|trưởng phòng ngân hàng|giày na tra|tứ trụ|ngũ đệ|nhân tướng học|phù hợp để kết hôn|voz.vn|xạo l|phân hoá giàu nghèo"
+    },
+    "standalone_topics": [
+      "thời tiết",
+      "nhiệt độ",
+      "mưa.*hôm nay",
+      "nắng.*hôm nay",
+      "giá vàng",
+      "vàng sjc",
+      "giá xăng",
+      "tỷ giá",
+      "tỷ giá usd",
+      "kqxs",
+      "xổ số",
+      "kết quả xổ số",
+      "điểm thi",
+      "tra cứu điểm",
+      "giá đô",
+      "bitcoin",
+      "crypto",
+      "chứng khoán",
+      "cổ phiếu",
+      "giảm phát|thị trường nhà|evergrande",
+      "agentic ai|reinforcement learning|rl",
+      "cờ bạc|martingale|gấp thếp",
+      "phân tích roi|tài chính cá nhân|đầu tư mạo hiểm",
+      "bầu cử",
+      "tổng thống",
+      "bot k râu nhí",
+      "copa",
+      "euro",
+      "world cup",
+      "bóng đá",
+      "nguồn ebook",
+      "công cụ dịch thuật",
+      "chi phí api\\/token",
+      "trung tâm dữ liệu tier-3",
+      "giá linh kiện máy tính",
+      "kiểm tra an ninh mạng doanh nghiệp",
+      "tham nhũng",
+      "vấn đề xã hội việt nam",
+      "thực tiễn phát triển ai",
+      "đạo đức ai",
+      "lừa đảo trực tuyến mới",
+      "chính sách sở hữu chung cư",
+      "tác động xã hội của ai",
+      "chính trị kinh doanh",
+      "chính sách đối ngoại",
+      "luật nhà ở",
+      "ứng dụng ai dịch thuật",
+      "vấn đề bản quyền",
+      "lịch sử thất bại của doanh nghiệp nhà nước việt nam \\(vinashin, vinaline\\)",
+      "lịch sử hình thành và phát triển của hanoi telecom",
+      "đầu tư vào công ty vệ tinh ở úc",
+      "bàn phím cơ",
+      "chính sách thu hút nhân tài \\(liên quan tô lâm\\/hưng\\)",
+      "pháp luật an ninh mạng",
+      "tội phạm công nghệ cao",
+      "artificial intelligence \\(ai\\)",
+      "automation",
+      "quy định giao dịch tài chính",
+      "phát triển\\/code ai",
+      "dịch thuật sách bằng ai",
+      "tìm kiếm\\/mua truyện ebook \\(epub\\)",
+      "bot k râu nhí \\(context nội bộ\\/người dùng\\)",
+      "chứng khoán quốc tế",
+      "ai agents",
+      "sách về ai",
+      "chiến lược phát triển kinh tế trung quốc",
+      "so sánh hệ tư tưởng kinh doanh á-âu",
+      "tác động của phân hóa giàu nghèo đến xã hội",
+      "cạnh tranh công nghệ ai giữa trung quốc và mỹ",
+      "hệ thống tư pháp",
+      "minh bạch tư pháp",
+      "quy trình điều tra",
+      "vai trò của viện kiểm sát",
+      "giá trị mạng người",
+      "luật bồi thường",
+      "chiếm dụng vốn",
+      "lừa đảo tài chính",
+      "mạng điều khiển công nghiệp",
+      "giao thức hàng hải",
+      "quy hoạch giao thông quốc gia",
+      "hạ tầng đô thị",
+      "lừa đảo qua chatbot\\/telegram bot",
+      "kinh tế trải nghiệm và giá trị thương hiệu",
+      "tuân thủ bản quyền phần mềm doanh nghiệp",
+      "tự chế sản phẩm theo ý muốn",
+      "chính sách công nghiệp",
+      "đổi mới sáng tạo trong doanh nghiệp nhà nước",
+      "mô hình kinh tế trung quốc",
+      "so sánh năng lực cạnh tranh quốc gia",
+      "hiện tượng fan hâm mộ và lòng trung thành",
+      "bình luận xã hội về các nhóm 'zalo 9 họ'",
+      "mã chứng khoán",
+      "tài chính",
+      "lãi suất",
+      "tiền ảo",
+      "xử lý video bằng ai",
+      "chuyển đổi video sang văn bản",
+      "chi phí vận hành mô hình ai lớn",
+      "xử lý audio thành text",
+      "giải mã\\/xác thực mã định danh",
+      "api test fact interpretation",
+      "vụ việc pháp lý nhân vật công chúng",
+      "tin tức về fpt",
+      "hệ thống tín nhiệm xã hội",
+      "chính sách quản trị quốc gia",
+      "chính sách nhập cư",
+      "bảo mật dữ liệu chatbot",
+      "lịch sử phát triển ngành công nghệ\\/viễn thông việt nam",
+      "triết lý về sở hữu đất đai và quyền cá nhân",
+      "tác động của chính sách quy hoạch đô thị lên đời sống dân cư",
+      "tiểu thuyết mạng trung quốc",
+      "chuyển thể hoạt hình",
+      "địa chính trị",
+      "tự chủ công nghệ",
+      "chuỗi cung ứng bán dẫn",
+      "lô đề",
+      "Nghị quyết 19",
+      "kinh tế dựa trên tri thức",
+      "tự chủ chiến lược",
+      "sân bay Long Thành",
+      "luật bảo vệ động vật",
+      "thị trường AI",
+      "Moonshot AI",
+      "rạp chiếu phim",
+      "CGV ghế nằm",
+      "Line OA outage",
+      "tiền kỹ thuật số quốc gia",
+      "bitcoin",
+      "thành công doanh nhân trẻ",
+      "ngành vận tải biển",
+      "văn hóa nhậu"
+    ],
+    "link_requests_regex": "xin link|cho link|gửi link|địa chỉ|url|link|cho xin|ở đâu|trang nào",
+    "proactive_trigger_words": [
+      "ai biết",
+      "làm sao",
+      "lỗi gì",
+      "bug",
+      "không chạy",
+      "có cách nào",
+      "bác nào",
+      "mọi người",
+      "xin ý kiến",
+      "chịu",
+      "rén",
+      "hơi thọt",
+      "rủi ro",
+      "không hiểu",
+      "giúp với",
+      "chỉ dùm",
+      "bế tắc",
+      "cần hỗ trợ",
+      "🆘🆘",
+      "khó mà",
+      "rủi ro cao",
+      "ko thoải mái",
+      "không có lương hưu",
+      "ủa sao k trả lời",
+      "cách nào hiệu quả hơn",
+      "để bọn anh cải thiện",
+      "nâng cấp sửa các lỗ hổng",
+      "ngất rồi à",
+      "cần bỏ qua lịch sử chát",
+      "cái gì thế này",
+      "không hiểu",
+      "giúp với",
+      "làm sao để",
+      "có nên"
+    ],
+    "leak_blacklist": [
+      "lo prompt",
+      "show prompt",
+      "system prompt",
+      "lenh he thong",
+      "reveal instructions",
+      "nhan vat cua em la gi",
+      "tro ly thong minh ngoan",
+      "tuning bot",
+      "lo het prompt",
+      "lam lo prompt",
+      "sao no lam lo het prompt the nay"
+    ],
+    "updated_at": {
+      "_seconds": 1785763957,
+      "_nanoseconds": 498000000
+    }
+  }
 }

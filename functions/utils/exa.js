@@ -1,5 +1,6 @@
 const axios = require("axios");
 const { db, FieldValue } = require("./db");
+const logger = require("./logger");
 
 const EXA_API_KEY = process.env.EXA_API_KEY;
 
@@ -125,7 +126,8 @@ const searchExa = async (query, options = {}) => {
       headers: {
         "x-api-key": EXA_API_KEY,
         "Content-Type": "application/json"
-      }
+      },
+      timeout: 15000
     });
 
     if (!data.results || data.results.length === 0) return null;
@@ -149,9 +151,11 @@ const searchExa = async (query, options = {}) => {
     const status = error?.response?.status;
     if (status >= 400) {
       console.error(`[Exa] Lỗi API nghiêm trọng (${status}), khởi động dự phòng...`);
+      logger.logOperational("SEARCH_ERROR", `[Exa] Lỗi API nghiêm trọng (${status})`, error?.response?.data || error.message);
       throw error;
     }
     console.error("[Exa] Lỗi tìm kiếm:", error?.response?.data || error.message);
+    logger.logOperational("SEARCH_ERROR", "[Exa] Lỗi tìm kiếm", error?.response?.data || error.message);
     return null;
   }
 };

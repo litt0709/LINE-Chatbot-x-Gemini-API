@@ -2,6 +2,7 @@ const { db } = require("./db");
 const axios = require("axios");
 const { DEEPSEEK_API_KEY, DEEPSEEK_URL, DEEPSEEK_MODEL } = require("../config");
 const { resolveWebContext } = require("./deepseek");
+const logger = require("./logger");
 
 const askOptimizer = async (prompt) => {
   try {
@@ -11,7 +12,7 @@ const askOptimizer = async (prompt) => {
         model: DEEPSEEK_MODEL,
         messages: [{ role: "system", content: "Bạn là một AI tối ưu hóa siêu việt. Hãy viết quy tắc thật ngắn gọn, sắc bén, tuân thủ tuyệt đối yêu cầu." }, { role: "user", content: prompt }]
       },
-      { headers: { "Content-Type": "application/json", Authorization: `Bearer ${DEEPSEEK_API_KEY}` } }
+      { headers: { "Content-Type": "application/json", Authorization: `Bearer ${DEEPSEEK_API_KEY}` }, timeout: 20000 }
     );
     return data.choices[0].message.content.trim();
   } catch (error) {
@@ -56,10 +57,12 @@ const dailyHumanStudy = async () => {
         }
         await configRef.set({ human_insights: insights }, { merge: true });
         console.log("[Evolution] Đã nạp Human Insight:", newInsight);
+        logger.logSystem("EVOLUTION_HUMAN_STUDY", `Đã nạp Human Insight: ${newInsight}`, "SUCCESS");
       }
     }
   } catch (err) {
     console.error("[Evolution] Lỗi Tầm Sư Học Đạo:", err.message);
+    logger.logSystem("EVOLUTION_HUMAN_STUDY", `Lỗi: ${err.message}`, "FAILED");
   }
 };
 
@@ -100,6 +103,7 @@ const processAuditIssues = async () => {
         }
         await configRef.set({ dynamic_guardrails: guardrails }, { merge: true });
         console.log("[Evolution] Đã nạp Guardrail mới:", newGuardrail);
+        logger.logSystem("EVOLUTION_GUARDRAIL", `Đã nạp Guardrail mới: ${newGuardrail}`, "SUCCESS");
         
         // Xóa audit_issues đã xử lý
         const batch = db.batch();
@@ -111,6 +115,7 @@ const processAuditIssues = async () => {
     }
   } catch (err) {
     console.error("[Evolution] Lỗi xử lý Audit Issues:", err.message);
+    logger.logSystem("EVOLUTION_GUARDRAIL", `Lỗi: ${err.message}`, "FAILED");
   }
 };
 

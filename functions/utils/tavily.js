@@ -1,4 +1,5 @@
 const axios = require("axios");
+const logger = require("./logger");
 
 const TAVILY_API_KEY = process.env.TAVILY_API_KEY;
 
@@ -113,7 +114,7 @@ const searchTavily = async (query, options = {}) => {
 
   try {
     console.log(`[Tavily] Query: "${query}" | Hôm nay: ${isTodaySensitive} | Ưu tiên trang chính thống VN`);
-    const response = await axios.post("https://api.tavily.com/search", params);
+    const response = await axios.post("https://api.tavily.com/search", params, { timeout: 15000 });
     const { answer, results = [] } = response.data;
     if (!answer && results.length === 0) return null; // Không có kết quả — bình thường, không fallback
 
@@ -133,10 +134,12 @@ const searchTavily = async (query, options = {}) => {
     // Rate limit (429) hoặc Server down (5xx) hoặc network timeout — re-throw để search.js fallback sang Exa
     if (status === 429 || (status >= 500) || !status) {
       console.error(`[Tavily] Lỗi nghiêm trọng (${status || 'network'}), khởi động Exa dự phòng...`);
+      logger.logOperational("SEARCH_ERROR", `[Tavily] Lỗi nghiêm trọng (${status || 'network'})`, error?.response?.data || error.message);
       throw error;
     }
     // Lỗi khác (4xx, bad request...) — không fallback, trả null
     console.error("[Tavily] Lỗi tìm kiếm:", error?.response?.data || error.message);
+    logger.logOperational("SEARCH_ERROR", "[Tavily] Lỗi tìm kiếm", error?.response?.data || error.message);
     return null;
   }
 };

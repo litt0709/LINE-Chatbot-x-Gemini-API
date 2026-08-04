@@ -1,116 +1,110 @@
-# 🏗️ Kiến Trúc Hệ Thống: LINE & Telegram AI Chatbot
-> **Cập nhật:** Lần cuối vào ngày 31/07/2026
+# Kiến trúc tổng thể hệ thống (Architecture)
+_Cập nhật lần cuối: 2026-08-04_
 
-Hệ thống được thiết kế theo hướng **Serverless** trên Google Cloud Platform (Firebase Cloud Functions), tập trung tối đa vào tốc độ phản hồi, tiết kiệm chi phí Token/Database và khả năng mở rộng (Multi-platform).
-
----
-
-## 1. Phân Lớp Kiến Trúc (Architecture Layers)
-
-| Lớp (Layer) | Công nghệ / File chịu trách nhiệm | Chức năng chính |
-| :--- | :--- | :--- |
-| **Request Layer** | Firebase Functions (`index.js`), `line.js`, `telegram.js` | Hứng Webhook từ LINE/Telegram, Parse sự kiện, Xác thực chữ ký. Băm nhỏ tin nhắn (Message Chunking) chống sập Telegram API. Xử lý LINE TextV2 (mentions & postback). Làm sạch XML Tags tàn dư trước khi gửi phản hồi. |
-| **Processing Layer** | `index.js` | Điều phối logic: Whitelist, Context Builder. Lọc chống lộ prompt bằng `leak_blacklist.json`. Hỗ trợ luồng hỏi thời gian thuần túy (Fast Path). Định tuyến luồng Audit & Cleanup tự động (`cleanup_audit.js`, `cleanup_update.js`). |
-| **LLM Layer** | `llm.js`, `deepseek.js`, `gemini.js` | LLM Router điều phối. DeepSeek-V4-Flash (Chat chính, Cấu trúc tag, Smart Search Query, Post-processing xóa câu hỏi ngược). Gemini-2.5-Flash (Phân tích ảnh/tài liệu đa phương thức, Tạo Audit Logs JSON). Offline Guardrails ngắt mạch API khi thiếu Web Context. |
-| **Search Layer** | `search.js`, `tavily.js`, `exa.js` | Định tuyến tìm kiếm. Tavily và Exa. Tích hợp Firewall chặn Web Scraping các nền tảng mạng xã hội (X/Twitter). Dùng Regex động tự phân loại (NEWS, FINANCE, DEV, SOCIAL, STANDALONE_TOPICS). |
-| **Storage Layer** | `db.js` (RTDB, Firestore, RAM Cache) | Hệ thống Hybrid Memory 3 tầng: RAM (Siêu tốc), RTDB (Ngắn hạn), Firestore (Dài hạn). Cung cấp Firestore API cho audit workflow độc lập. |
-
----
-
-## 2. Sơ Đồ Kiến Trúc Tổng Thể (ASCII Art)
+## Sơ đồ Kiến trúc (Architecture Diagram)
 
 ```text
-       [Telegram App]             [LINE App]
-             |                        |
-             +-----------+------------+
-                         |
-                         v
-             +------------------------+
-             | Firebase Cloud Function| (index.js - webhook)
-             +-----------+------------+
-                         |
-                         v
-             +------------------------+
-             |    Processing Layer    | (Whitelist, Context Builder, Scrubbing)
-             +-----------+------------+
-                         |
-      +------------------+------------------+
-      |                  |                  |
-      v                  v                  v
-+-----------+     +-------------+    +---------------+
-| LLM Layer |<--->| Search Layer|<-->| Storage Layer |
-+-----------+     +-------------+    +---------------+
- (Offline           (Tavily, Exa,       (RTDB, Firestore,
- Guardrails,         Scraping,          RAM Cache)
- DeepSeek,           Firewall)
- Gemini)
++-----------------------------------------------------------------+
+|                         USER (LINE / Telegram)                  |
++-----------------------------------------------------------------+
+                                | (Webhook API)
+                                v
++-----------------------------------------------------------------+
+|                       REQUEST LAYER (index.js)                  |
+| - Validation (Secret Token)                                     |
+| - Idempotency Cache (processedWebhooks, max 1000)               |
+| - Prompt Leakage Filter (leak_blacklist.json)                   |
++-----------------------------------------------------------------+
+                                |
+                                v
++-----------------------------------------------------------------+
+|                     PROCESSING LAYER (index.js)                 |
+| - Parse Text, Media, Event                                      |
+| - Smart Group Chat (Focus Mode, Proactive Check, isSummary)     |
+| - Action Tag Parser (<PROFILE>, <FACT>, <SCHEDULE>, <REACT>...) |
+| - Mention Resolution (textV2 for LINE, HTML for Telegram)       |
+| - MasterScheduler (Cron tasks)                                  |
++-----------------------------------------------------------------+
+                                |
+                                v
++-----------------------------------------------------------------+
+|       LLM LAYER (llm.js -> deepseek.js / gemini.js / news.js)   |
+| - System Prompt Builder (Brevity, Dynamic Config, Core Memory)  |
+| - Gemini 2.5 Flash (Multimodal, analyzeDocument, Audit/Summary) |
+| - DeepSeek V4 Flash (Text Chat, Reasoning, Tool Calling/ReAct)  |
++-----------------------------------------------------------------+
+               |                               |
+               v                               v
++--------------------------+    +---------------------------------+
+|      SEARCH LAYER        |    |       STORAGE LAYER (db.js)     |
+| (search.js)              |    | - Firestore: User Profiles,     |
+| - Regex Extractor        |    |   Audit Logs, Configs, Quotas   |
+| - Web Scraper (scrapeUrl)|    | - RTDB: Messages, Metadata,     |
+| - Tavily API (tavily.js) |    |   Schedules, Facts, Active      |
+| - Exa API (exa.js)       |    | - RAM Cache: Profile, Facts,    |
++--------------------------+    |   Metadata, WebContext          |
+                                +---------------------------------+
 ```
 
----
+## Bảng phân lớp kiến trúc
 
-## 3. Data Flow Sơ Đồ Chat (Text Workflow)
+| Lớp (Layer) | Chức năng chính | Các File liên quan |
+|---|---|---|
+| **Request Layer** | Nhận Request, kiểm tra Secret Token (Telegram), lọc trùng lặp Webhook, chặn Prompt Leakage. | `index.js` |
+| **Processing Layer** | Điều phối luồng, bóc tách thẻ HTML (Action Tags), quản lý tính năng nhóm, xử lý Mention, kiểm duyệt Admin (Duyệt Facts). | `index.js` |
+| **LLM Layer** | Logic tương tác AI, phân bổ tải giữa DeepSeek (Chat) và Gemini (Ảnh, Tài liệu, Nén bộ nhớ, Audit). | `llm.js`, `deepseek.js`, `gemini.js`, `news.js` |
+| **Search Layer** | Truy xuất thông tin thời gian thực từ mạng Internet, phân loại (NEWS, DEV, SOCIAL, FINANCE) để chọn API (Tavily/Exa). | `search.js`, `tavily.js`, `exa.js` |
+| **Storage Layer** | Lưu trữ đa tầng (RAM -> RTDB -> Firestore) tối ưu tốc độ đọc và chi phí ghi dữ liệu. | `db.js` |
+
+## Sơ đồ luồng dữ liệu (Data Flow khi Chat)
 
 ```text
-User ──> [Webhook] ──> Lọc Blacklist & Fast Path (hỏi giờ/ngày)
-                             │
-                             v
-                    Kiểm tra Cache RAM (Lấy Profile User siêu tốc)
-                             │
-                             v
-                    Xây dựng Ngữ cảnh (Ghim chủ đề & Bơm Facts/Profile từ RTDB/RAM)
-                             │
-                             v
-                    Search Router (Trích xuất từ khóa, quyết định Search)
-                    ├── Có ──> Kiểm tra URL bằng Firewall ──> Gọi API / Scrape
-                    └── Không ─> Tiếp tục
-                             │
-                             v
-                    Kiểm tra Offline Guardrails (Chống Hallucination)
-                    ├── Thỏa mãn (News/Fact-check KHÔNG có webContext) ──> Trả text "Không biết" (Ngắt mạch)
-                    └── Không thỏa mãn ──> Gộp Context gửi lên LLM Router
-                             │
-                             v
-                    Nhận chuỗi trả về từ LLM (DeepSeek/Gemini)
-                             │
-                             v
-                    Post-processing (Regex dọn sạch câu hỏi ngược đối với task Tóm tắt)
-                             │
-                             v
-                    Trích xuất XML Tags linh hoạt (Regex getAttr)
-                    ├── <PROFILE> ──> Update RAM & Firestore (Tên, giới tính, đặc điểm)
-                    ├── <FACT>    ──> Lưu Pending RTDB & Gửi Telegram duyệt
-                    ├── <Task>    ──> Tạo QuickReply (LINE) / Inline Keyboard (Telegram)
-                    └── <REACT>   ──> Validate Emoji ──> API Reaction (Telegram)
-                             │
-                             v
-                    Xóa các XML tags ẩn, format mentions, làm sạch chuỗi (Telegram / LINE textV2)
-                             │
-                             v
-                    Chunking (Telegram MAX_LEN=2000) ──> Gửi API trả lời
-                             │
-                             v
-                    Lưu lịch sử chat vào RTDB (Bất đồng bộ)
+User gửi tin nhắn
+   |
+   +-> 1. index.js: Xác thực & kiểm tra Idempotency
+   |
+   +-> 2. Tải Bot Config (Firestore -> RAM) & User/Group Profile (Firestore/RTDB -> RAM)
+   |
+   +-> 3. Lọc Prompt Leakage
+   |
+   +-> 4. search.js: Phát hiện nhu cầu tìm kiếm (Offline check)
+   |      +-> Nếu CÓ: Cào Web / Tavily / Exa -> Trả về WebContext (Lưu cache RTDB 5 phút)
+   |
+   +-> 5. Tìm kiếm Facts liên quan trong Cache
+   |
+   +-> 6. deepseek.js: Ghép System Prompt (Brevity Rule, Context, Facts, WebContext)
+   |      +-> Gọi API DeepSeek (Hỗ trợ Tool Call ReAct tối đa 2 lượt)
+   |
+   +-> 7. Trả về Text -> index.js parse các thẻ (<PROFILE>, <FACT>, <SCHEDULE>...)
+   |
+   +-> 8. Xử lý Mention (LINE textV2, Telegram HTML) & Băm nhỏ tin nhắn
+   |
+   +-> 9. Gửi tin qua line.js / telegram.js
+   |
+   +-> 10. Lưu tin nhắn vào RTDB
 ```
 
----
+## Bảng chi phí theo hành động
 
-## 4. Tối Ưu Hóa Chi Phí & Bảo Mật Hệ Thống (Cost & Security Matrix)
+Hệ thống được thiết kế tối ưu cực đoan về chi phí (Cost-effective):
 
-| Hành động / Sự cố | Biện pháp Tối ưu / Khắc phục | Mức phí dự kiến |
-| :--- | :--- | :--- |
-| **LLM Model Cost** | Chuyển từ deepseek-chat sang `deepseek-v4-flash` rẻ hơn, tốc độ phản hồi siêu việt. | Tối thiểu phí Token |
-| **Hallucination Prevention** | Sử dụng **Offline Guardrails** (Regex check) ngắt mạch không gọi LLM nếu thiếu Web Context cho các sự kiện thời sự/fact-check. | 0đ (Tiết kiệm 100% token) |
-| **Bảo vệ Prompt** | Chặn dò hỏi (Prompt Leakage) qua `leak_blacklist.json` tại tầng Webhook. | 0đ |
-| **Chống Scraping lỗi** | Firewall tại Search Layer tự động chặn đọc link X/Twitter, ngăn LLM bị nhiễu do JS rác. | Tối ưu thời gian & token |
-| **Hybrid Memory** | Quản lý bộ nhớ RAM cho Profile, Facts Index và Web Context. Cache Web Context 5 phút. | Tối thiểu phí đọc DB |
-| **Đọc Lịch sử Chat** | Dùng Realtime Database (RTDB) lấy tin nhắn thô. Cực rẻ, độ trễ thấp hơn Firestore. | ~0.0001đ / tin nhắn |
-| **Quản lý Rác Logs** | Hai luồng cron thủ công `/audit` và `/update` có script cleanup độc lập, tự động xóa DB sau khi hoàn tất. | Miễn phí |
+| Hành động / Dữ liệu | Giải pháp lưu trữ / API | Đánh giá Chi phí |
+|---|---|---|
+| **Tin nhắn trò chuyện thô** | Firebase RTDB (Realtime Database) | **Free/Rất rẻ** (Không tính phí Write document) |
+| **Hồ sơ Người dùng (Profile)** | RAM Cache (L1) -> Firestore (L2) | **Rẻ** (Chỉ ghi khi có thay đổi thực sự qua `<PROFILE>`) |
+| **Cấu hình Bot (botConfig)** | RAM Cache (L1) -> Firestore (L2) | **Gần như Free** (Cache RAM sống theo chu kỳ func) |
+| **Facts (Kiến thức tự học)** | RAM Cache (L1) -> RTDB (L2) | **Rất rẻ** (Lưu cấu trúc JSON trong RTDB) |
+| **Schedules (Lịch hẹn)** | RTDB | **Rất rẻ** |
+| **Lọc WebContext/Search** | RAM Cache -> RTDB (Cache 5p) | **Tiết kiệm API calls** (Tránh gọi Search API nhiều lần) |
+| **Audit Logs (Lịch sử lỗi)** | Firestore (Xóa bằng MasterScheduler) | **Có phí** (Ghi mỗi khi Gemini phát hiện issue, xóa tự động) |
+| **Chat Text API** | DeepSeek V4 Flash | **Siêu rẻ** (Giảm chi phí LLM so với GPT-4/Claude) |
+| **Vision / Summary API** | Gemini 2.5 Flash | **Free/Rẻ** (Dùng tài khoản Google AI Studio miễn phí/rẻ) |
+| **Search API (Tavily)** | Tavily API | **Free Tier** (1000 requests/tháng) |
+| **Search API (Exa)** | Exa API (Có Firestore quota tracker) | **Free Tier** (Max 950 requests/tháng, hard limit tại `exa_usage`) |
 
----
+## Môi trường Triển khai
 
-## 5. Môi Trường Triển Khai (Environments)
-
-| Tên Bot | Project ID GCP | Trạng thái | Nền tảng |
-| :--- | :--- | :--- | :--- |
-| LINE Bot | `line-ai-chatbot-eab18` | Active | Node.js 22 (2nd Gen) |
-| Telegram Bot | `tele-ai-chatbot` | Active | Node.js 22 (2nd Gen) |
+- **Nền tảng**: Firebase Cloud Functions (Node.js 22, 2nd Gen)
+- **Vùng (Region)**: `us-central1`
+- **Webhook URL**: `https://webhook-wsokmtbtsq-uc.a.run.app`
+- **Tài nguyên**: Cấu hình bộ nhớ `256MiB`, `maxInstances: 10`, timeout `300s`.

@@ -9,6 +9,7 @@ const telegram = require("./utils/telegram");
 const llm = require("./utils/llm");
 const { generateDailyNewsDigest } = require("./utils/news");
 const { getBotConfig } = require("./utils/configCache");
+const logger = require("./utils/logger");
 
 let cachedTgParticipants = null;
 let cachedLineParticipants = null;
@@ -501,7 +502,6 @@ const processAndExtractProfile = async (text, senderId, participants = {}, sessi
     .replace(/\[TAGS:.*?\]/gi, "")
     .replace(/\[THÔNG TIN TỪ INTERNET\]/gi, "thông tin trên Internet")
     .replace(/\n{3,}/g, "\n\n")
-    .replace(/["']?\s*\/>/g, "") // Dọn dẹp rác " /> do LLM sinh lỗi cú pháp thẻ XML
     .trim();
 
   // Bắt tag <RULE> (Phase 4: Self-Reflection)
@@ -862,8 +862,13 @@ exports.webhook = onRequest({
       return res.end();
     }
 
-    // Xử lý tin nhắn (Text, Ảnh, Document)
+    // Xử lý tin nhắn (Text, Ảnh, Document, Sticker)
     let messageContent = message.text || message.caption || null;
+
+    if (!messageContent && message.sticker) {
+       const emoji = message.sticker.emoji || "";
+       messageContent = `[Người dùng vừa gửi một Sticker thể hiện cảm xúc: ${emoji}]`.trim();
+    }
 
     if (messageContent && messageContent.trim() === "/start") {
       await telegram.reply(chatId, "Dạ em chào anh chị! Em là Annie đây ạ 🥰. Anh chị cần tra cứu tin tức, hỏi đáp hay lấy lịch thi đấu bóng đá thì cứ nhắn em nhé, em sẵn sàng 24/7 luôn ạ! ✨");
@@ -1239,6 +1244,9 @@ exports.webhook = onRequest({
         }
       } else if (event.type === "message" && event.message.type === "text") {
         messageContent = event.message.text;
+      } else if (event.message?.type === "sticker") {
+        const keywords = event.message.keywords ? event.message.keywords.join(", ") : "";
+        messageContent = `[Người dùng vừa gửi một Sticker biểu cảm: ${keywords}]`.trim();
       } else if (event.message?.type === "image") {
         const sessionId = event.source.groupId || event.source.roomId || userId;
         const sessionData = await getSessionMetadata(sessionId);
@@ -1570,9 +1578,43 @@ exports.masterScheduler = onSchedule({
 
   // Tiến hoá vô hạn (Infinite Evolution Framework): 3:00 AM
   if (hour === 3 && minute < 5) {
-    console.log("[Scheduler] Kích hoạt Tiến hóa Vô hạn");
+    console.log("[Scheduler] Kích hoạt Tiến hóa Vô hạn & Dọn dẹp Logs");
+    logger.logSystem("CRON_JOB", "Kích hoạt Tiến hóa Vô hạn & Dọn dẹp Logs", "SUCCESS");
+    
+    // Tiến hóa
     const { runDailyEvolution } = require("./utils/evolution");
     await runDailyEvolution();
+    
+    // Log Rotation (Zero Bloat)
+    try {
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const systemLogsRef = rtdb.ref("logs/system_logs");
+      const opLogsRef = rtdb.ref("logs/operational_logs");
+      
+      const [sysSnap, opSnap] = await Promise.all([systemLogsRef.once("value"), opLogsRef.once("value")]);
+      
+      if (sysSnap.exists()) {
+        const updates = {};
+        sysSnap.forEach(child => {
+          const dateStr = child.key; // YYYY-MM-DD
+          if (new Date(dateStr) < sevenDaysAgo) updates[dateStr] = null;
+        });
+        if (Object.keys(updates).length > 0) await systemLogsRef.update(updates);
+      }
+      
+      if (opSnap.exists()) {
+        const updates = {};
+        opSnap.forEach(child => {
+          const dateStr = child.key;
+          if (new Date(dateStr) < sevenDaysAgo) updates[dateStr] = null;
+        });
+        if (Object.keys(updates).length > 0) await opLogsRef.update(updates);
+      }
+      logger.logSystem("CRON_JOB", "Dọn dẹp logs cũ thành công", "SUCCESS");
+    } catch (err) {
+      console.error("[Scheduler] Lỗi khi dọn dẹp logs:", err.message);
+      logger.logSystem("CRON_JOB", "Lỗi dọn dẹp logs: " + err.message, "FAILED");
+    }
   }
 
   // 3. Dọn dẹp Lịch sử (Memory Compression): Chạy mỗi 4 tiếng (0, 4, 8, 12, 16, 20) lúc đầu giờ

@@ -1,9 +1,8 @@
 const admin = require("firebase-admin");
-const { FieldValue } = require("firebase-admin/firestore");
 const fs = require("fs");
 
-const serviceAccount = require("./auth/line-ai-chatbot-eab18-firebase-adminsdk-fbsvc-2abdcc42a0.json");
-const teleKey = require("./auth/tele-ai-chatbot-firebase-adminsdk-fbsvc-f017990579.json");
+const serviceAccount = require("../functions/auth/line-ai-chatbot-eab18-firebase-adminsdk-fbsvc-2abdcc42a0.json");
+const teleKey = require("../functions/auth/tele-ai-chatbot-firebase-adminsdk-fbsvc-f017990579.json");
 
 const appLine = admin.initializeApp({ credential: admin.credential.cert(serviceAccount) }, "LINE_APP");
 const dbLine = appLine.firestore();
@@ -11,34 +10,39 @@ const dbLine = appLine.firestore();
 const appTele = admin.initializeApp({ credential: admin.credential.cert(teleKey) }, "TELE_APP");
 const dbTele = appTele.firestore();
 
-async function cleanupDB(db, appName) {
-  const snap = await db.collection("audit_logs").get();
-  for (const doc of snap.docs) {
-    const data = doc.data();
-    if (data.audit_issues) {
-      await db.collection("audit_logs").doc(doc.id).update({
-        audit_issues: FieldValue.delete()
-      });
-      console.log(`[${appName}] Đã xóa audit_issues ở doc: ${doc.id}`);
-
-      // Kiểm tra xem document còn dữ liệu audit nào khác không
-      const hasKeywords = data.audit_keywords && data.audit_keywords.length > 0;
-      const hasMissedLinks = data.missed_link_requests && data.missed_link_requests.length > 0;
-      const hasMissedTopics = data.missed_topics && data.missed_topics.length > 0;
-      
-      if (!hasKeywords && !hasMissedLinks && !hasMissedTopics) {
-        await db.collection("audit_logs").doc(doc.id).delete();
-        console.log(`[${appName}] Xóa luôn document trống: ${doc.id}`);
+async function cleanup() {
+  try {
+    const snapLine = await dbLine.collection("audit_logs").get();
+    let countLine = 0;
+    for (const doc of snapLine.docs) {
+      const data = doc.data();
+      if (data.audit_issues) {
+        await doc.ref.update({ audit_issues: admin.firestore.FieldValue.delete() });
+        // Check if we should delete the doc entirely
+        if (!data.audit_keywords && !data.missed_link_requests && !data.missed_topics) {
+          await doc.ref.delete();
+        }
+        countLine++;
       }
     }
+    
+    const snapTele = await dbTele.collection("audit_logs").get();
+    let countTele = 0;
+    for (const doc of snapTele.docs) {
+      const data = doc.data();
+      if (data.audit_issues) {
+        await doc.ref.update({ audit_issues: admin.firestore.FieldValue.delete() });
+        // Check if we should delete the doc entirely
+        if (!data.audit_keywords && !data.missed_link_requests && !data.missed_topics) {
+          await doc.ref.delete();
+        }
+        countTele++;
+      }
+    }
+    console.log(`Cleaned up ${countLine} LINE docs and ${countTele} TELE docs.`);
+  } catch (error) {
+    console.error("Error cleaning up audit logs:", error);
   }
 }
 
-async function run() {
-  console.log("Bắt đầu dọn dẹp audit_logs...");
-  await cleanupDB(dbLine, "LINE");
-  await cleanupDB(dbTele, "TELEGRAM");
-  console.log("Hoàn thành.");
-}
-
-run();
+cleanup();
