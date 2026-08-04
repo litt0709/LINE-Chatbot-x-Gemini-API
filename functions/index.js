@@ -1124,7 +1124,15 @@ exports.webhook = onRequest({
     const isGroup = chatType !== "private";
     const groupContext = await buildGroupProfileContext(participants, cleanPrompt, userId, isGroup, senderName);
     const factsContext = await findRelevantFacts(String(chatId), cleanPrompt);
-    const rawMsg = await llm.chat(String(chatId), cleanPrompt, senderName, userId, null, quoteContext, forceIgnoreCheck, groupContext, isGroup, hotTopic, isPostback, postbackContext, factsContext, isProactiveTargeted);
+    
+    let rawMsg = "";
+    try {
+      rawMsg = await llm.chat(String(chatId), cleanPrompt, senderName, userId, null, quoteContext, forceIgnoreCheck, groupContext, isGroup, hotTopic, isPostback, postbackContext, factsContext, isProactiveTargeted);
+    } catch (err) {
+      console.error("[Telegram] Lỗi gọi LLM:", err.message);
+      await telegram.reply(chatId, "Dạ hiện tại máy chủ AI đang bận hoặc quá tải xíu, anh/chị đợi vài phút rồi hỏi lại em nha! 🥺");
+      return res.end();
+    }
 
     const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, createdAt: new Date().toISOString() };
 
@@ -1476,7 +1484,16 @@ exports.webhook = onRequest({
 
       const groupContext = await buildGroupProfileContext(participants, cleanPrompt, userId, isGroup, senderName);
       const factsContext = await findRelevantFacts(sessionId, cleanPrompt);
-      const rawMsg = await llm.chat(sessionId, cleanPrompt, senderName, userId, eventMessageId, quoteContext, forceIgnoreCheck, groupContext, isGroup, hotTopic, isPostback, postbackContext, factsContext);
+      
+      let rawMsg = "";
+      try {
+        rawMsg = await llm.chat(sessionId, cleanPrompt, senderName, userId, eventMessageId, quoteContext, forceIgnoreCheck, groupContext, isGroup, hotTopic, isPostback, postbackContext, factsContext);
+      } catch (err) {
+        console.error("[LINE] Lỗi gọi LLM:", err.message);
+        const fallbackMsg = { type: "text", text: "Dạ hiện tại máy chủ AI đang bận hoặc quá tải xíu, anh/chị đợi vài phút rồi hỏi lại em nha! 🥺" };
+        await line.reply(event.replyToken, [fallbackMsg]);
+        continue;
+      }
 
       const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, lineMessageId: eventMessageId, createdAt: new Date().toISOString() };
 

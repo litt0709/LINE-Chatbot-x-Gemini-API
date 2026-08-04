@@ -336,6 +336,14 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   
   try {
     while (true) {
+      
+      // Bắt buộc sanitize payload để phòng tránh lỗi "unknown variant model"
+      messages.forEach((m, idx) => {
+        if (m.role === "model") {
+          console.warn("[DeepSeek] CẢNH BÁO: Phát hiện role='model' ở index " + idx + ", tiến hành sanitize thành 'assistant'. Nội dung:", m.content);
+          m.role = "assistant";
+        }
+      });
       const payload = { model: DEEPSEEK_MODEL, messages };
       
       // Chỉ gắn tools nếu chưa quá giới hạn và không phải là xin link (fast path heuristic)
@@ -360,7 +368,7 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
            for (const match of dsmlMatches) {
              responseMessage.tool_calls.push({
                id: "call_" + Math.random().toString(36).substring(2, 11),
-               function: { name: match[1], arguments: JSON.stringify({ query: match[2].trim() }) }
+               type: "function", function: { name: match[1], arguments: JSON.stringify({ query: match[2].trim() }) }
              });
            }
          }
