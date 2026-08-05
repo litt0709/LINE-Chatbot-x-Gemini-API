@@ -5,13 +5,14 @@ _Cập nhật lần cuối: 2026-08-05_
 
 | File | Nhiệm vụ chính |
 |---|---|
-| `functions/index.js` | Entry point của Webhook (LINE & Telegram). Validate request. Idempotency Cache. Bóc tách Action Tags. Vẽ ASCII Art trực tiếp. Gọi LLM và điều phối phản hồi. Quản lý Cross-Environment Notification. |
-| `functions/utils/db.js` | Hàm tiện ích thao tác với Firebase RTDB (Cache, ghi tin nhắn thô, lịch hẹn) và Firestore (Hồ sơ người dùng). |
+| `functions/index.js` | Entry point của Webhook (LINE & Telegram). Validate request. Idempotency Cache (State-based). Bóc tách Action Tags. Vẽ ASCII Art trực tiếp. Gọi LLM và điều phối phản hồi. Quản lý Cross-Environment Notification. Xử lý File/PDF > 5MB. |
+| `functions/utils/db.js` | Hàm tiện ích thao tác với Firebase RTDB (Cache, ghi tin nhắn thô, lịch hẹn, trạng thái chạy masterScheduler) và Firestore (Hồ sơ người dùng). |
 | `functions/utils/llm.js` | Router phân luồng cấu hình LLM_PROVIDER để chọn DeepSeek hay Gemini. |
 | `functions/utils/deepseek.js` | Core chat LLM. Khởi tạo System Prompt động (nhồi Persona Anchor, MBTI, RAG Skill Vectors & JSON LTM). Hỗ trợ ReAct Tool Calling (search). Tích hợp Dual-Process Classifier để chọn model, tích hợp logic Auto-Retry chống ECONNRESET. |
-| `functions/utils/gemini.js` | LLM phụ trợ tác vụ nặng. Phân tích ảnh/tài liệu. Nén trí nhớ (LTM JSON, MBTI, Skill Vectors) và trích xuất Audit Logs. |
-| `functions/utils/search.js` | Phân tích từ khóa tìm kiếm (Regex offline check). Trích xuất nội dung link web (Scraping). Gọi API Tavily/Exa. RTDB WebContext caching. |
+| `functions/utils/gemini.js` | LLM phụ trợ tác vụ nặng. Phân tích ảnh/tài liệu qua File API (Hỗ trợ PDF với Prompt đặc thù). Nén trí nhớ (LTM JSON, MBTI, Skill Vectors) và trích xuất Audit Logs. |
+| `functions/utils/search.js` | Phân tích từ khóa tìm kiếm. Trích xuất nội dung link web. Chặn và phân tích PDF Links < 5MB (Bypass Scraping). Gọi API Tavily/Exa. RTDB WebContext caching. |
 | `functions/utils/tavily.js` | Wrapper API Tavily. Xử lý tìm kiếm tin thời sự, có chia nguồn VN/Quốc tế. |
+| `functions/commands/report.js` | Lệnh nội bộ (Internal Command). Tạo báo cáo tài chính/token xuyên nền tảng (Cross-project RTDB fetch), hỗ trợ tổng kết hàng tháng và web search. |
 | `functions/utils/exa.js` | Wrapper API Exa. Tìm kiếm chuyên sâu (Dev, Social). Cân bằng quota thông minh với Firestore tracking. |
 | `functions/utils/news.js` | Sinh bản tin buổi sáng và chiều dựa vào Web Search và DeepSeek LLM. |
 | `functions/utils/telegram.js` | Thao tác API Telegram (Gửi tin nhắn, chunking nội dung dài, phím bấm, reaction). |
@@ -43,10 +44,21 @@ _Cập nhật lần cuối: 2026-08-05_
 8. **Phản hồi User**: Chặt nội dung thành từng đoạn 2000 ký tự (Telegram) hoặc gửi đi bằng API Reply (LINE dùng textV2 mention).
 9. **Lưu trữ**: Lưu tin nhắn vào RTDB.
 
-### 2. Lazy Image Processing (Xử lý Đa phương tiện)
-- **Tối ưu Băng thông**: Khi có Image/File, hệ thống KHÔNG tải xuống lập tức.
-- **On-demand Download**: Chỉ khi cần mô tả, hệ thống gọi `downloadMessageFile` lưu tạm ra `/tmp/`.
-- **Phân tích (Gemini)**: Gửi file qua API Gemini (3.0 Flash) để mô tả nội dung. Sau đó xóa file local.
+### 2. Lazy Image Processing & PDF Reading (Xử lý Đa phương tiện)
+- **Bảo vệ tài nguyên**: Telegram Webhook/LINE Event khi báo có Document/File, hệ thống lập tức check size > 5MB sẽ drop ngay lập tức.
+- **Tối ưu Băng thông**: Với File < 5MB, hệ thống KHÔNG tải xuống lập tức nếu gửi chay (không kèm caption).
+- **On-demand Download**: Chỉ khi nhắc đến tài liệu, hệ thống gọi `downloadMessageFile` lưu tạm ra `/tmp/`.
+- **Phân tích (Gemini)**: Gửi file qua API Gemini (3.0 Flash qua File API). Nếu là PDF (`isPdf=true`), nhồi Prompt phân tích cấu trúc bài viết (Concept, Phương pháp, Kết quả, Research Gap). Sau đó xóa file local.
+
+### 2.5 Lệnh `/report` Xuyên nền tảng (Cross-Platform)
+- Lệnh được gọi từ `index.js`. File `commands/report.js` chịu trách nhiệm.
+- **Dynamic Service Account**: Sử dụng `PLATFORM` Env Var để lấy Admin SDK chéo. (Ví dụ Telegram sẽ init app của LINE).
+- **Data Merging**: Đọc `metrics/daily_tokens` và `metrics/monthly_calls` từ cả 2 nguồn RTDB, nhóm theo tháng, và xuất ra báo cáo duy nhất. Mức phí Search tính $0.005/lượt.
+
+### 3. MasterScheduler (Cron Job)
+- Chạy mỗi 5 phút một lần từ Cloud Scheduler.
+- **Idempotency (Chống lặp lộn xộn)**: Dùng cờ `system_state/master_scheduler_processed` tại RTDB để đảm bảo Telegram server và LINE server không chạy đè lên nhau. Node nào giành được lock sẽ chạy.
+- Thực hiện xoá tin rác, tổng hợp bộ nhớ dài hạn, tạo báo cáo tin tức `news.js`...
 
 ### 3. Web Context Resolution (Search Decision Tree)
 1. **Kiểm tra Catch Cứng (Fast Path)**: Các câu hỏi giờ giấc / ngày tháng hiện tại sẽ bỏ qua API.

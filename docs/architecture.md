@@ -15,16 +15,18 @@ _Cập nhật lần cuối: 2026-08-05_
 | - Idempotency Cache (processedWebhooks, max 1000)               |
 | - Prompt Leakage Filter (leak_blacklist.json)                   |
 | - ASCII Art Generator (figlet)                                  |
+| - Lệnh nội bộ (Report Cross-Platform)                           |
 +-----------------------------------------------------------------+
                                 |
                                 v
 +-----------------------------------------------------------------+
 |                     PROCESSING LAYER (index.js)                 |
-| - Parse Text, Media, Event                                      |
+| - Parse Text, Media, Event, Lệnh /report                        |
 | - EQ Empathy Analysis (Emoji/Sticker -> Emotion Injection)      |
 | - Action Tag Parser (<PROFILE>, <FACT>, <SCHEDULE>, <REACT>...) |
 | - Strict Mention Resolution (Word Boundary Matching)            |
-| - MasterScheduler (Cron tasks & Cross-Platform Routing)         |
+| - Chặn File PDF/Media > 5MB bảo vệ tài nguyên                   |
+| - MasterScheduler (Idempotency RTDB state & Đa nền tảng)        |
 +-----------------------------------------------------------------+
                                 |
                                 v
@@ -40,22 +42,22 @@ _Cập nhật lần cuối: 2026-08-05_
 |      SEARCH LAYER        |    |       STORAGE LAYER (db.js)     |
 | (search.js)              |    | - Firestore: User Profiles      |
 | - Regex Extractor        |    |   (JSON LTM, MBTI, Skills)      |
-| - Web Scraper (scrapeUrl)|    | - RTDB: Messages, Metadata,     |
-| - Tavily API (tavily.js) |    |   Schedules, Facts, Active      |
-| - Exa API (exa.js)       |    | - RAM Cache: Profile, Facts,    |
-+--------------------------+    |   Metadata, WebContext          |
-                                +---------------------------------+
+| - Bắt Link PDF (>5MB)    |    | - RTDB: Messages, Metadata,     |
+| - Web Scraper (scrapeUrl)|    |   Schedules, Facts, State       |
+| - Tavily API (tavily.js) |    | - RAM Cache: Profile, Facts,    |
+| - Exa API (exa.js)       |    |   Metadata, WebContext          |
++--------------------------+    +---------------------------------+
 ```
 
 ## Bảng phân lớp kiến trúc
 
 | Lớp (Layer) | Chức năng chính | Các File liên quan |
 |---|---|---|
-| **Request Layer** | Nhận Request, kiểm tra Secret Token, lọc trùng lặp Webhook, chặn Prompt Leakage, sinh ASCII Art (`figlet`). | `index.js` |
-| **Processing Layer** | Điều phối luồng, bóc tách Action Tags, quản lý tính năng nhóm, trích xuất cảm xúc (EQ Empathy), xử lý Strict Mention, định tuyến notification đa môi trường (Cross-Platform Routing). | `index.js` |
-| **LLM Layer** | Tương tác AI, định tuyến (Dual-Process) giữa System 1 (V4-Flash) và System 2 (V4-Pro) kèm Fallback và Auto-Retry. Gemini nén bộ nhớ (MBTI, Skill Vectors) và Audit. | `llm.js`, `deepseek.js`, `gemini.js`, `news.js` |
-| **Search Layer** | Truy xuất thông tin thời gian thực, phân loại (NEWS, DEV, SOCIAL, FINANCE) để chọn API (Tavily/Exa). | `search.js`, `tavily.js`, `exa.js` |
-| **Storage Layer** | Lưu trữ đa tầng (RAM -> RTDB -> Firestore). Firestore lưu Cấu trúc JSON Core Memory, MBTI Profile & Skill Vectors. | `db.js` |
+| **Request Layer** | Nhận Request, kiểm tra Token, xử lý lệnh `/report` đa nền tảng, lọc trùng lặp Webhook, chặn Prompt Leakage, sinh ASCII Art. | `index.js`, `commands/report.js` |
+| **Processing Layer** | Điều phối luồng, bóc tách Action Tags, chặn File/PDF >5MB, trích xuất cảm xúc (EQ), xử lý Strict Mention, định tuyến Cron Jobs (kèm Idempotency lock). | `index.js` |
+| **LLM Layer** | Tương tác AI, định tuyến (Dual-Process) giữa V4-Flash/V4-Pro. Gemini dùng File API phân tích PDF/Ảnh và nén bộ nhớ (LTM, MBTI). | `llm.js`, `deepseek.js`, `gemini.js`, `news.js` |
+| **Search Layer** | Truy xuất thông tin thời gian thực, tải PDF Buffer từ Link, phân loại (NEWS, DEV, SOCIAL, FINANCE) để chọn API (Tavily/Exa). | `search.js`, `tavily.js`, `exa.js` |
+| **Storage Layer** | Lưu trữ đa tầng (RAM -> RTDB -> Firestore). Firestore lưu JSON Core Memory, MBTI Profile. Lưu System State của Scheduler. | `db.js` |
 
 ## Sơ đồ luồng dữ liệu (Data Flow khi Chat)
 
@@ -71,7 +73,8 @@ User gửi tin nhắn
    +-> 3. Lọc Prompt Leakage & Phân tích Cảm xúc (analyzeEmotion từ Emoji/Sticker)
    |
    +-> 4. search.js: Phát hiện nhu cầu tìm kiếm (Offline check)
-   |      +-> Cào Web / Tavily / Exa -> Trả về WebContext (Lưu cache RTDB)
+   |      +-> Phân loại URL: Nếu là link .pdf, HEAD check <5MB -> Tải Buffer PDF -> Gọi Gemini File API.
+   |      +-> Nếu URL thường: Cào Web / Tavily / Exa -> Trả về WebContext (Lưu cache RTDB)
    |
    +-> 5. Tìm kiếm Facts liên quan trong Cache
    |
@@ -103,8 +106,8 @@ Hệ thống được thiết kế tối ưu cực đoan về chi phí (Cost-eff
 | **Audit Logs (Lịch sử lỗi)** | Firestore (Xóa bằng MasterScheduler) | **Có phí** (Ghi tự động khi Gemini review ban đêm) |
 | **Chat Text (System 1)** | DeepSeek V4 Flash | **Siêu rẻ** (Cho 90% giao tiếp thông thường) |
 | **Chat Text (System 2)** | DeepSeek V4 Pro | **Trả phí theo usage** (Chỉ trigger cho câu hỏi phức tạp/CoT) |
-| **Vision / Summary API** | Gemini 3.0 Flash | **Free/Rẻ** (Dùng tài khoản Google AI Studio miễn phí/rẻ) |
-| **Search API (Tavily)** | Tavily API | **Free Tier** (1000 requests/tháng) |
+| **Vision & PDF Reading** | Gemini 3.0 Flash (File API) | **Free/Rẻ** (Dùng File API đọc file dung lượng < 5MB) |
+| **Search API (Tavily)** | Tavily API | **~$0.005/lượt** (Theo hạn mức gói trả phí/free tier) |
 | **Search API (Exa)** | Exa API | **Free Tier** (Max 950 requests/tháng) |
 
 ## Môi trường Triển khai (Multi-Environment)
