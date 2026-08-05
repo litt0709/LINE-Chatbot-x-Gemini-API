@@ -42,3 +42,7 @@ Tài liệu này liệt kê danh sách các tính năng (features) của Bot, ba
 ## 10. Tóm tắt & Quản lý Chủ đề (Topic Summarization)
 - **Cơ chế:** Quản lý dung lượng bộ nhớ (Context Window) bằng cách tự động hoặc chủ động tóm tắt các đoạn hội thoại dài.
 - **Cách hoạt động:** Khi user gõ lệnh `"tóm tắt chủ đề"` hoặc khi bộ nhớ đầy, hệ thống sẽ chốt lại các điểm chính của cuộc trò chuyện, lưu thành `Hot Topic` để duy trì mạch truyện, đồng thời giải phóng bộ nhớ RAM tạm thời nhằm tiết kiệm token xử lý.
+
+## 11. Báo cáo Chi phí & Tiêu thụ Token (Cost Reporting)
+- **Cơ chế:** Theo dõi và thống kê số lượng token mà LLM (DeepSeek) tiêu thụ hàng ngày, từ đó ước tính chi phí thực tế theo USD.
+- **Cách hoạt động:** Sau mỗi lượt chat, bot trích xuất dữ liệu `usage` từ API và lưu dồn (atomic increment) vào RTDB (`metrics/daily_tokens`). Người quản trị có thể gọi công cụ IDE Agent (Skill `/report`) để xuất báo cáo chi tiết mà không làm ảnh hưởng đến hiệu năng hay phát sinh chi phí Write của hệ thống.

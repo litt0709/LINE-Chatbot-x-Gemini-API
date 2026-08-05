@@ -25,6 +25,7 @@ const llm = require("./utils/llm");
 const { generateDailyNewsDigest } = require("./utils/news");
 const { getBotConfig } = require("./utils/configCache");
 const logger = require("./utils/logger");
+const figlet = require("figlet");
 
 let cachedTgParticipants = null;
 let cachedLineParticipants = null;
@@ -176,22 +177,29 @@ const isUserAllowed = (userId, platform) => {
 const buildGroupProfileContext = async (participantsMap, promptText = "", senderId = "", isGroup = false, senderName = "") => {
   const uniqueIds = [...new Set(Object.values(participantsMap))].filter(Boolean);
   const lowerPrompt = promptText.toLowerCase();
+  
+  // Pad the prompt for simple word boundary checking (since JS \b is bad with Unicode)
+  const paddedPrompt = ` ${lowerPrompt.replace(/[.,!?()[\]{}"':;]/g, ' ')} `;
 
-  const PROFILE_TRIGGER_KEYWORDS = ["anh", "chị", "tôi", "mình", "em", "nhớ", "quên", "sở thích", "tên gì", "làm gì", "quê", "vợ", "chồng", "con", "hôm trước", "nhà", "biết"];
-  const hasTrigger = PROFILE_TRIGGER_KEYWORDS.some(kw => lowerPrompt.includes(kw));
+  const PROFILE_TRIGGER_KEYWORDS = [" anh ", " chị ", " tôi ", " mình ", " em ", " nhớ ", " quên ", " sở thích ", " tên gì ", " làm gì ", " quê "];
+  const hasTrigger = PROFILE_TRIGGER_KEYWORDS.some(kw => paddedPrompt.includes(kw));
 
-  // Lấy profile song song bằng Promise.all (nhanh hơn ~50% so với for...of tuần tự)
+  // Lấy profile song song
   const results = await Promise.all(uniqueIds.map(async (uid) => {
     let name = Object.keys(participantsMap).find(k => participantsMap[k] === uid) || uid;
     const isSender = (uid === senderId);
     if (isSender && senderName) {
-      name = senderName; // Ưu tiên tên gốc (có viết hoa) cho người gửi
+      name = senderName; 
     }
     
-    let isMentioned = lowerPrompt.includes(name.toLowerCase());
+    // Strict mention checking
+    const nameLower = name.toLowerCase();
+    let isMentioned = paddedPrompt.includes(` ${nameLower} `);
+    
     if (!isMentioned) {
-      const nameWords = name.toLowerCase().split(/\s+/).filter(w => w.length >= 2);
-      isMentioned = nameWords.some(w => lowerPrompt.includes(w));
+      // Check individual parts of the name (e.g. "Hải" from "Nguyễn Văn Hải")
+      const nameWords = nameLower.split(/\s+/).filter(w => w.length >= 3); // Bỏ qua chữ < 3 ký tự (như A, Lê, An, Mì...) để tránh false positive
+      isMentioned = nameWords.some(w => paddedPrompt.includes(` ${w} `));
     }
     
     if (!isSender && !isMentioned) return null;
@@ -203,7 +211,6 @@ const buildGroupProfileContext = async (participantsMap, promptText = "", sender
     }
     if (!profile) return null;
 
-    // Phục hồi original casing (viết hoa/viết thường) để LLM match chính xác với chat history
     if (profile.real_name) {
       name = profile.real_name;
     } else if (isSender && senderName) {
@@ -216,24 +223,25 @@ const buildGroupProfileContext = async (participantsMap, promptText = "", sender
       p.push(`Giới tính: ${genderStr}`);
     }
 
-    // Tầng 2: Full Traits (chỉ bơm khi có trigger hoặc bị mention trực tiếp)
-    if (hasTrigger || isMentioned) {
-      if (profile.public_traits) p.push(`Đặc điểm chung: ${profile.public_traits}`);
-      if (!isGroup && profile.private_traits) p.push(`Thông tin riêng tư: ${profile.private_traits}`);
+    // Tối ưu token: Chỉ bơm Traits nếu thực sự cần thiết (SENDER dùng đại từ, HOẶC người khác bị nhắc tên trực tiếp)
+    if ((isSender && hasTrigger) || isMentioned) {
+      if (profile.public_traits) p.push(`Info: ${profile.public_traits}`);
+      if (!isGroup && profile.private_traits) p.push(`Private: ${profile.private_traits}`);
 
       if (profile.traits && Array.isArray(profile.traits) && profile.traits.length > 0) {
-        p.push(`Đặc điểm cá nhân: ${profile.traits.join(" | ")}`);
+        // Chỉ lấy tối đa 3 đặc điểm nổi bật nhất để tiết kiệm token
+        p.push(`Traits: ${profile.traits.slice(0, 3).join(", ")}`);
       } else if (profile.traits && typeof profile.traits === "string") {
-        p.push(`Đặc tính: ${profile.traits}`);
+        p.push(`Traits: ${profile.traits}`);
       }
     }
 
-    return p.length > 0 ? `[${name}: ${p.join(", ")}] ` : `[${name}] `;
+    return p.length > 0 ? `[${name}: ${p.join(" | ")}]` : `[${name}]`;
   }));
 
-  const ctx = results.filter(Boolean).join("");
+  const ctx = results.filter(Boolean).join(" ");
   const prefix = isGroup ? "Thông tin tập thể" : "Thông tin người dùng";
-  const disclaimer = isGroup && ctx ? "\n[LƯU Ý CỐT LÕI: Chỉ dựa vào các thành viên ở trên, TUYỆT ĐỐI KHÔNG tự suy diễn, liên tưởng tên thành người nổi tiếng/tổ chức bên ngoài.]" : "";
+  const disclaimer = isGroup && ctx ? " (KHÔNG tự liên tưởng tên với người nổi tiếng)" : "";
   return ctx ? `\n\n${prefix}: ${ctx.trim()}${disclaimer}` : "";
 };
 
@@ -1088,9 +1096,9 @@ exports.webhook = onRequest({
       }
     }
 
-    // Lưu bất đồng bộ sang global nếu có dữ liệu mới
+    // Lưu bất đồng bộ sang global nếu có dữ liệu mới (Fire-and-forget)
     if (hasNewData) {
-      await saveGlobalParticipants("tg", cachedTgParticipants);
+      saveGlobalParticipants("tg", cachedTgParticipants).catch(e => console.error("[Telegram] Lỗi saveGlobalParticipants:", e.message));
     }
 
     // Nếu người dùng reply (trích dẫn) một tin nhắn khác, đính kèm nội dung đó vào prompt
@@ -1103,8 +1111,28 @@ exports.webhook = onRequest({
       const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, createdAt: new Date().toISOString() };
       const botMsgData = { role: "model", text: secureReply, createdAt: new Date().toISOString() };
 
-      await appendRawMessage(String(chatId), userMsgData, botMsgData);
-      await telegram.reply(chatId, secureReply);
+      appendRawMessage(String(chatId), userMsgData, botMsgData).catch(e => console.error(e));
+      await telegram.reply(chatId, secureReply).catch(e => console.error(e));
+      return res.end();
+    }
+
+    // Gửi chat action 'typing' để người dùng nhận được UX phản hồi tức thì
+    telegram.sendChatAction(chatId, "typing").catch(e => console.error("[Telegram] Lỗi sendChatAction:", e.message));
+
+    // ASCII Art (Zero Cost)
+    const asciiMatch = cleanPrompt.match(/vẽ (chữ|tên|ascii)\s+(.+)/i);
+    if (asciiMatch) {
+      const textToDraw = asciiMatch[2];
+      let asciiText = "Lỗi tạo ASCII";
+      try {
+        asciiText = figlet.textSync(textToDraw, { font: "Standard" });
+      } catch (e) { console.error("Figlet error:", e.message); }
+      
+      const replyMsg = "Dạ đây là tác phẩm ASCII của anh/chị nè! ✨\n```\n" + asciiText + "\n```";
+      const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, createdAt: new Date().toISOString() };
+      const botMsgData = { role: "model", text: replyMsg, createdAt: new Date().toISOString() };
+      appendRawMessage(String(chatId), userMsgData, botMsgData).catch(e => console.error(e));
+      await telegram.reply(chatId, replyMsg).catch(e => console.error(e));
       return res.end();
     }
 
@@ -1139,22 +1167,26 @@ exports.webhook = onRequest({
 
     const forceIgnoreCheck = (!isDirectlyTargeted && isImplicitlyTargeted);
     const isGroup = chatType !== "private";
-    const groupContext = await buildGroupProfileContext(participants, cleanPrompt, userId, isGroup, senderName);
-    const factsContext = await findRelevantFacts(String(chatId), cleanPrompt);
+    
+    // Gom các truy vấn I/O độc lập chạy song song để tối ưu tốc độ
+    const [groupContext, factsContext] = await Promise.all([
+      buildGroupProfileContext(participants, cleanPrompt, userId, isGroup, senderName),
+      findRelevantFacts(String(chatId), cleanPrompt)
+    ]);
     
     let rawMsg = "";
     try {
       rawMsg = await llm.chat(String(chatId), cleanPrompt, senderName, userId, null, quoteContext, forceIgnoreCheck, groupContext, isGroup, hotTopic, isPostback, postbackContext, factsContext, isProactiveTargeted);
     } catch (err) {
       console.error("[Telegram] Lỗi gọi LLM:", err.message);
-      await telegram.reply(chatId, "Dạ hiện tại máy chủ AI đang bận hoặc quá tải xíu, anh/chị đợi vài phút rồi hỏi lại em nha! 🥺");
+      await telegram.reply(chatId, "Dạ hiện tại máy chủ AI đang bận hoặc quá tải xíu, anh/chị đợi vài phút rồi hỏi lại em nha! 🥺").catch(e => {});
       return res.end();
     }
 
     const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, createdAt: new Date().toISOString() };
 
     if (rawMsg.trim() === "IGNORE") {
-      await appendRawMessage(String(chatId), userMsgData);
+      appendRawMessage(String(chatId), userMsgData).catch(e => console.error(e));
       return res.end();
     }
 
@@ -1421,8 +1453,28 @@ exports.webhook = onRequest({
         const botMsgData = { role: "model", text: secureReply, createdAt: new Date().toISOString() };
 
         const lineMsg = { type: "text", text: secureReply };
-        await line.reply(event.replyToken, [lineMsg]);
-        await appendRawMessage(sessionId, userMsgData, botMsgData);
+        await line.reply(event.replyToken, [lineMsg]).catch(e => console.error(e));
+        await appendRawMessage(sessionId, userMsgData, botMsgData).catch(e => console.error(e));
+        continue;
+      }
+
+      // Gửi chat action 'typing' (Loading Animation) để người dùng nhận được UX phản hồi tức thì
+      line.showLoadingAnimation(sessionId, 5).catch(e => console.error("[LINE] Lỗi showLoadingAnimation:", e.message));
+
+      // ASCII Art (Zero Cost)
+      const asciiMatch = cleanPrompt.match(/vẽ (chữ|tên|ascii)\s+(.+)/i);
+      if (asciiMatch) {
+        const textToDraw = asciiMatch[2];
+        let asciiText = "Lỗi tạo ASCII";
+        try {
+          asciiText = figlet.textSync(textToDraw, { font: "Standard" });
+        } catch (e) { console.error("Figlet error:", e.message); }
+        
+        const replyMsg = "Dạ đây là tác phẩm ASCII của anh/chị nè! ✨\n" + asciiText;
+        const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, lineMessageId: eventMessageId, createdAt: new Date().toISOString() };
+        const botMsgData = { role: "model", text: replyMsg, createdAt: new Date().toISOString() };
+        await appendRawMessage(sessionId, userMsgData, botMsgData).catch(e => console.error(e));
+        await line.reply(event.replyToken, [{ type: "text", text: replyMsg }]).catch(e => console.error(e));
         continue;
       }
 
@@ -1481,9 +1533,9 @@ exports.webhook = onRequest({
         hasNewData = true;
       }
 
-      // Lưu bất đồng bộ sang global nếu có dữ liệu mới
+      // Lưu bất đồng bộ sang global nếu có dữ liệu mới (Fire-and-forget)
       if (hasNewData) {
-        await saveGlobalParticipants("line", cachedLineParticipants);
+        saveGlobalParticipants("line", cachedLineParticipants).catch(e => console.error("[LINE] Lỗi saveGlobalParticipants:", e.message));
       }
 
       console.log(`[LINE] Participants map cho Session:`, JSON.stringify(participants));
@@ -1501,8 +1553,11 @@ exports.webhook = onRequest({
         }
       }
 
-      const groupContext = await buildGroupProfileContext(participants, cleanPrompt, userId, isGroup, senderName);
-      const factsContext = await findRelevantFacts(sessionId, cleanPrompt);
+      // Gom các truy vấn I/O độc lập chạy song song để tối ưu tốc độ
+      const [groupContext, factsContext] = await Promise.all([
+        buildGroupProfileContext(participants, cleanPrompt, userId, isGroup, senderName),
+        findRelevantFacts(sessionId, cleanPrompt)
+      ]);
       
       let rawMsg = "";
       try {
@@ -1510,21 +1565,21 @@ exports.webhook = onRequest({
       } catch (err) {
         console.error("[LINE] Lỗi gọi LLM:", err.message);
         const fallbackMsg = { type: "text", text: "Dạ hiện tại máy chủ AI đang bận hoặc quá tải xíu, anh/chị đợi vài phút rồi hỏi lại em nha! 🥺" };
-        await line.reply(event.replyToken, [fallbackMsg]);
+        await line.reply(event.replyToken, [fallbackMsg]).catch(e => {});
         continue;
       }
 
       const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, lineMessageId: eventMessageId, createdAt: new Date().toISOString() };
 
       if (rawMsg.trim() === "IGNORE") {
-        await appendRawMessage(sessionId, userMsgData);
+        appendRawMessage(sessionId, userMsgData).catch(e => console.error(e));
         continue;
       }
 
       const { text: botMsgText, topic } = await processAndExtractProfile(rawMsg, userId, participants, sessionId, senderName, "LINE");
 
       if (topic) {
-        await updateSessionMetadata(sessionId, { hotTopic: topic });
+        updateSessionMetadata(sessionId, { hotTopic: topic }).catch(e => console.error(e));
       }
 
       // Xây dựng LINE message có proper mention tags
@@ -1565,18 +1620,17 @@ const sendNotifications = async (type = "afternoon") => {
   console.log(`[Schedule] Bắt đầu tạo bản tin ngày cho ${targetIds.length} mục tiêu (loại: ${type})...`);
   const newsDigest = await generateDailyNewsDigest(type);
 
-  // Kiểm tra platform
-  const isLine = !!process.env.CHANNEL_ACCESS_TOKEN;
-  const isTelegram = !!process.env.TELEGRAM_BOT_TOKEN;
+  // Phân biệt theo đúng môi trường triển khai
+  const platform = (process.env.PLATFORM || "LINE").toUpperCase();
 
   for (const id of targetIds) {
     try {
-      if (isLine) {
-        await line.push(id, [{ type: "text", text: newsDigest.replace(/\*\*/g, "") }]);
-        console.log(`[Schedule] Đã gửi bản tin cho LINE ID: ${id}`);
-      } else if (isTelegram) {
+      if (platform === "TELEGRAM") {
         await telegram.push(id, newsDigest);
         console.log(`[Schedule] Đã gửi bản tin cho Telegram ID: ${id}`);
+      } else {
+        await line.push(id, [{ type: "text", text: newsDigest.replace(/\*\*/g, "") }]);
+        console.log(`[Schedule] Đã gửi bản tin cho LINE ID: ${id}`);
       }
     } catch (err) {
       console.error(`[Schedule] Lỗi khi gửi cho ID ${id}:`, err.message);
@@ -1705,9 +1759,12 @@ exports.masterScheduler = onSchedule({
           }
           if (psychologicalProfile) {
             updateData.psychological_profile = psychologicalProfile;
+            updateData.mbti_profile = psychologicalProfile; // Map for new terminology
           }
           if (dynamicRules && dynamicRules.length > 0) {
-            updateData.Dynamic_Rules = dynamicRules;
+            const oldRules = sessionData.Dynamic_Rules || sessionData.skill_vectors || [];
+            updateData.Dynamic_Rules = [...new Set([...oldRules, ...dynamicRules])].slice(-20); // Keep max 20 rules
+            updateData.skill_vectors = updateData.Dynamic_Rules; // Map for new terminology
           }
           if (hotTopic && hotTopic !== "None") {
             updateData.hotTopic = hotTopic;

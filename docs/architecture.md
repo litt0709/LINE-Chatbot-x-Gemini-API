@@ -1,5 +1,5 @@
 # Kiến trúc tổng thể hệ thống (Architecture)
-_Cập nhật lần cuối: 2026-08-04_
+_Cập nhật lần cuối: 2026-08-05_
 
 ## Sơ đồ Kiến trúc (Architecture Diagram)
 
@@ -14,6 +14,7 @@ _Cập nhật lần cuối: 2026-08-04_
 | - Validation (Secret Token)                                     |
 | - Idempotency Cache (processedWebhooks, max 1000)               |
 | - Prompt Leakage Filter (leak_blacklist.json)                   |
+| - ASCII Art Generator (figlet)                                  |
 +-----------------------------------------------------------------+
                                 |
                                 v
@@ -22,23 +23,23 @@ _Cập nhật lần cuối: 2026-08-04_
 | - Parse Text, Media, Event                                      |
 | - EQ Empathy Analysis (Emoji/Sticker -> Emotion Injection)      |
 | - Action Tag Parser (<PROFILE>, <FACT>, <SCHEDULE>, <REACT>...) |
-| - Mention Resolution (textV2 for LINE, HTML for Telegram)       |
-| - MasterScheduler (Cron tasks)                                  |
+| - Strict Mention Resolution (Word Boundary Matching)            |
+| - MasterScheduler (Cron tasks & Cross-Platform Routing)         |
 +-----------------------------------------------------------------+
                                 |
                                 v
 +-----------------------------------------------------------------+
 |       LLM LAYER (llm.js -> deepseek.js / gemini.js / news.js)   |
-| - System Prompt Builder (Dynamic Rules, JSON Core Memory)       |
+| - System Prompt Builder (Dynamic Rules, RAG Skill Vectors, MBTI)|
 | - Gemini 3.0 Flash (Multimodal, LTM Compression, Audit Logs)    |
-| - DeepSeek (Dual-Process: V4 Flash / Reasoner R2)               |
+| - DeepSeek (Dual-Process: V4 Flash / V4 Pro + Auto-Retry)       |
 +-----------------------------------------------------------------+
                |                               |
                v                               v
 +--------------------------+    +---------------------------------+
 |      SEARCH LAYER        |    |       STORAGE LAYER (db.js)     |
 | (search.js)              |    | - Firestore: User Profiles      |
-| - Regex Extractor        |    |   (JSON LTM, Dynamic Rules)     |
+| - Regex Extractor        |    |   (JSON LTM, MBTI, Skills)      |
 | - Web Scraper (scrapeUrl)|    | - RTDB: Messages, Metadata,     |
 | - Tavily API (tavily.js) |    |   Schedules, Facts, Active      |
 | - Exa API (exa.js)       |    | - RAM Cache: Profile, Facts,    |
@@ -50,11 +51,11 @@ _Cập nhật lần cuối: 2026-08-04_
 
 | Lớp (Layer) | Chức năng chính | Các File liên quan |
 |---|---|---|
-| **Request Layer** | Nhận Request, kiểm tra Secret Token (Telegram), lọc trùng lặp Webhook, chặn Prompt Leakage. | `index.js` |
-| **Processing Layer** | Điều phối luồng, bóc tách Action Tags, quản lý tính năng nhóm, trích xuất cảm xúc từ Emoji (EQ Empathy), xử lý Mention. | `index.js` |
-| **LLM Layer** | Tương tác AI, định tuyến (Dual-Process) giữa System 1 (Flash) và System 2 (Reasoner). Gemini nén bộ nhớ và Audit. | `llm.js`, `deepseek.js`, `gemini.js`, `news.js` |
+| **Request Layer** | Nhận Request, kiểm tra Secret Token, lọc trùng lặp Webhook, chặn Prompt Leakage, sinh ASCII Art (`figlet`). | `index.js` |
+| **Processing Layer** | Điều phối luồng, bóc tách Action Tags, quản lý tính năng nhóm, trích xuất cảm xúc (EQ Empathy), xử lý Strict Mention, định tuyến notification đa môi trường (Cross-Platform Routing). | `index.js` |
+| **LLM Layer** | Tương tác AI, định tuyến (Dual-Process) giữa System 1 (V4-Flash) và System 2 (V4-Pro) kèm Fallback và Auto-Retry. Gemini nén bộ nhớ (MBTI, Skill Vectors) và Audit. | `llm.js`, `deepseek.js`, `gemini.js`, `news.js` |
 | **Search Layer** | Truy xuất thông tin thời gian thực, phân loại (NEWS, DEV, SOCIAL, FINANCE) để chọn API (Tavily/Exa). | `search.js`, `tavily.js`, `exa.js` |
-| **Storage Layer** | Lưu trữ đa tầng (RAM -> RTDB -> Firestore). Firestore lưu Cấu trúc JSON Core Memory & Dynamic Rules. | `db.js` |
+| **Storage Layer** | Lưu trữ đa tầng (RAM -> RTDB -> Firestore). Firestore lưu Cấu trúc JSON Core Memory, MBTI Profile & Skill Vectors. | `db.js` |
 
 ## Sơ đồ luồng dữ liệu (Data Flow khi Chat)
 
@@ -62,8 +63,10 @@ _Cập nhật lần cuối: 2026-08-04_
 User gửi tin nhắn
    |
    +-> 1. index.js: Xác thực & kiểm tra Idempotency
+   |      +-> [Zero-cost] Nếu lệnh `/vẽ`: Trả về luôn ASCII art qua `figlet`.
    |
-   +-> 2. Tải Bot Config, User/Group Profile (JSON Core_Memory, Dynamic_Rules)
+   +-> 2. Tải Bot Config, User/Group Profile (JSON Core_Memory, MBTI, Skill Vectors)
+   |      +-> [Tối ưu] Chỉ load Full Traits nếu User là Sender hoặc bị Mentioned (Strict Regex)
    |
    +-> 3. Lọc Prompt Leakage & Phân tích Cảm xúc (analyzeEmotion từ Emoji/Sticker)
    |
@@ -72,10 +75,11 @@ User gửi tin nhắn
    |
    +-> 5. Tìm kiếm Facts liên quan trong Cache
    |
-   +-> 6. deepseek.js: Ghép System Prompt (Context, Rules, JSON LTM)
+   +-> 6. deepseek.js: Ghép System Prompt (Context, Persona Anchor, RAG Skills, JSON LTM)
    |      +-> Phân loại độ khó (Dual-Process Classifier)
    |      +-> Nếu Dễ: Gọi deepseek-v4-flash
-   |      +-> Nếu Khó: Bẻ lái sang deepseek-v4-reasoner
+   |      +-> Nếu Khó: Gọi deepseek-v4-pro
+   |      +-> [Fallback/Auto-Retry]: Tự động thử lại 2 lần nếu lỗi mạng (ECONNRESET), nếu fail v4-pro thì gọi v4-flash.
    |
    +-> 7. Trả về Text -> index.js parse các thẻ (<PROFILE>, <FACT>, <SCHEDULE>...)
    |
@@ -93,19 +97,20 @@ Hệ thống được thiết kế tối ưu cực đoan về chi phí (Cost-eff
 | Hành động / Dữ liệu | Giải pháp lưu trữ / API | Đánh giá Chi phí |
 |---|---|---|
 | **Tin nhắn trò chuyện thô** | Firebase RTDB (Realtime Database) | **Free/Rất rẻ** (Không tính phí Write document) |
-| **Hồ sơ Người dùng (Profile)** | RAM Cache (L1) -> Firestore (L2) | **Rẻ** (Chỉ ghi khi nén JSON LTM lúc 3h sáng hoặc có `<PROFILE>`) |
+| **Hồ sơ (LTM, MBTI, Skills)** | RAM Cache (L1) -> Firestore (L2) | **Rẻ** (Chỉ ghi khi nén JSON LTM lúc 3h sáng hoặc có `<PROFILE>`) |
 | **Cấu hình Bot (botConfig)** | RAM Cache (L1) -> Firestore (L2) | **Gần như Free** (Cache RAM) |
-| **Facts & Schedules** | RTDB | **Rất rẻ** |
+| **Vẽ ASCII Art** | Node.js (figlet) | **Hoàn toàn Free** (Local Compute) |
 | **Audit Logs (Lịch sử lỗi)** | Firestore (Xóa bằng MasterScheduler) | **Có phí** (Ghi tự động khi Gemini review ban đêm) |
 | **Chat Text (System 1)** | DeepSeek V4 Flash | **Siêu rẻ** (Cho 90% giao tiếp thông thường) |
-| **Chat Text (System 2)** | DeepSeek V4 Reasoner | **Trả phí theo usage** (Chỉ trigger cho câu hỏi phức tạp/CoT) |
+| **Chat Text (System 2)** | DeepSeek V4 Pro | **Trả phí theo usage** (Chỉ trigger cho câu hỏi phức tạp/CoT) |
 | **Vision / Summary API** | Gemini 3.0 Flash | **Free/Rẻ** (Dùng tài khoản Google AI Studio miễn phí/rẻ) |
 | **Search API (Tavily)** | Tavily API | **Free Tier** (1000 requests/tháng) |
 | **Search API (Exa)** | Exa API | **Free Tier** (Max 950 requests/tháng) |
 
-## Môi trường Triển khai
+## Môi trường Triển khai (Multi-Environment)
 
 - **Nền tảng**: Firebase Cloud Functions (Node.js 22, 2nd Gen)
 - **Vùng (Region)**: `us-central1`
-- **Webhook URL**: `https://webhook-wsokmtbtsq-uc.a.run.app`
+- **LINE Project**: `line-ai-chatbot-eab18` (Webhook URL: `https://webhook-wsokmtbtsq-uc.a.run.app`)
+- **Telegram Project**: `tele-ai-chatbot` (Webhook URL: `https://webhook-ephgri5wvq-uc.a.run.app`)
 - **Tài nguyên**: Cấu hình bộ nhớ `256MiB`, `maxInstances: 10`, timeout `300s`.
