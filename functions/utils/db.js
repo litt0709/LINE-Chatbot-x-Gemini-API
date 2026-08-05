@@ -39,6 +39,9 @@ const appendRawMessage = async (sessionId, ...messages) => {
     const ref = rtdb.ref(`chats/${sessionId}/messages`);
     const promises = messages.map(msg => ref.push(msg));
     await Promise.all(promises);
+    
+    // Internal Tracking
+    await trackFirebaseUsage("rtdb_writes", messages.length).catch(() => {});
   } catch (error) {
     console.error(`[RTDB] Lỗi lưu tin nhắn thô ${sessionId}:`, error.message);
   }
@@ -360,6 +363,53 @@ const getDueSchedules = async (nowTimestamp) => {
   }
 };
 
+/**
+ * Đếm mức độ sử dụng Firebase (Internal Tracking)
+ * @param {string} metric Loại metric (ví dụ: 'functions_invocations', 'rtdb_writes')
+ * @param {number} count Số lượng muốn cộng thêm
+ */
+const trackFirebaseUsage = async (metric, count = 1) => {
+  try {
+    const today = new Date();
+    // Giờ VN (UTC+7)
+    const vnTime = new Date(today.getTime() + 7 * 60 * 60 * 1000);
+    const dateStr = vnTime.toISOString().split("T")[0]; // YYYY-MM-DD
+    
+    const ref = rtdb.ref(`metrics/daily_usage/${dateStr}/firebase/${metric}`);
+    await ref.set(admin.database.ServerValue.increment(count));
+  } catch (error) {
+    console.error("[RTDB] Lỗi trackFirebaseUsage:", error.message);
+  }
+};
+
+/**
+ * Đọc cờ trạng thái hệ thống từ RTDB
+ * @param {string} key Tên key (VD: 'news/morning_2026_08_05')
+ * @returns {Promise<any>}
+ */
+const getSystemState = async (key) => {
+  try {
+    const snap = await rtdb.ref(`system_states/${key}`).once("value");
+    return snap.exists() ? snap.val() : null;
+  } catch (error) {
+    console.error(`[RTDB] Lỗi đọc system state ${key}:`, error.message);
+    return null;
+  }
+};
+
+/**
+ * Ghi cờ trạng thái hệ thống vào RTDB
+ * @param {string} key Tên key (VD: 'news/morning_2026_08_05')
+ * @param {any} value Giá trị cần lưu
+ */
+const setSystemState = async (key, value) => {
+  try {
+    await rtdb.ref(`system_states/${key}`).set(value);
+  } catch (error) {
+    console.error(`[RTDB] Lỗi ghi system state ${key}:`, error.message);
+  }
+};
+
 module.exports = { 
   db, 
   rtdb,
@@ -385,7 +435,10 @@ module.exports = {
   getAllSchedules,
   deleteSchedule,
   getDueSchedules,
-  clearSessionHistory
+  clearSessionHistory,
+  trackFirebaseUsage,
+  getSystemState,
+  setSystemState
 };
 
 

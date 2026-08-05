@@ -14,6 +14,7 @@ Tài liệu này liệt kê danh sách các tính năng (features) của Bot, ba
 ## 3. Bản tin hàng ngày (Daily News Digest)
 - **Cơ chế:** Hàng ngày vào lúc 8:00 sáng và 13:30 chiều (từ Thứ 2 đến Thứ 6), bot sẽ tự động gửi bản tin công nghệ mới nhất hoặc câu chúc ngày mới vào các group/user đã đăng ký nhận thông báo.
 - **Luồng xử lý:** Sử dụng Firebase Cloud Scheduler để trigger hàm cron job tự động.
+- **Tính bền bỉ (Idempotency):** Áp dụng cờ trạng thái (State Flag) lưu trên RTDB để chống tình trạng lỡ tin nhắn do Cloud Scheduler bị độ trễ (delay cold-start) vượt quá số phút quy định. Mở rộng khung cửa sổ kích hoạt kết hợp với RTDB giúp đảm bảo bản tin được phát đi duy nhất một lần (Exactly-Once delivery).
 
 ## 4. Quản lý Hồ sơ (Profile Management)
 - **Cơ chế:** Bot tự động trích xuất các đặc điểm cá nhân, sở thích, giới tính, tên gọi của user thông qua thẻ XML `<PROFILE>`. 

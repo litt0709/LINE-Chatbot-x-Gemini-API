@@ -54,15 +54,32 @@ const multimodal = async (imageBinary) => {
 /**
  * Phân tích tài liệu (PDF, Excel, Word...) bằng File API.
  * @param {string} localFilePath - Đường dẫn file local (thường ở /tmp/)
+ * @param {boolean} isPdf - Đánh dấu xem tài liệu có phải là PDF không
  * @returns {Promise<string>}
  */
-const analyzeDocument = async (localFilePath) => {
+const analyzeDocument = async (localFilePath, isPdf = false) => {
   let uploadResult = null;
   try {
-    uploadResult = await ai.files.upload({ file: localFilePath });
+    uploadResult = await getAI().files.upload({ file: localFilePath });
     
     // Đợi 2 giây để Google xử lý file nội bộ trước khi gọi generate (tránh lỗi file not ready)
     await new Promise(resolve => setTimeout(resolve, 2000));
+
+    let textPrompt = "Trích xuất và tóm tắt thông tin quan trọng nhất từ tài liệu này. Giữ lại các số liệu và ý chính. YÊU CẦU BẮT BUỘC: Bản tóm tắt phải cực kỳ súc tích, khách quan và TUYỆT ĐỐI KHÔNG VƯỢT QUÁ 1000 CHỮ.";
+    
+    if (isPdf) {
+      textPrompt = `Dựa trên tất cả tài liệu này, hãy trình bày lại như sau:
+1. Các chủ đề/concept cốt lõi nhất
+2. Cách tiếp cận/phương pháp phổ biến.
+3. Các kết quả nhất quán và các điểm còn tranh cãi. (nếu có trong bài)
+4. Khoảng trống nghiên cứu tiềm năng được gợi ý trong tài liệu. (nếu có trong bài)
+Mỗi ý đều phải dẫn chiếu tới tài liệu nguồn (tên hoặc ký hiệu).
+BẮT BUỘC 100%: 
+- Không được bỏ sót bất cứ nội dung chính nào
+- Nội dùng trình bày mạch lạc rõ ràng, khoa học. Có thể trình bày từ tổng quan về nội dung trước, sau đó đi chi tiết
+- Nội dung đơn giản nhất cho người đọc, tránh câu cú chúc choắc, viết câu theo cấu trúc chủ ngữ-vị ngữ-tân ngữ
+- Tuỳ theo ngữ cảnh, có thể giữ nguyên các từ chuyên môn công nghệ, không cần dịch sang tiếng Việt (tránh để gây khó hiểu)`;
+    }
 
     const response = await getAI().models.generateContent({
       model: GEMINI_MODEL,
@@ -71,7 +88,7 @@ const analyzeDocument = async (localFilePath) => {
           role: "user",
           parts: [
             { fileData: { fileUri: uploadResult.uri, mimeType: uploadResult.mimeType } },
-            { text: "Trích xuất và tóm tắt thông tin quan trọng nhất từ tài liệu này. Giữ lại các số liệu và ý chính. YÊU CẦU BẮT BUỘC: Bản tóm tắt phải cực kỳ súc tích, khách quan và TUYỆT ĐỐI KHÔNG VƯỢT QUÁ 1000 CHỮ." }
+            { text: textPrompt }
           ]
         }
       ]
@@ -83,7 +100,7 @@ const analyzeDocument = async (localFilePath) => {
     return "Lỗi: Không thể phân tích nội dung tài liệu này.";
   } finally {
     if (uploadResult && uploadResult.name) {
-      ai.files.delete({ name: uploadResult.name }).catch(e => console.error("[Gemini] Lỗi xóa file:", e.message));
+      getAI().files.delete({ name: uploadResult.name }).catch(e => console.error("[Gemini] Lỗi xóa file:", e.message));
     }
     if (fs.existsSync(localFilePath)) {
       fs.unlinkSync(localFilePath);

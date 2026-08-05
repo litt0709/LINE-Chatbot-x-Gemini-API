@@ -14,22 +14,26 @@ description: |
 - `deepseek-v4-flash`: Prompt = $0.07 | Completion = $0.14
 - `deepseek-v4-pro`: Prompt = $0.55 | Completion = $2.19
 
+## 3. Web Search (Tavily)
+- Đơn giá: $0.005 / request ($5 per 1000 requests).
+- Dữ liệu lượt search sẽ được cộng gộp vào tổng chi phí.
+
 ## Quy trình thực hiện
 
 ### Bước 1: Thực thi script thống kê
 Chạy lệnh sau trong terminal để lấy dữ liệu thống kê từ RTDB:
-`cd functions && node ../.agents/skills/report/scripts/generate_report.js`
+`node .agents/skills/report/scripts/generate_report.js`
 
 ### Bước 2: Phân tích kết quả
-Script sẽ trả về một chuỗi JSON chứa dữ liệu thống kê của 7 ngày gần nhất (bao gồm số lượng Prompt Tokens, Completion Tokens, và tổng chi phí của từng ngày).
+Script sẽ trả về một chuỗi JSON chứa dữ liệu thống kê GỘP CHUNG (cả LINE và TELEGRAM) theo từng tháng (tháng hiện tại, và tháng trước nếu hôm nay < ngày 11). Bao gồm chi phí Token và chi phí Web Search.
 
 ### Bước 3: Xuất báo cáo cho User
 Trình bày kết quả bằng một bảng Markdown đẹp mắt và chuyên nghiệp.
 
 **Format yêu cầu:**
-- Bảng 1: Thống kê tổng quan các ngày (Ngày, Tổng Token, Tổng Chi Phí USD).
-- Bảng 2: Chi tiết ngày HÔM NAY (chia theo model Flash và Pro, Input/Output).
-- Dùng GitHub Alerts (VD: `> [!NOTE]`) để ghi chú thêm rằng dữ liệu được track với chi phí 0đ thông qua RTDB.
+- Bảng tổng kết theo tháng: Cột (Tháng, Tiền Token, Tiền Web Search, Tổng USD).
+- Bảng chi tiết Model trong tháng hiện tại: Cột (Model, Prompt Tokens, Completion Tokens, USD).
+- Dùng GitHub Alerts (VD: `> [!NOTE]`) để ghi chú thêm rằng chi phí Web Search được tính là $0.005/lần và dữ liệu được track với chi phí 0đ (không tốn phí write database).
 
 **Lưu ý:**
 - Bắt buộc phải chạy script bằng lệnh Node để kéo dữ liệu thật từ Database trước khi generate report. KHÔNG ĐƯỢC BỊA SỐ LIỆU.

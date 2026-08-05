@@ -18,20 +18,19 @@ async function handleCommand(prompt, context) {
   // Bỏ qua nếu prompt quá dài không giống lệnh
   if (cleanPrompt.length > 100) return null;
 
-  // 1. Lệnh vẽ ASCII ẩn (trigger khi chat "vẽ chữ xyz")
-  if (/^(vẽ) (chữ|tên|ascii)\s+(.+)/i.test(cleanPrompt)) {
+  // 1. Lệnh vẽ ASCII ẩn (trigger khi chat "vẽ chữ xyz" hoặc "/vẽ chữ xyz")
+  if (/(?:^|\s)(?:\/)?(vẽ) (chữ|tên|ascii)\s+(.+)/i.test(cleanPrompt)) {
     return handleAsciiCommand(cleanPrompt);
   }
 
   // 2. Lệnh báo cáo (Token / Health) - hỗ trợ cả tự nhiên
-  if (/^\/(report|health)$/i.test(cleanPrompt) || 
-      /^(cho )?biết sức khoẻ/i.test(cleanPrompt) || 
-      /^(cho )?biết sức khỏe/i.test(cleanPrompt) || 
-      /^(báo cáo|thống kê) (sức khỏe|health)/i.test(cleanPrompt)) {
+  if (/^\/health$/i.test(cleanPrompt) || 
+      /(cho )?(tôi )?biết sức kho(ẻ|e)/i.test(cleanPrompt) || 
+      /(báo cáo|thống kê|cho xem) (sức kho(ẻ|e)|health)/i.test(cleanPrompt)) {
     return await handleReportCommand("/health", context);
   }
 
-  if (/^(báo cáo|thống kê) (chi phí|token|deepseek)/i.test(cleanPrompt) || /^\/report$/i.test(cleanPrompt)) {
+  if (/(báo cáo|thống kê|cho xem|xem) (chi phí|token|deepseek|tiền)/i.test(cleanPrompt) || /^\/report$/i.test(cleanPrompt)) {
     return await handleReportCommand("/report", context);
   }
 

@@ -2,7 +2,7 @@
 const { onRequest } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const crypto = require("crypto");
-const { db, rtdb, FieldValue, appendRawMessage, getRawMessages, clearRawMessages, getUserProfile, saveUserProfile, registerActiveSession, getActiveSessions, deregisterActiveSession, getSessionMetadata, updateSessionMetadata, getGlobalParticipants, saveGlobalParticipants, saveFact, getFactsIndex, getFactDetail, saveSchedule, getUserSchedules, getAllSchedules, deleteSchedule, getDueSchedules, clearSessionHistory } = require("./utils/db");
+const { db, rtdb, FieldValue, appendRawMessage, getRawMessages, clearRawMessages, getUserProfile, saveUserProfile, registerActiveSession, getActiveSessions, deregisterActiveSession, getSessionMetadata, updateSessionMetadata, getGlobalParticipants, saveGlobalParticipants, saveFact, getFactsIndex, getFactDetail, saveSchedule, getUserSchedules, getAllSchedules, deleteSchedule, getDueSchedules, clearSessionHistory, trackFirebaseUsage, getSystemState, setSystemState } = require("./utils/db");
 const line = require("./utils/line");
 const telegram = require("./utils/telegram");
 
@@ -713,6 +713,9 @@ exports.webhook = onRequest({
   memory: "256MiB",
   maxInstances: 10
 }, async (req, res) => {
+  // Đếm số lượt gọi Cloud Functions
+  trackFirebaseUsage("functions_invocations", 1).catch(() => {});
+
   const isTelegram = req.body && (req.body.message || req.body.callback_query || req.body.edited_message || req.body.channel_post);
 
   if (req.method === "GET") {
@@ -932,10 +935,15 @@ exports.webhook = onRequest({
         messageContent = (messageContent ? messageContent + "\n" : "") + `[BỨC ẢNH NGƯỜI DÙNG VỪA GỬI ĐẾN]: "${imgDesc.trim()}"`;
         isImage = true;
       } else if (message.document) {
+        if (message.document.file_size > 5 * 1024 * 1024) {
+          await telegram.reply(chatId, "[Hệ thống: File tài liệu quá lớn (>5MB), không hỗ trợ phân tích để bảo vệ hệ thống]");
+          return res.end();
+        }
         const fileName = message.document.file_name || "document";
+        const isPdf = fileName.toLowerCase().endsWith(".pdf") || message.document.mime_type === "application/pdf";
         console.log(`[Telegram] Đang xử lý file ${fileName} từ User ${userId}...`);
         const localPath = await telegram.downloadMessageFile(message.document.file_id, fileName);
-        const fileDesc = await llm.analyzeDocument(localPath);
+        const fileDesc = await llm.analyzeDocument(localPath, isPdf);
         messageContent = (messageContent ? messageContent + "\n" : "") + `[TÀI LIỆU NGƯỜI DÙNG VỪA GỬI ĐẾN: ${fileName}]:\n"${fileDesc.trim()}"`;
         isImage = true;
       } else if (message.reply_to_message?.photo) {
@@ -946,10 +954,15 @@ exports.webhook = onRequest({
         messageContent = (messageContent ? messageContent + "\n" : "") + `[BỨC ẢNH ĐƯỢC TRÍCH DẪN]: "${imgDesc.trim()}"`;
         isImage = true;
       } else if (message.reply_to_message?.document) {
+        if (message.reply_to_message.document.file_size > 5 * 1024 * 1024) {
+          await telegram.reply(chatId, "[Hệ thống: File tài liệu quá lớn (>5MB), không hỗ trợ phân tích để bảo vệ hệ thống]");
+          return res.end();
+        }
         const fileName = message.reply_to_message.document.file_name || "document";
+        const isPdf = fileName.toLowerCase().endsWith(".pdf") || message.reply_to_message.document.mime_type === "application/pdf";
         console.log(`[Telegram] Đang xử lý file được trích dẫn ${fileName} từ User ${userId}...`);
         const localPath = await telegram.downloadMessageFile(message.reply_to_message.document.file_id, fileName);
-        const fileDesc = await llm.analyzeDocument(localPath);
+        const fileDesc = await llm.analyzeDocument(localPath, isPdf);
         messageContent = (messageContent ? messageContent + "\n" : "") + `[TÀI LIỆU ĐƯỢC TRÍCH DẪN: ${fileName}]:\n"${fileDesc.trim()}"`;
         isImage = true;
       }
@@ -965,6 +978,8 @@ exports.webhook = onRequest({
         ? message.photo[message.photo.length - 1].file_id
         : message.document.file_id;
       const mediaType = message.photo ? "image" : "document";
+      const fileSize = message.photo ? 0 : message.document.file_size;
+      const isPdf = message.document && (message.document.file_name || "").toLowerCase().endsWith(".pdf");
       const placeholderText = message.photo
         ? "[HÌNH ẢNH]"
         : `[TÀI LIỆU: ${message.document.file_name || "document"}]`;
@@ -977,6 +992,8 @@ exports.webhook = onRequest({
         senderId: userId,
         mediaId,
         mediaType,
+        fileSize,
+        isPdf,
         createdAt: new Date().toISOString()
       };
       await appendRawMessage(String(chatId), userMsg);
@@ -1119,11 +1136,15 @@ exports.webhook = onRequest({
             const imgDesc = await llm.multimodal(imageBinary);
             quoteContext = `[BỨC ẢNH ĐƯỢC NHẮC ĐẾN]: "${imgDesc.trim()}"\n`;
           } else if (mediaMsg.mediaType === "document") {
-            const docNameMatch = mediaMsg.text.match(/\[TÀI LIỆU:\s*(.*?)\]/);
-            const fileName = docNameMatch ? docNameMatch[1] : "document";
-            const localPath = await telegram.downloadMessageFile(mediaMsg.mediaId, fileName);
-            const fileDesc = await llm.analyzeDocument(localPath);
-            quoteContext = `[TÀI LIỆU ĐƯỢC NHẮC ĐẾN: ${fileName}]:\n"${fileDesc.trim()}"\n`;
+            if (mediaMsg.fileSize > 5 * 1024 * 1024) {
+               quoteContext = `[Hệ thống: File tài liệu quá lớn (>5MB), không thể phân tích]\n`;
+            } else {
+               const docNameMatch = mediaMsg.text.match(/\[TÀI LIỆU:\s*(.*?)\]/);
+               const fileName = docNameMatch ? docNameMatch[1] : "document";
+               const localPath = await telegram.downloadMessageFile(mediaMsg.mediaId, fileName);
+               const fileDesc = await llm.analyzeDocument(localPath, mediaMsg.isPdf);
+               quoteContext = `[TÀI LIỆU ĐƯỢC NHẮC ĐẾN: ${fileName}]:\n"${fileDesc.trim()}"\n`;
+            }
           }
         }
       }
@@ -1292,6 +1313,10 @@ exports.webhook = onRequest({
         await registerActiveSession(sessionId);
         continue;
       } else if (event.message?.type === "file") {
+        if (event.message.fileSize > 5 * 1024 * 1024) {
+          await line.reply(event.replyToken, "[Hệ thống: File tài liệu quá lớn (>5MB), không hỗ trợ phân tích để bảo vệ hệ thống]");
+          continue;
+        }
         const sessionId = event.source.groupId || event.source.roomId || userId;
         const sessionData = await getSessionMetadata(sessionId);
         const sessionParticipants = sessionData.participants || {};
@@ -1299,12 +1324,15 @@ exports.webhook = onRequest({
         const participants = { ...sessionParticipants, ...cachedParticipants };
         const senderName = Object.keys(participants).find(key => participants[key] === userId) || "User";
         const fileName = event.message.fileName || "document";
+        const isPdf = fileName.toLowerCase().endsWith(".pdf");
 
         const userMsg = {
           role: "user",
           text: `[TÀI LIỆU: ${fileName}]`,
           mediaId: event.message.id,
           mediaType: "document",
+          fileSize: event.message.fileSize,
+          isPdf,
           senderName,
           senderId: userId,
           lineMessageId: event.message.id,
@@ -1431,7 +1459,7 @@ exports.webhook = onRequest({
         const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, lineMessageId: eventMessageId, createdAt: new Date().toISOString() };
         const botMsgData = { role: "model", text: commandReply, createdAt: new Date().toISOString() };
         await appendRawMessage(sessionId, userMsgData, botMsgData).catch(e => console.error(e));
-        await line.reply(event.replyToken, [{ type: "text", text: commandReply }]).catch(e => console.error(e));
+        await line.reply(event.replyToken, [{ type: "text", text: commandReply.replace(/\*\*/g, "") }]).catch(e => console.error(e));
         continue;
       }
 
@@ -1447,10 +1475,14 @@ exports.webhook = onRequest({
               const imgDesc = await llm.multimodal(imageBinary);
               quoteContext = `[BỨC ẢNH ĐƯỢC TRÍCH DẪN]: "${imgDesc.trim()}"\n`;
             } else if (q.mediaType === "document") {
-              console.log(`[LINE] Quoted message là tài liệu, đang tải on-demand và phân tích (ID: ${q.mediaId})...`);
-              const localPath = await line.downloadMessageFile(q.mediaId, "quoted_doc");
-              const fileDesc = await llm.analyzeDocument(localPath);
-              quoteContext = `[TÀI LIỆU ĐƯỢC TRÍCH DẪN]: "${fileDesc.trim()}"\n`;
+              if (q.fileSize > 5 * 1024 * 1024) {
+                 quoteContext = `[Hệ thống: File tài liệu quá lớn (>5MB), không thể phân tích]\n`;
+              } else {
+                 console.log(`[LINE] Quoted message là tài liệu, đang tải on-demand và phân tích (ID: ${q.mediaId})...`);
+                 const localPath = await line.downloadMessageFile(q.mediaId, "quoted_doc");
+                 const fileDesc = await llm.analyzeDocument(localPath, q.isPdf);
+                 quoteContext = `[TÀI LIỆU ĐƯỢC TRÍCH DẪN]: "${fileDesc.trim()}"\n`;
+              }
             } else {
               const quotedFrom = q.senderName || (q.role === "model" ? "Annie" : "ai đó");
               const fullText = q.text;
@@ -1610,18 +1642,30 @@ exports.masterScheduler = onSchedule({
   const minute = vnTime.getMinutes();
   const dayOfWeek = vnTime.getDay(); // 0 is Sunday, 1 is Monday ... 5 is Friday
   const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5;
+  const dateKey = `${vnTime.getFullYear()}_${String(vnTime.getMonth() + 1).padStart(2, "0")}_${String(vnTime.getDate()).padStart(2, "0")}`;
 
   // 1. Bản tin Sáng: 8:00 (Thứ 2 - Thứ 6)
-  if (isWeekday && hour === 8 && minute < 5) {
-    console.log("[Scheduler] Kích hoạt Bản tin Sáng");
-    await sendNotifications("morning");
+  if (isWeekday && hour === 8 && minute >= 0 && minute < 20) {
+    const stateKey = `news/morning_${dateKey}`;
+    const hasSent = await getSystemState(stateKey);
+    if (!hasSent) {
+      console.log("[Scheduler] Kích hoạt Bản tin Sáng");
+      await setSystemState(stateKey, true); // Đánh dấu đã gửi ngay lập tức để chống lặp (Idempotency)
+      await sendNotifications("morning");
+    }
   }
 
   // 2. Bản tin Chiều: 13:30 (Thứ 2 - Thứ 6)
-  if (isWeekday && hour === 13 && minute >= 30 && minute < 35) {
-    console.log("[Scheduler] Kích hoạt Bản tin Chiều");
-    await sendNotifications("afternoon");
+  if (isWeekday && hour === 13 && minute >= 30 && minute < 50) {
+    const stateKey = `news/afternoon_${dateKey}`;
+    const hasSent = await getSystemState(stateKey);
+    if (!hasSent) {
+      console.log("[Scheduler] Kích hoạt Bản tin Chiều");
+      await setSystemState(stateKey, true);
+      await sendNotifications("afternoon");
+    }
   }
+
 
   // Tiến hoá vô hạn (Infinite Evolution Framework): 3:00 AM
   if (hour === 3 && minute < 5) {

@@ -142,6 +142,46 @@ const scrapeUrl = async (url) => {
   }
   const axios = require("axios");
   try {
+    const headRes = await axios.head(url, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1)" },
+      timeout: 5000
+    }).catch(() => null);
+
+    let isPdf = url.toLowerCase().includes(".pdf");
+    let contentLength = 0;
+
+    if (headRes && headRes.headers) {
+      if (headRes.headers["content-type"] && headRes.headers["content-type"].includes("application/pdf")) {
+        isPdf = true;
+      }
+      contentLength = parseInt(headRes.headers["content-length"] || "0", 10);
+    }
+
+    if (isPdf) {
+      if (contentLength > 5 * 1024 * 1024) {
+        return "[Hệ thống: Link này chứa File PDF quá lớn (>5MB), không hỗ trợ phân tích để bảo vệ hệ thống]";
+      }
+      console.log(`[Scraper] Bắt đầu tải file PDF từ URL: ${url}`);
+      const { data: pdfBuffer } = await axios.get(url, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1)" },
+        responseType: "arraybuffer",
+        timeout: 15000
+      });
+      if (pdfBuffer.length > 5 * 1024 * 1024) {
+        return "[Hệ thống: File PDF tải về quá lớn (>5MB), không hỗ trợ phân tích]";
+      }
+      
+      const fs = require("fs");
+      const os = require("os");
+      const path = require("path");
+      const localPath = path.join(os.tmpdir(), `url_${Date.now()}.pdf`);
+      fs.writeFileSync(localPath, pdfBuffer);
+      
+      const llm = require("./gemini");
+      const fileDesc = await llm.analyzeDocument(localPath, true);
+      return `[TÀI LIỆU PDF TRỪ URL]:\n"${fileDesc.trim()}"`;
+    }
+
     const { data: html } = await axios.get(url, {
       headers: { "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1)" },
       timeout: 8000

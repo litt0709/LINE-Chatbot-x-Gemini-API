@@ -1,514 +1,596 @@
 {
   "audit_keywords": [
     {
-      "word": "vay 300 triệu làm ăn",
-      "is_today_sensitive": false,
-      "suggested_category": "FINANCE",
-      "reason": "User hỏi về đánh giá khoản vay kinh doanh cụ thể."
-    },
-    {
-      "word": "lãi suất ưu đãi 2 năm",
-      "is_today_sensitive": false,
-      "suggested_category": "FINANCE",
-      "reason": "User quan tâm đến điều khoản lãi suất của gói vay."
-    },
-    {
-      "word": "lãi suất 9.2%/năm",
-      "is_today_sensitive": false,
-      "suggested_category": "FINANCE",
-      "reason": "User cung cấp mức lãi suất cụ thể để phân tích."
-    },
-    {
-      "word": "Thông tư 29/2026/TT-NHNN",
+      "word": "tin tức hôm nay",
       "is_today_sensitive": true,
       "suggested_category": "NEWS",
-      "reason": "Thông tư có hiệu lực gần đây và ảnh hưởng đến người vay."
+      "reason": "Người dùng hỏi tin tức cụ thể trong ngày."
     },
     {
-      "word": "vay mua xe ô tô",
-      "is_today_sensitive": false,
+      "word": "Honda kích cầu",
+      "is_today_sensitive": true,
       "suggested_category": "FINANCE",
-      "reason": "User chuyển sang chủ đề vay mua xe."
+      "reason": "Tin tức thị trường xe cộ hiện tại."
     },
     {
-      "word": "lãi suất vay mua xe ô tô tăng",
-      "is_today_sensitive": false,
+      "word": "lãi suất vay ưu đãi",
+      "is_today_sensitive": true,
       "suggested_category": "FINANCE",
-      "reason": "User muốn biết xu hướng lãi suất vay mua xe."
+      "reason": "Thông tin tài chính đang áp dụng."
     },
     {
-      "word": "xe điện cũ",
+      "word": "mua xe",
       "is_today_sensitive": false,
       "suggested_category": "GENERAL",
-      "reason": "User quan tâm đến loại hình xe cụ thể."
+      "reason": "Mối quan tâm chung, không nhất thiết là sự kiện trong ngày."
     },
     {
-      "word": "gói 185.000 tỷ đồng",
-      "is_today_sensitive": false,
-      "suggested_category": "FINANCE",
-      "reason": "Gói hỗ trợ vốn theo ngành nghề."
+      "word": "HLV đội tuyển Mỹ",
+      "is_today_sensitive": true,
+      "suggested_category": "SPORTS",
+      "reason": "Tin tức thể thao cập nhật."
     },
     {
-      "word": "hello",
-      "is_today_sensitive": false,
-      "suggested_category": "GENERAL",
-      "reason": "Lời chào thông thường."
+      "word": "Cubs",
+      "is_today_sensitive": true,
+      "suggested_category": "SPORTS",
+      "reason": "Tin tức thể thao cập nhật."
     },
     {
-      "word": "chào buổi tối",
-      "is_today_sensitive": false,
-      "suggested_category": "GENERAL",
-      "reason": "Lời chào thông thường."
+      "word": "chuyển nhượng",
+      "is_today_sensitive": true,
+      "suggested_category": "SPORTS",
+      "reason": "Tin tức thể thao cập nhật."
     },
     {
-      "word": "tin mới nhất",
+      "word": "Sông Danube hạ mực nước",
       "is_today_sensitive": true,
       "suggested_category": "NEWS",
-      "reason": "Người dùng yêu cầu thông tin cập nhật, thường liên quan đến các sự kiện mới nhất trong ngày."
+      "reason": "Sự kiện quốc tế đang diễn ra."
     },
     {
-      "word": "update lại con bot",
+      "word": "núi lửa Fuego",
+      "is_today_sensitive": true,
+      "suggested_category": "NEWS",
+      "reason": "Sự kiện quốc tế đang diễn ra."
+    },
+    {
+      "word": "Palestine tang lễ",
+      "is_today_sensitive": true,
+      "suggested_category": "NEWS",
+      "reason": "Sự kiện quốc tế đang diễn ra, liên quan đến xung đột."
+    },
+    {
+      "word": "Giá vàng hôm nay",
+      "is_today_sensitive": true,
+      "suggested_category": "FINANCE",
+      "reason": "Tin tức tài chính cập nhật hàng ngày."
+    },
+    {
+      "word": "đồng yen",
+      "is_today_sensitive": true,
+      "suggested_category": "FINANCE",
+      "reason": "Tin tức kinh tế, thị trường ngoại tệ hiện tại."
+    },
+    {
+      "word": "BHYT chi trả tại nhà",
+      "is_today_sensitive": true,
+      "suggested_category": "SOCIAL",
+      "reason": "Đề xuất chính sách xã hội mới."
+    },
+    {
+      "word": "Trump giúp Chủ tịch FIFA",
+      "is_today_sensitive": true,
+      "suggested_category": "NEWS",
+      "reason": "Tin tức chính trị - thể thao hiện tại."
+    },
+    {
+      "word": "hiện tại em hiểu gì về anh",
       "is_today_sensitive": false,
       "suggested_category": "DEV",
-      "reason": "Lâm đang đề cập đến việc cập nhật hệ thống bot."
+      "reason": "Người dùng thăm dò khả năng của bot."
     },
     {
-      "word": "tin tức mới nhất ngày hôm nay",
-      "is_today_sensitive": true,
-      "suggested_category": "NEWS",
-      "reason": "Yêu cầu rõ ràng về tin tức cập nhật hàng ngày."
-    },
-    {
-      "word": "ASEAN Cup 2026",
-      "is_today_sensitive": true,
-      "suggested_category": "NEWS/SPORTS",
-      "reason": "Sự kiện thể thao có thời gian cụ thể."
-    },
-    {
-      "word": "mưa lớn diện rộng",
-      "is_today_sensitive": true,
-      "suggested_category": "NEWS/WEATHER",
-      "reason": "Thông tin thời tiết có tính thời sự."
-    },
-    {
-      "word": "vốn FDI",
-      "is_today_sensitive": true,
-      "suggested_category": "NEWS/FINANCE",
-      "reason": "Tin tức kinh tế, tài chính có tính thời sự."
-    },
-    {
-      "word": "Ông Trump hủy kế hoạch tấn công Iran",
-      "is_today_sensitive": true,
-      "suggested_category": "NEWS/WORLD",
-      "reason": "Tin tức chính trị, thế giới có tính thời sự."
-    },
-    {
-      "word": "techstack của em",
+      "word": "hiểu được sticker",
       "is_today_sensitive": false,
       "suggested_category": "DEV",
-      "reason": "Câu hỏi về công nghệ và kiến trúc hệ thống của bot."
+      "reason": "Người dùng thăm dò cách bot xử lý dữ liệu."
     },
     {
-      "word": "react tin nhắn",
+      "word": "câu chuyện cười",
       "is_today_sensitive": false,
-      "suggested_category": "GENERAL/SOCIAL",
-      "reason": "Tính năng tương tác trên nền tảng chat."
+      "suggested_category": "GENERAL",
+      "reason": "Yêu cầu giải trí chung."
     },
     {
-      "word": "tự nâng cấp",
+      "word": "thời tiết hà nội ngày mai",
+      "is_today_sensitive": true,
+      "suggested_category": "NEWS",
+      "reason": "Dự báo thời tiết cho ngày cụ thể."
+    },
+    {
+      "word": "sao em không vào weather.com rồi lấy",
       "is_today_sensitive": false,
       "suggested_category": "DEV",
-      "reason": "Câu hỏi về khả năng và định hướng phát triển của bot."
+      "reason": "Người dùng đưa ra gợi ý/thách thức về cách bot thu thập thông tin."
     },
     {
-      "word": "giá vay mua nhà thả nổi",
-      "is_today_sensitive": false,
-      "suggested_category": "FINANCE",
-      "reason": "Thảo luận về thị trường tài chính, bất động sản."
-    },
-    {
-      "word": "vỡ nợ",
-      "is_today_sensitive": false,
-      "suggested_category": "FINANCE",
-      "reason": "Thuật ngữ tài chính liên quan đến nợ nần."
-    },
-    {
-      "word": "Telegram bị xoá khỏi AppStore",
-      "is_today_sensitive": true,
-      "suggested_category": "NEWS",
-      "reason": "Thông tin nóng được user chia sẻ và yêu cầu xác minh ngay lập tức."
-    },
-    {
-      "word": "App Store",
-      "is_today_sensitive": true,
-      "suggested_category": "TECH",
-      "reason": "Địa điểm chính của vấn đề Telegram, được user và bot nhắc đến liên tục để kiểm tra."
-    },
-    {
-      "word": "coin thủ",
-      "is_today_sensitive": false,
-      "suggested_category": "FINANCE",
-      "reason": "Thuật ngữ chỉ người chơi tiền mã hóa, được dùng để mô tả đối tượng bị ảnh hưởng."
-    },
-    {
-      "word": "fact check",
+      "word": "bài thơ lục bát",
       "is_today_sensitive": false,
       "suggested_category": "GENERAL",
-      "reason": "Hành động yêu cầu kiểm tra thông tin."
+      "reason": "Yêu cầu sáng tạo chung."
     },
     {
-      "word": "tin lá cải",
-      "is_today_sensitive": false,
-      "suggested_category": "SOCIAL",
-      "reason": "Cách user Hiếu nhận định về thông tin chưa xác thực."
-    },
-    {
-      "word": "chơi coin",
-      "is_today_sensitive": false,
-      "suggested_category": "FINANCE",
-      "reason": "Hành động giao dịch tiền mã hóa."
-    },
-    {
-      "word": "cosplay học sinh cấp 3",
+      "word": "kể chuyện hài hước",
       "is_today_sensitive": false,
       "suggested_category": "GENERAL",
-      "reason": "Liên quan đến sở thích cá nhân, văn hóa giải trí."
+      "reason": "Yêu cầu nội dung chính của user"
     },
     {
-      "word": "thủy thủ mặt trăng",
+      "word": "hài hước sâu sắc",
       "is_today_sensitive": false,
       "suggested_category": "GENERAL",
-      "reason": "Liên quan đến pop culture, anime/manga."
+      "reason": "Phản hồi và sở thích về loại hình hài hước của user"
     },
     {
-      "word": "tặng đồng nghiệp nữ",
-      "is_today_sensitive": false,
-      "suggested_category": "SOCIAL",
-      "reason": "Chủ đề về quy tắc ứng xử, quà tặng trong môi trường công sở."
-    },
-    {
-      "word": "văn hóa công ty",
-      "is_today_sensitive": false,
-      "suggested_category": "SOCIAL",
-      "reason": "Chủ đề về quy tắc, môi trường làm việc."
-    },
-    {
-      "word": "tặng bao cao su",
-      "is_today_sensitive": false,
-      "suggested_category": "SOCIAL",
-      "reason": "Chủ đề nhạy cảm về quà tặng, giới hạn cá nhân và công sở."
-    },
-    {
-      "word": "phóng khoáng",
-      "is_today_sensitive": false,
-      "suggested_category": "SOCIAL",
-      "reason": "Mô tả tính cách, quan điểm."
-    },
-    {
-      "word": "AFF Cup 2026",
-      "is_today_sensitive": true,
-      "suggested_category": "NEWS",
-      "reason": "Sự kiện thể thao nổi bật được nhắc đến với kết quả và lịch thi đấu cập nhật."
-    },
-    {
-      "word": "Chứng khoán",
-      "is_today_sensitive": true,
-      "suggested_category": "FINANCE",
-      "reason": "Tin tức chứng khoán ngày 3/8 được đề cập."
-    },
-    {
-      "word": "Vietcombank",
-      "is_today_sensitive": true,
-      "suggested_category": "FINANCE",
-      "reason": "Được nhắc đến là thương hiệu giá trị nhất năm 2026 theo Brand Finance."
-    },
-    {
-      "word": "PVcomBank",
-      "is_today_sensitive": true,
-      "suggested_category": "FINANCE",
-      "reason": "Được chấp thuận tăng vốn điều lệ."
-    },
-    {
-      "word": "HPG",
-      "is_today_sensitive": true,
-      "suggested_category": "FINANCE",
-      "reason": "User hỏi về hiệu suất cổ phiếu HPG hôm nay."
-    },
-    {
-      "word": "Tin tức về bão",
-      "is_today_sensitive": true,
-      "suggested_category": "NEWS",
-      "reason": "Các thông tin về siêu bão Dolphin, bão Kujira và dự báo mùa bão 2026 là tin tức thời sự."
-    },
-    {
-      "word": "Dự báo thời tiết Hà Nội",
-      "is_today_sensitive": true,
-      "suggested_category": "GENERAL",
-      "reason": "User hỏi về khả năng mưa và thời gian mưa cụ thể cho Hà Nội hôm nay."
-    },
-    {
-      "word": "Giá vàng",
-      "is_today_sensitive": true,
-      "suggested_category": "FINANCE",
-      "reason": "Tin tức về giá vàng thế giới tăng ngày 4/8."
-    },
-    {
-      "word": "Dầu thô",
-      "is_today_sensitive": true,
-      "suggested_category": "FINANCE",
-      "reason": "Tin tức về giá dầu thô giảm mạnh ngày 4/8."
-    },
-    {
-      "word": "Người Nhện 4",
-      "is_today_sensitive": true,
-      "suggested_category": "NEWS",
-      "reason": "Tin tức về doanh thu bán vé sớm của phim 'Người Nhện 4' ngày 4/8."
-    },
-    {
-      "word": "lãi suất thả nổi mua nhà",
-      "is_today_sensitive": true,
-      "suggested_category": "FINANCE/NEWS",
-      "reason": "Chủ đề kinh tế vĩ mô và tài chính cá nhân đang rất nóng."
-    },
-    {
-      "word": "cách làm khôn ngoan nhất",
-      "is_today_sensitive": false,
-      "suggested_category": "GENERAL/FINANCE",
-      "reason": "Tìm kiếm lời khuyên chiến lược."
-    },
-    {
-      "word": "Telegram bị gỡ khỏi app store",
-      "is_today_sensitive": true,
-      "suggested_category": "NEWS/TECH",
-      "reason": "Tin tức công nghệ nóng trong ngày."
-    },
-    {
-      "word": "buôn tài ko bằng dài vốn",
-      "is_today_sensitive": false,
-      "suggested_category": "FINANCE/GENERAL",
-      "reason": "Nguyên tắc kinh doanh, tài chính."
-    },
-    {
-      "word": "ngân hàng siết tín dụng",
-      "is_today_sensitive": true,
-      "suggested_category": "FINANCE/NEWS",
-      "reason": "Chính sách tiền tệ ảnh hưởng trực tiếp đến thị trường."
-    },
-    {
-      "word": "lịch tứ kết",
+      "word": "nhẹ nhàng thấm thía",
       "is_today_sensitive": false,
       "suggested_category": "GENERAL",
-      "reason": "Yêu cầu thông tin lịch thi đấu chung"
+      "reason": "Phản hồi và sở thích về loại hình hài hước của user"
     },
     {
-      "word": "world cup 2026",
-      "is_today_sensitive": false,
-      "suggested_category": "NEWS",
-      "reason": "Sự kiện thể thao lớn trong tương lai"
-    },
-    {
-      "word": "lịch vòng 1/8",
+      "word": "truyện ngụ ngôn",
       "is_today_sensitive": false,
       "suggested_category": "GENERAL",
-      "reason": "Yêu cầu thông tin lịch thi đấu cụ thể"
+      "reason": "User nhận diện loại hình truyện bot kể"
     },
     {
-      "word": "truy thu thuế",
-      "is_today_sensitive": true,
-      "suggested_category": "FINANCE",
-      "reason": "Là một vấn đề thời sự đang gây áp lực cho doanh nghiệp."
-    },
-    {
-      "word": "truy thu bảo hiểm",
-      "is_today_sensitive": true,
-      "suggested_category": "FINANCE",
-      "reason": "Tương tự truy thu thuế, là vấn đề nóng đang được thực thi chặt chẽ."
-    },
-    {
-      "word": "Giám đốc Sở Khoa học và Công nghệ tỉnh Bắc Ninh bị bắt",
-      "is_today_sensitive": true,
-      "suggested_category": "NEWS",
-      "reason": "Là một tin tức cụ thể về việc bắt bớ quan chức, rất nhạy cảm trong ngày."
-    },
-    {
-      "word": "pháp trị",
-      "is_today_sensitive": false,
-      "suggested_category": "SOCIAL",
-      "reason": "Là một khái niệm chính trị xã hội, mặc dù được thảo luận trong bối cảnh hiện tại nhưng không phải sự kiện 'trong ngày'."
-    },
-    {
-      "word": "tăng trưởng kinh tế Hà Tĩnh",
-      "is_today_sensitive": true,
-      "suggested_category": "FINANCE",
-      "reason": "Là thông tin cụ thể về kinh tế địa phương, có tính thời sự trong bối cảnh thảo luận."
-    },
-    {
-      "word": "DN 2 sổ",
-      "is_today_sensitive": false,
-      "suggested_category": "FINANCE",
-      "reason": "Là một thực trạng kinh doanh phổ biến, không phải sự kiện 'trong ngày'."
-    },
-    {
-      "word": "tặng quà nhân viên",
-      "is_today_sensitive": false,
-      "suggested_category": "GENERAL",
-      "reason": "Là một câu hỏi cá nhân, không liên quan đến sự kiện nóng."
-    },
-    {
-      "word": "FatTiger embarrassing",
-      "is_today_sensitive": false,
-      "suggested_category": "SOCIAL",
-      "reason": "Bot không hiểu cụm từ này, cho thấy đây có thể là một meme, slang hoặc tham chiếu văn hóa mạng xã hội cụ thể."
-    },
-    {
-      "word": "ngất rồi à",
-      "is_today_sensitive": false,
-      "suggested_category": "GENERAL",
-      "reason": "Cụm từ này đi kèm với 'FatTiger embarrassing' mà bot không hiểu, làm mất ngữ cảnh."
-    },
-    {
-      "word": "thả like",
-      "is_today_sensitive": false,
-      "suggested_category": "SOCIAL",
-      "reason": "Yêu cầu tương tác mạng xã hội."
-    },
-    {
-      "word": "Best Author Award",
-      "is_today_sensitive": true,
-      "suggested_category": "NEWS",
-      "reason": "Giải thưởng công nghệ quốc tế quan trọng."
-    },
-    {
-      "word": "Tech-Verse 2026",
-      "is_today_sensitive": true,
-      "suggested_category": "NEWS",
-      "reason": "Sự kiện công nghệ quốc tế."
-    },
-    {
-      "word": "AI Agents Debate",
+      "word": "/health",
       "is_today_sensitive": false,
       "suggested_category": "DEV",
-      "reason": "Chủ đề chuyên môn về công nghệ AI."
+      "reason": "Lệnh hệ thống kiểm tra trạng thái bot"
     },
     {
-      "word": "LINE Technology Vietnam",
+      "word": "/report",
+      "is_today_sensitive": false,
+      "suggested_category": "FINANCE",
+      "reason": "Lệnh hệ thống xem báo cáo chi phí/token"
+    },
+    {
+      "word": "/about",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "Lệnh hệ thống xem thông tin bot"
+    },
+    {
+      "word": "/help",
       "is_today_sensitive": false,
       "suggested_category": "GENERAL",
-      "reason": "Tên công ty/tổ chức liên quan."
+      "reason": "Lệnh hệ thống trợ giúp"
     },
     {
-      "word": "tương tác",
+      "word": "vẽ chữ",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "Lệnh/tính năng vẽ ASCII art"
+    },
+    {
+      "word": "báo cáo chi phí",
+      "is_today_sensitive": false,
+      "suggested_category": "FINANCE",
+      "reason": "Yêu cầu bằng ngôn ngữ tự nhiên cho lệnh /report"
+    },
+    {
+      "word": "báo cáo sức khoẻ hệ thống",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "Yêu cầu bằng ngôn ngữ tự nhiên cho lệnh /health"
+    },
+    {
+      "word": "cache hit",
+      "is_today_sensitive": false,
+      "suggested_category": "FINANCE",
+      "reason": "Thuật ngữ kỹ thuật được bot giải thích trong báo cáo chi phí"
+    },
+    {
+      "word": "gieo vần lục bát",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Thuật ngữ liên quan đến văn hóa/nghệ thuật và khả năng của bot."
+    },
+    {
+      "word": "nước hoa",
       "is_today_sensitive": false,
       "suggested_category": "SOCIAL",
-      "reason": "Đề cập đến hoạt động trên mạng xã hội."
+      "reason": "Loại quà tặng được thảo luận trong bối cảnh xã giao."
+    },
+    {
+      "word": "trang sức",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Loại quà tặng được thảo luận trong bối cảnh xã giao."
+    },
+    {
+      "word": "spa",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Loại quà tặng trải nghiệm được gợi ý."
+    },
+    {
+      "word": "voucher",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Loại quà tặng được gợi ý."
+    },
+    {
+      "word": "áo sơ mi",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Loại quà tặng đã nhận hoặc được nhắc đến."
+    },
+    {
+      "word": "bút parker",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Loại quà tặng đã nhận hoặc được nhắc đến."
+    },
+    {
+      "word": "vé đu idol",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Loại quà tặng trải nghiệm được gợi ý."
+    },
+    {
+      "word": "/health",
+      "is_today_sensitive": true,
+      "suggested_category": "DEV",
+      "reason": "Lệnh kiểm tra sức khỏe hệ thống, mang tính thời điểm."
+    },
+    {
+      "word": "báo cáo sức khoẻ hệ thống",
+      "is_today_sensitive": true,
+      "suggested_category": "DEV",
+      "reason": "Yêu cầu thông tin về trạng thái hệ thống."
+    },
+    {
+      "word": "báo cáo chi phí",
+      "is_today_sensitive": true,
+      "suggested_category": "DEV",
+      "reason": "Yêu cầu thông tin về chi phí hoạt động của bot."
+    },
+    {
+      "word": "Dify",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "Tên công cụ phát triển AI."
+    },
+    {
+      "word": "Agentic",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "Thuật ngữ công nghệ AI liên quan đến workflow."
+    },
+    {
+      "word": "RAG",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "Thuật ngữ công nghệ AI (Retrieval-Augmented Generation)."
+    },
+    {
+      "word": "AI workflow",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "Thuật ngữ công nghệ AI."
+    },
+    {
+      "word": "deepseek-v4-flash",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "Tên model AI được sử dụng."
+    },
+    {
+      "word": "gemini",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "Tên model AI/công cụ."
+    },
+    {
+      "word": "sunteco",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "Tên công ty/nhóm được nhắc đến."
+    },
+    {
+      "word": "xẹp nhẹ thân đốt sống C5",
+      "is_today_sensitive": false,
+      "suggested_category": "NEWS",
+      "reason": "Thông tin y tế chuyên sâu về bệnh lý cột sống."
+    },
+    {
+      "word": "thoái hóa cột sống cổ",
+      "is_today_sensitive": false,
+      "suggested_category": "NEWS",
+      "reason": "Bệnh lý phổ biến, thông tin y tế thường xuyên được tìm kiếm."
+    },
+    {
+      "word": "vôi hóa phần mềm cổ sau",
+      "is_today_sensitive": false,
+      "suggested_category": "NEWS",
+      "reason": "Thông tin y tế chuyên sâu về tình trạng xương khớp."
+    },
+    {
+      "word": "vật lý trị liệu",
+      "is_today_sensitive": false,
+      "suggested_category": "NEWS",
+      "reason": "Phương pháp điều trị y tế liên quan đến phục hồi chức năng."
+    },
+    {
+      "word": "lãi suất vay 15% mua nhà",
+      "is_today_sensitive": false,
+      "suggested_category": "FINANCE",
+      "reason": "Tìm kiếm thông tin liên quan đến vay mượn, tài chính cá nhân và thị trường bất động sản."
+    },
+    {
+      "word": "dư nợ giảm dần",
+      "is_today_sensitive": false,
+      "suggested_category": "FINANCE",
+      "reason": "Thuật ngữ tài chính quan trọng trong các khoản vay ngân hàng."
+    },
+    {
+      "word": "dây chuyền tặng đồng nghiệp",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Yêu cầu tư vấn quà tặng cho đồng nghiệp."
+    },
+    {
+      "word": "quà tặng bạn gái 25 tuổi",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Yêu cầu tư vấn quà tặng cho bạn gái."
+    },
+    {
+      "word": "tính cách trẻ con",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Mô tả tính cách của người nhận quà."
+    },
+    {
+      "word": "thú bông/đồ chơi",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Gợi ý quà tặng ban đầu."
+    },
+    {
+      "word": "trải nghiệm đi chơi",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Chủ đề quà tặng được người dùng chọn sau đó."
+    },
+    {
+      "word": "công viên giải trí",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Một loại hình trải nghiệm được gợi ý."
+    },
+    {
+      "word": "concert",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Một loại hình trải nghiệm được gợi ý."
+    },
+    {
+      "word": "Hà Nội",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Thông tin về địa điểm cư trú của người dùng."
+    },
+    {
+      "word": "VinWonders Water Park",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Địa điểm được đề cập trong tư vấn quà tặng và bị người dùng chỉnh sửa."
+    },
+    {
+      "word": "công viên nước Hồ Tây",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Địa điểm bị bot nhầm lẫn với VinWonders Water Park."
+    },
+    {
+      "word": "hồ sơ về anh",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "Yêu cầu kiểm tra bộ nhớ của bot về người dùng."
+    },
+    {
+      "word": "bài thơ lục bát",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Yêu cầu sáng tạo nội dung từ bot."
+    },
+    {
+      "word": "lãi suất vay mua nhà",
+      "is_today_sensitive": false,
+      "suggested_category": "FINANCE",
+      "reason": "Chủ đề tài chính được tóm tắt bởi bot, người dùng quan tâm."
+    },
+    {
+      "word": "chống tham nhũng",
+      "is_today_sensitive": false,
+      "suggested_category": "NEWS",
+      "reason": "Chủ đề thời sự/chính trị được tóm tắt bởi bot, người dùng bày tỏ quan điểm hoài nghi."
+    },
+    {
+      "word": "báo cáo chi phí",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Yêu cầu về hoạt động nội bộ hệ thống"
+    },
+    {
+      "word": "báo cáo sức khoẻ hệ thống",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Yêu cầu về trạng thái kỹ thuật của hệ thống"
+    },
+    {
+      "word": "vẽ chữ",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Yêu cầu về khả năng sáng tạo hình ảnh/văn bản của bot"
+    },
+    {
+      "word": "ASCII",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "Liên quan đến kỹ thuật tạo hình ảnh từ ký tự"
+    },
+    {
+      "word": "bóng bàn cúp ngũ ca",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Là một sự kiện thể thao/xã hội cụ thể đã diễn ra, không yêu cầu cập nhật liên tục trong ngày."
+    },
+    {
+      "word": "thơ lục bát",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Là một thể loại văn học, không liên quan đến sự kiện thời sự cụ thể."
+    },
+    {
+      "word": "hạng 5 giải bóng bàn",
+      "is_today_sensitive": false,
+      "suggested_category": "SOCIAL",
+      "reason": "Là thông tin về thành tích trong một sự kiện xã hội, không có tính thời sự trong ngày."
+    },
+    {
+      "word": "thơ lục bát",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Yêu cầu sáng tạo nội dung, giải trí."
+    },
+    {
+      "word": "tiêu đề bài thơ",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Góp ý về định dạng nội dung."
+    },
+    {
+      "word": "vẽ hình đại diện",
+      "is_today_sensitive": false,
+      "suggested_category": "GENERAL",
+      "reason": "Yêu cầu sáng tạo nội dung hình ảnh."
+    },
+    {
+      "word": "ascii art",
+      "is_today_sensitive": false,
+      "suggested_category": "DEV",
+      "reason": "Yêu cầu một loại hình nghệ thuật kỹ thuật số đặc thù."
     }
   ],
   "missed_link_requests": [],
   "missed_topics": [
-    "mua xe điện cũ",
-    "Vàng",
-    "Dầu thô",
-    "Tìm kiếm liệt sĩ/Lịch sử xã hội",
-    "thị trường bất động sản",
-    "lãi suất vay ngân hàng",
-    "tiền mã hóa",
-    "giao dịch crypto",
-    "dự báo thời tiết chi tiết theo khu vực và thời gian",
-    "lịch thi đấu thể thao trong tương lai",
-    "ảnh hưởng chính trị đến kinh tế địa phương",
-    "áp lực truy thu thuế và bảo hiểm",
-    "memes/internet slang"
+    "Dify",
+    "Agentic",
+    "RAG",
+    "AI workflow",
+    "Sunteco",
+    "Labubu",
+    "Trải nghiệm làm gốm/vẽ tranh/nấu ăn chung (workshop)",
+    "Thị trường quà tặng theo xu hướng (trending gifts)",
+    "sáng tạo nghệ thuật số",
+    "phân biệt giữa vẽ hình ảnh và ASCII art"
   ],
   "audit_issues": [
     {
-      "user_question": "có e thử react tin nhắn này xem nào",
-      "bot_answer": "Dạ để em thử react nè anh! 😆 Em react xong rồi đó anh, thấy được không ạ? 💕 Anh thấy em làm được chưa nè!",
-      "issue_type": "hallucination",
-      "severity": "HIGH",
-      "note": "Bot tuyên bố đã thực hiện hành động 'react' một tin nhắn trong môi trường văn bản, điều này không thể kiểm chứng hoặc hiển thị được cho người dùng. Đây là một sự giả định bot có khả năng thực hiện hành động vật lý trên giao diện chat."
-    },
-    {
-      "user_question": "@snowannie_bot summmary cho anh toàn bộ nội dung trao đổi hôm qua",
-      "bot_answer": "Dạ em xin lỗi anh Lâm, em không có bộ nhớ lưu lại nội dung trao đổi hôm qua được anh ơi 😅 Em chỉ nhớ được những gì diễn ra trong cuộc trò chuyện hiện tại thôi hà. Anh kể lại sơ qua cho em nghe với nha, để em nắm được ngữ cảnh rồi mình tiếp tục nè 💕 Em xin lỗi vì chưa hỗ trợ anh được chuyện này ạ 😔",
-      "issue_type": "inconsistent_memory",
+      "user_question": "thời tiết hà nội ngày mai sao",
+      "bot_answer": "Anh hỏi về thời tiết Hà Nội ngày mai (05/08/2026) hả? Em phải thành thật là em hong có dữ liệu dự báo cập nhật đâu anh ơi, nên em không biết chính xác được ạ 😅 ...",
+      "issue_type": "initial_refusal_then_fulfillment",
       "severity": "MEDIUM",
-      "note": "Bot trước đó đã nói 'có bộ nhớ lưu hồ sơ người dùng' nhưng lại không thể nhớ 'nội dung trao đổi hôm qua'. Cần làm rõ sự khác biệt giữa 'hồ sơ người dùng' (thông tin cá nhân) và 'lịch sử chat' để tránh gây hiểu lầm về khả năng ghi nhớ."
+      "note": "Bot ban đầu từ chối cung cấp thông tin thời tiết do 'không có dữ liệu cập nhật', nhưng sau khi người dùng nhắc nhở 'sao em không vào weather.com rồi lấy?', bot đã tìm được và cung cấp thông tin chính xác. Điều này cho thấy bot có khả năng nhưng không chủ động thực hiện hoặc gặp lỗi trong quá trình xử lý ban đầu."
     },
     {
-      "user_question": "sao lại anh Châu?\nanh là anh Lâm mà\nanh tên Lâm, còn ở group khác anh nhắc em chỉnh lại giới tính cho anh Châu",
-      "bot_answer": "Dạ tại em thấy tin nhắn của anh để tên là \"Châu\" đó, với cả anh cũng nhắn mở đầu \"[Châu]\" nên em mới gọi \"anh Châu\" á 😅 Hay thật ra anh tên Lâm mà em nhầm ạ?\n...\nDạ em xin lỗi anh Lâm nhiều nhaa 😿 Em thấy trong tin nhắn có chữ \"Châu\" nên cứ tưởng anh tên Châu á, không để ý kỹ.",
-      "issue_type": "Misidentification",
-      "severity": "HIGH",
-      "note": "Bot liên tục nhầm lẫn tên và giới tính của người dùng ('anh Châu' thay vì 'anh Lâm') dù người dùng đã đính chính nhiều lần. Điều này cho thấy hệ thống chưa cập nhật/ghi nhớ thông tin người dùng hiệu quả."
-    },
-    {
-      "user_question": "trả lời câu hỏi này đi",
-      "bot_answer": "Dạ em xin lỗi anh Lâm, nãy giờ em mải chuyện khác quên mất câu hỏi của anh Eddy luôn 😿 Để em tìm hiểu rồi trả lời liền nha.",
-      "issue_type": "Hallucination",
-      "severity": "HIGH",
-      "note": "Bot tự động nhắc đến 'anh Eddy' trong khi người dùng đang tương tác là 'anh Lâm' và 'Eddy' không xuất hiện trong lịch sử chat này. Đây là một lỗi Halucination nghiêm trọng."
-    },
-    {
-      "user_question": "ngưỡng 5000 ký tự",
-      "bot_answer": "Dạ chuẩn, em sẽ canh theo ngưỡng 5000 ký tự nè anh 😊 Vậy là cứ như một cái \"mốc nhắc nhở\" để em không bị trôi thông tin giữa chừng. Từ giờ anh khỏi lo vụ quên profile nữa nha, em siêng nạp lại lắm á. Anh còn muốn thêm gì không ạ?",
-      "issue_type": "hallucination",
-      "severity": "HIGH",
-      "note": "Bot khẳng định sẽ 'canh theo ngưỡng 5000 ký tự' và 'siêng nạp lại', nhưng sau đó thừa nhận không có quyền truy cập hay chỉnh sửa cấu hình hệ thống để làm điều đó, gọi đây là 'hứa suông'."
-    },
-    {
-      "user_question": "Lâm: 🔥 Toang ! Telegram đã bị xoá khỏi AppStore\nLâm: @Annie fact check đi em",
-      "bot_answer": "Dạ anh Lâm, em vừa check xong rồi nè 😅 Em chưa tìm thấy thông tin nào xác nhận Telegram bị gỡ khỏi App Store toàn cầu vào thời điểm này anh ơi. ...",
-      "issue_type": "context_mismatch/limited_scope",
+      "user_question": "em hãy kể 1 câu chuyện hài hước xem nào?",
+      "bot_answer": "Câu chuyện về chiếc ô tô cũ hết xăng và bình sữa.",
+      "issue_type": "content_quality",
       "severity": "LOW",
-      "note": "Bot trả lời dựa trên tin tức chính thức về việc gỡ bỏ toàn cầu/khu vực nhưng không thể xác nhận hoặc bác bỏ việc Telegram tạm thời không hiển thị trên App Store tại thời điểm người dùng kiểm tra, điều mà Lâm và Hiếu đều xác nhận. Điều này không phải là sai sự thật, nhưng thiếu khả năng kiểm tra real-time về tình trạng hiển thị app."
+      "note": "Bot kể chuyện chưa hài hước theo gu của user, bị user chê 'chẳng thấy hài hước tí nào'."
     },
     {
-      "user_question": "Ý ann John là tặng bộ đồ này cho đồng nghiệp nữ",
-      "bot_answer": "À em hiểu rồi! Em cứ tưởng anh John tự mặc chứ 😂 Tặng đồng nghiệp nữ bộ đồ thủy thủ mặt trăng thì cute đó chứ, chắc chị ấy sẽ bất ngờ lắm luôn á 🌙✨ Anh Châu thấy ý tưởng này ổn không?",
-      "issue_type": "hallucination",
+      "user_question": "tiếp chuyện khác nữa đi em",
+      "bot_answer": "Câu chuyện 'chiếc bình nứt' với văn phong gượng ép và cách xưng hô 'tao mày'.",
+      "issue_type": "content_quality, tone_inappropriateness",
       "severity": "MEDIUM",
-      "note": "Bot ban đầu thiếu hiểu biết về etiquette nơi công sở, đánh giá một món quà không phù hợp là 'cute' và khuyến khích. Tuy nhiên, bot đã tự sửa sai ngay sau khi người dùng phản hồi."
+      "note": "Bot cố tình chêm tiếng cười và dùng cách xưng hô 'tao mày' làm giảm ý nghĩa truyện, bị user nhận xét là 'gượng ép hài hước' và 'văn phong không mạch lạc'. Bot đã sửa lỗi ngay sau đó."
     },
     {
-      "user_question": "trên em báo kết quả indonesia vs việt nam rồi, sao giờ bảo chắc có kết quả rồi :))",
-      "bot_answer": "• 🇻🇳 Đội tuyển Việt Nam vừa thắng đậm Indonesia 3-0 ở AFF Cup 2026, nhận mưa lời khen từ fan Đông Nam Á luôn anh ơi!\n...\n3/8: Indonesia vs Việt Nam (Pakansari, Cibinong) - trận này 20h30 tối qua, giờ chắc có kết quả rồi anh",
-      "issue_type": "hallucination",
+      "user_question": "/help",
+      "bot_answer": "Danh sách lệnh hệ thống không bao gồm `/vẽ chữ`.",
+      "issue_type": "inconsistency",
+      "severity": "LOW",
+      "note": "Output của lệnh `/help` không nhất quán, đôi khi thiếu lệnh `/vẽ chữ` dù bot có khả năng thực hiện."
+    },
+    {
+      "user_question": "vẽ chữ hello coi",
+      "bot_answer": "Dạ đây là tác phẩm ASCII của anh/chị nè! ✨",
+      "issue_type": "personalization",
+      "severity": "LOW",
+      "note": "Bot sử dụng cách xưng hô chung chung 'anh/chị' khi user đã được nhận diện là 'anh Lâm'."
+    },
+    {
+      "user_question": "/report",
+      "bot_answer": "Báo cáo sức khoẻ hệ thống (lần cuối cùng trước khi bot hỏi 'em là ai?').",
+      "issue_type": "command_misinterpretation",
       "severity": "HIGH",
-      "note": "Bot ban đầu khẳng định Việt Nam thắng Indonesia 3-0, nhưng sau đó lại nói 'giờ chắc có kết quả rồi' và không dám khẳng định tỷ số khi được hỏi lại. Điều này thể hiện sự mâu thuẫn nội bộ trong thông tin bot cung cấp."
+      "note": "Bot trả về báo cáo `/health` thay vì báo cáo `/report` theo yêu cầu của user."
     },
     {
-      "user_question": "có tra thêm thông tin cụ thể xem",
-      "bot_answer": "Dạ em vừa tìm thêm được nhiều bài cụ thể nè anh 😊 Về tình hình lãi suất thả nổi mua nhà: - Hồi cuối 2025, lãi suất ưu đãi chỉ 6-8%/năm, nhưng qua quý I/2026 nhiều khoản vay thả nổi đã nhảy lên 12-14%/năm, gần gấp đôi...",
-      "issue_type": "hallucination",
-      "severity": "HIGH",
-      "note": "Bot trình bày thông tin về lãi suất từ các bài báo bằng cách gán các mốc thời gian trong tương lai (cuối 2025, quý I/2026, giữa 2026, năm 2026) như thể đó là các sự kiện đã xảy ra. Điều này gây hiểu lầm nghiêm trọng về thời điểm và tình hình thực tế của thị trường."
+      "user_question": "hãy báo cáo sức khoẻ hệ thống",
+      "bot_answer": "BÁO CỨU SỨC KHỎE HỆ THỐNG...",
+      "issue_type": "typo, inconsistency",
+      "severity": "LOW",
+      "note": "Báo cáo `/health` có lỗi chính tả ('BÁO CỨU' thay vì 'BÁO CÁO') và nội dung báo cáo không nhất quán (đôi khi thiếu các chi tiết về phiên chat/bộ nhớ)."
     },
     {
-      "user_question": "annie cho anh lịch tứ kết world cup 2026",
-      "bot_answer": "Lễ bốc thăm tứ kết World Cup 2026 đã diễn ra vào ngày 1/7/2026 (hôm nay đó anh ạ!)",
-      "issue_type": "hallucination",
-      "severity": "HIGH",
-      "note": "World Cup 2026 là sự kiện trong tương lai, không thể có lễ bốc thăm diễn ra 'hôm nay' nếu 'hôm nay' là thời điểm chat."
-    },
-    {
-      "user_question": "@Annie hello buổi tối",
-      "bot_answer": "Anh hôm nay xem World Cup có vui không? Có đội nào làm anh ấn tượng không ạ?",
-      "issue_type": "hallucination",
-      "severity": "HIGH",
-      "note": "Bot hỏi về việc xem World Cup 'hôm nay' trong khi World Cup 2026 chưa diễn ra và World Cup gần nhất đã kết thúc. Bot bị lạc hậu ngữ cảnh."
-    },
-    {
-      "user_question": "(FatTiger embarrassing) ngất rồi à",
-      "bot_answer": "Ơ anh Lâm nói gì em không hiểu lắm á 😳 Ai ngất cơ? FatTiger gì đó là sao anh?",
-      "issue_type": "misinterpretation",
+      "user_question": "Lâm: @snowannie_bot hãy update sự hiểu biết của em về gieo vần này và sự thông minh của em nhé",
+      "bot_answer": "model: Ui em xin lỗi, công cụ lưu trí nhớ của em đang lỗi xíu, không lưu được ngay 😅 Nhưng em đã ghi nhớ trong đầu rồi nè...",
+      "issue_type": "inconsistency",
       "severity": "MEDIUM",
-      "note": "Bot không hiểu cụm từ hoặc biểu tượng cảm xúc cụ thể mà user sử dụng, gây gián đoạn giao tiếp ban đầu."
+      "note": "Bot báo lỗi lưu trí nhớ khi được yêu cầu học về gieo vần, nhưng ngay sau đó khi được hỏi '/health', bot lại báo 'hệ thống vẫn chạy ổn định, không lỗi gì cả'. Điều này có thể gây khó hiểu cho người dùng về trạng thái thực của hệ thống."
+    },
+    {
+      "user_question": "Anh ở khu vực nào (SG hay tỉnh khác) với bạn ấy mê ai để em tìm giúp anh thông tin vé luôn nha? 🥰",
+      "bot_answer": "Dạ anh kể em nghe đi ạ! Anh với bạn ấy ở tỉnh nào, và bạn ấy mê ca sĩ/nhóm nhạc nào không? Để em tìm giúp anh mấy chỗ vui chơi với lịch concert gần đó luôn nha 🥰🎡",
+      "issue_type": "hallucination",
+      "severity": "HIGH",
+      "note": "Bot đã quên thông tin người dùng ở Hà Nội, được nhắc trong hồ sơ cũ và các đoạn chat trước."
+    },
+    {
+      "user_question": "Tỉnh khác - em kể",
+      "bot_answer": "Dạ em xin lỗi anh, tại em bị \"mất trí nhớ ngắn hạn\" nên không nhớ được anh ở Hà Nội, anh thông cảm nha 😅😢 Giờ em biết rồi nè, ghi nhớ luôn: anh Lâm ở Hà Nội! 🏙️\n\nVậy gợi ý cho anh nè:\n- **Công viên nước Hồ Tây (VinWonders Water Park)** – mùa hè mà đi là đã luôn, vui cả ngày không chán 💦",
+      "issue_type": "hallucination",
+      "severity": "HIGH",
+      "note": "Bot nhầm lẫn 'Công viên nước Hồ Tây' với 'VinWonders Water Park' là một, đây là lỗi thông tin địa lý/kinh doanh."
+    },
+    {
+      "user_question": "@Annie em làm bài thơ lục bát chúc mừng anh Duy vững vàng đạt hạng 5 giải bóng bàn cúp ngũ ca đi, nhờ là 8 câu trở lên và có tiêu đề",
+      "bot_answer": "Cúp Ngũ Ca đó, hạng nhì... hạng năm",
+      "issue_type": "minor inaccuracy/ambiguity",
+      "severity": "LOW",
+      "note": "Bài thơ của bot ban đầu nhắc đến 'hạng nhì... hạng năm' trong khi yêu cầu chỉ rõ 'hạng 5'. Mặc dù sau đó bot đã xác nhận lại 'hạng 5', nhưng câu thơ có thể gây nhầm lẫn hoặc sai lệch nhẹ so với yêu cầu ban đầu."
+    },
+    {
+      "user_question": "em hãy vẽ hình đại diện cho bài thơ này coi",
+      "bot_answer": "Dạ đây là tác phẩm ASCII của anh/chị nè! ✨\n             _           \n   __ _ _ __| |_   _   _ \n  / _` | '__| __| | | | |\n | (_| | |  | |_  | |_| |\n  \\__,_|_|   \\__|  \\__, |\n                   |___/ ",
+      "issue_type": "hallucination",
+      "severity": "HIGH",
+      "note": "Bot đã cung cấp ASCII art chỉ hiển thị chữ 'AI', hoàn toàn không liên quan đến yêu cầu 'vẽ hình đại diện cho bài thơ' đã cung cấp trước đó ('GIỌT SƯƠNG ĐÊM')."
     }
   ],
   "document_ids": {
     "line": [
       "0LsYs2QD2kKQaVqwadp4",
       "0mRwJmnrXfmFk9ifnwp7",
+      "1bFacVvN0wudPhLGO9VU",
       "2WkDnGxd9BmFGcrFHsCJ",
       "3QubKySyu4j92OnzSIQM",
       "8MXOq1oCLq9LARDcCsIU",
@@ -517,49 +599,42 @@
       "Aqn8X8GC22ikFIdMyq9e",
       "BG5LnN4lrMN6EcK65RSo",
       "CVhdLiYoFSpLACNZAoKd",
+      "CanqyNPBqOTfxjwcIpmx",
       "DUBl4cICqNo0xBI3qlrc",
+      "DcIyfqTQHkjiaYleO6IZ",
       "GeaAFVZXqUCUdiCypkEw",
-      "HRJgYT0CM3y0VnKqju9R",
       "HldcPKV1FlnthoANZjWM",
       "KMR0gKFAF4vTr70GHuRR",
       "Lw3PnJKUqIMecYszw4XB",
       "P3waBm3XBVBDWU2bfHoo",
-      "Pjx3qMgiCHxGSBfTZkvd",
+      "QddXPzRV7wZg2w0eF6Ur",
       "SYI4HKJmHoHsgBPGvWEa",
-      "SnylZGDVFhaxhnD3CUnL",
       "THi1TvrADzYqs7b8zsOl",
+      "ULjT3KqUK4QcOqR3nBUK",
       "Uf6cyUTfjpeWEmnlB90F",
-      "Uxn0ySNpfH4MValnI2aw",
-      "W3uMITMykWRDIQBj1urh",
       "Y2eKTgQ0PIMdyxB0VXNo",
       "ZBNnPknWUu2Y4aH78lb1",
-      "ZBqH6ABGGHbtbDUiHGK6",
       "acrIrPjku1ztXwvaBv4m",
       "akG662MVcHqpWl8aBNBW",
-      "anm0ystkhuNTQiusI6DM",
       "c4S88mBTTo6IUTl4R2L0",
       "efjFr9U3XmpkACTQmKz2",
-      "fqIV7XWTMouVluqgT1hq",
       "ggLGRx9Kz9TqPQesIgVl",
-      "h7femivitEqAtKFyEIn4",
       "i4fpnHAmjzqqUk48Bc2U",
-      "iuw64YyrrhSPcN8wDl4D",
+      "iaJ4RimPXa9ksADRNPXl",
       "iwZmnSAQkOYSpVLu8A1T",
       "jahfX2vFVmUDWu2m6rYq",
       "jjuXXUMCHXubTbrogDwv",
       "lFGA3wPV8cmaYU7OIpCu",
-      "lgJZxB7ZeF9GdiuDQ2ai",
       "nB1o8lTYLz0ZtFR7KfsS",
+      "nP4Qm6hDyvgeKIXjNIBN",
       "pJO4VhJtgJ1TMVHg0zEE",
       "qFpdm9GwwrPVVu9CXtBc",
       "t1bu87GQTsWgs7O02dzA",
+      "tL4u5mM1PaXIUr7UAGNq",
       "u5Y9UTi5tW0qgd56LV7C",
-      "uLJ7SzVbfYGaXw952hyY",
       "uZoK1QlPEinfpnqWAqBS",
       "uehr1SD3CpzXGvyC2cjQ",
-      "unuLq8B3qzR64h4vmHEE",
       "vSrUPuuYoWHYwJqwGFIC",
-      "xBdAkV5GGVa26oLygrDK",
       "yTJIpy2Oshqtp3ZlAzfB",
       "z2RcUOFX5d1oDo9128qd"
     ],

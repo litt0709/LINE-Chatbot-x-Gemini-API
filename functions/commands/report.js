@@ -28,6 +28,10 @@ async function generateTokenReport() {
     const snapCalls = await rtdb.ref("metrics/monthly_calls").once("value");
     const dataCalls = snapCalls.exists() ? snapCalls.val() : {};
 
+    // 3. Lấy dữ liệu Firebase Usage hôm nay
+    const snapFirebase = await rtdb.ref(`metrics/daily_usage/${todayDate}/firebase`).once("value");
+    const dataFirebase = snapFirebase.exists() ? snapFirebase.val() : {};
+
     const resultDS = {}; // Dành cho DeepSeek
     let geminiToday = { requests: 0, total_tokens: 0 }; // Dành cho Gemini hôm nay
 
@@ -95,7 +99,20 @@ async function generateTokenReport() {
     const exaPct = ((exaMonth / EXA_LIMIT) * 100).toFixed(1);
 
     reportText += `- **Tavily (Search)**: ${tavilyMonth} / ${TAVILY_LIMIT} (${tavilyPct}%)\n`;
-    reportText += `- **Exa (Deep Web)**: ${exaMonth} / ${EXA_LIMIT} (${exaPct}%)\n`;
+    reportText += `- **Exa (Deep Web)**: ${exaMonth} / ${EXA_LIMIT} (${exaPct}%)\n\n`;
+
+    // Báo cáo Firebase Usage
+    reportText += "🔥 **FIREBASE USAGE (Hôm Nay)**\n";
+    const functionsCount = dataFirebase.functions_invocations || 0;
+    const rtdbWrites = dataFirebase.rtdb_writes || 0;
+    
+    // Ước lượng Free Tier mỗi ngày (2 triệu / 30 ngày = ~66k / ngày)
+    const DAILY_FUNCTIONS_LIMIT = 66000;
+    const fPct = ((functionsCount / DAILY_FUNCTIONS_LIMIT) * 100).toFixed(1);
+    
+    reportText += `- **Cloud Functions**: ${functionsCount.toLocaleString()} / ${DAILY_FUNCTIONS_LIMIT.toLocaleString()} (${fPct}%)\n`;
+    reportText += `- **RTDB Messages Saved**: ${rtdbWrites.toLocaleString()} tin nhắn\n`;
+    reportText += `- **Ước tính chi phí**: $0 (Nằm trong Free Tier)\n`;
 
     return reportText.trim();
   } catch (error) {
