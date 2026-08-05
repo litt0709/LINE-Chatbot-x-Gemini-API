@@ -85,9 +85,12 @@ const reply = async (chatId, text) => {
   // 4. Gửi tuần tự từng Chunk
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i];
-    // Phục hồi định dạng in đậm từ Markdown sang HTML <b> TRÊN TỪNG CHUNK
-    // Việc này đảm bảo không có thẻ <b> bị cắt đôi gây lỗi HTML parser
     let htmlText = chunk.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>");
+    
+    // Convert markdown code blocks to <pre>
+    htmlText = htmlText.replace(/```([\s\S]*?)```/g, "<pre>$1</pre>");
+    // Convert inline code to <code>
+    htmlText = htmlText.replace(/`([^`]+)`/g, "<code>$1</code>");
     
     // Chỉ đính kèm bàn phím inline ở chunk CUỐI CÙNG
     const isLast = (i === chunks.length - 1);

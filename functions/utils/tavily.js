@@ -1,5 +1,6 @@
 const axios = require("axios");
 const logger = require("./logger");
+const { rtdb } = require("./db");
 
 const TAVILY_API_KEY = process.env.TAVILY_API_KEY;
 
@@ -128,6 +129,15 @@ const searchTavily = async (query, options = {}) => {
         urls.push(r.url);
       });
     }
+
+    try {
+      const todayDate = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Ho_Chi_Minh" });
+      const monthDate = todayDate.substring(0, 7);
+      const updates = {};
+      updates[`metrics/monthly_calls/${monthDate}/tavily`] = rtdb.ServerValue.increment(1);
+      await rtdb.ref().update(updates);
+    } catch(e) { console.error("[Tavily] Lỗi ghi nhận token:", e.message); }
+
     return { summary, urls };
   } catch (error) {
     const status = error?.response?.status;

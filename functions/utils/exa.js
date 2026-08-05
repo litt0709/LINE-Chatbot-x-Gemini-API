@@ -1,5 +1,5 @@
 const axios = require("axios");
-const { db, FieldValue } = require("./db");
+const { db, rtdb, FieldValue } = require("./db");
 const logger = require("./logger");
 
 const EXA_API_KEY = process.env.EXA_API_KEY;
@@ -138,6 +138,14 @@ const searchExa = async (query, options = {}) => {
       month: currentMonth,
       count: FieldValue.increment(1)
     }, { merge: true }).catch(e => console.error("[Exa] Lỗi cập nhật quota:", e.message));
+
+    try {
+      const todayDate = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Ho_Chi_Minh" });
+      const monthDate = todayDate.substring(0, 7);
+      const updates = {};
+      updates[`metrics/monthly_calls/${monthDate}/exa`] = rtdb.ServerValue.increment(1);
+      await rtdb.ref().update(updates);
+    } catch(e) { console.error("[Exa] Lỗi ghi nhận token:", e.message); }
 
     let summary = "Thông tin thực tế từ Internet (Exa):\n";
     const urls = [];

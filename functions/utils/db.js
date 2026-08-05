@@ -305,6 +305,39 @@ const getAllSchedules = async () => {
   }
 };
 
+/**
+ * Xóa toàn bộ lịch sử chat của một session.
+ * @param {string} sessionId
+ */
+const clearSessionHistory = async (sessionId) => {
+  // 1. Xóa toàn bộ Document cha trên Firestore
+  try {
+    await db.collection("users").doc(sessionId).delete();
+    console.log(`[Firestore] Đã xóa document cha: ${sessionId}`);
+  } catch (error) {
+    console.error(`[Reset Session] Lỗi xóa document ${sessionId}:`, error.message);
+  }
+
+  // 2. Xóa RTDB Raw Messages
+  try {
+    await clearRawMessages(sessionId);
+    console.log(`[RTDB] Đã xóa tin nhắn thô: ${sessionId}`);
+  } catch (error) {
+    console.error(`[Reset Session] Lỗi xóa tin nhắn thô ${sessionId}:`, error.message);
+  }
+
+  // 3. Xóa Metadata (participants, hotTopic) trên RTDB & Cache
+  try {
+    await updateSessionMetadata(sessionId, { participants: {}, hotTopic: "" });
+    console.log(`[RTDB/Cache] Đã reset metadata: ${sessionId}`);
+  } catch (error) {
+    console.error(`[Reset Session] Lỗi reset metadata ${sessionId}:`, error.message);
+  }
+};
+
+/**
+ * Xóa lịch hẹn (Schedule)
+ */
 const deleteSchedule = async (scheduleId) => {
   try {
     await rtdb.ref(`schedules/${scheduleId}`).remove();
@@ -351,7 +384,8 @@ module.exports = {
   getUserSchedules,
   getAllSchedules,
   deleteSchedule,
-  getDueSchedules
+  getDueSchedules,
+  clearSessionHistory
 };
 
 

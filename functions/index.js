@@ -2,7 +2,7 @@
 const { onRequest } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const crypto = require("crypto");
-const { db, rtdb, FieldValue, appendRawMessage, getRawMessages, clearRawMessages, getUserProfile, saveUserProfile, registerActiveSession, getActiveSessions, deregisterActiveSession, getSessionMetadata, updateSessionMetadata, getGlobalParticipants, saveGlobalParticipants, saveFact, getFactsIndex, getFactDetail, saveSchedule, getUserSchedules, getAllSchedules, deleteSchedule, getDueSchedules } = require("./utils/db");
+const { db, rtdb, FieldValue, appendRawMessage, getRawMessages, clearRawMessages, getUserProfile, saveUserProfile, registerActiveSession, getActiveSessions, deregisterActiveSession, getSessionMetadata, updateSessionMetadata, getGlobalParticipants, saveGlobalParticipants, saveFact, getFactsIndex, getFactDetail, saveSchedule, getUserSchedules, getAllSchedules, deleteSchedule, getDueSchedules, clearSessionHistory } = require("./utils/db");
 const line = require("./utils/line");
 const telegram = require("./utils/telegram");
 
@@ -25,7 +25,7 @@ const llm = require("./utils/llm");
 const { generateDailyNewsDigest } = require("./utils/news");
 const { getBotConfig } = require("./utils/configCache");
 const logger = require("./utils/logger");
-const figlet = require("figlet");
+const { handleCommand } = require("./commands");
 
 let cachedTgParticipants = null;
 let cachedLineParticipants = null;
@@ -566,35 +566,6 @@ const processAndExtractProfile = async (text, senderId, participants = {}, sessi
   return { text: cleanedText, topic, reaction };
 };
 
-/**
- * Xóa toàn bộ lịch sử chat của một session.
- * @param {string} sessionId
- */
-const clearSessionHistory = async (sessionId) => {
-  // 1. Xóa toàn bộ Document cha trên Firestore
-  try {
-    await db.collection("users").doc(sessionId).delete();
-    console.log(`[Firestore] Đã xóa document cha: ${sessionId}`);
-  } catch (error) {
-    console.error(`[Reset Session] Lỗi xóa document ${sessionId}:`, error.message);
-  }
-
-  // 2. Xóa RTDB Raw Messages
-  try {
-    await clearRawMessages(sessionId);
-    console.log(`[RTDB] Đã xóa tin nhắn thô: ${sessionId}`);
-  } catch (error) {
-    console.error(`[Reset Session] Lỗi xóa tin nhắn thô ${sessionId}:`, error.message);
-  }
-
-  // 3. Xóa Metadata (participants, hotTopic) trên RTDB & Cache
-  try {
-    await updateSessionMetadata(sessionId, { participants: {}, hotTopic: "" });
-    console.log(`[RTDB/Cache] Đã reset metadata: ${sessionId}`);
-  } catch (error) {
-    console.error(`[Reset Session] Lỗi reset metadata ${sessionId}:`, error.message);
-  }
-};
 
 const cleanText = (text) => text.replace(/@[^\s]+/g, "").replace(/\s+/g, " ").trim();
 
@@ -1119,20 +1090,13 @@ exports.webhook = onRequest({
     // Gửi chat action 'typing' để người dùng nhận được UX phản hồi tức thì
     telegram.sendChatAction(chatId, "typing").catch(e => console.error("[Telegram] Lỗi sendChatAction:", e.message));
 
-    // ASCII Art (Zero Cost)
-    const asciiMatch = cleanPrompt.match(/vẽ (chữ|tên|ascii)\s+(.+)/i);
-    if (asciiMatch) {
-      const textToDraw = asciiMatch[2];
-      let asciiText = "Lỗi tạo ASCII";
-      try {
-        asciiText = figlet.textSync(textToDraw, { font: "Standard" });
-      } catch (e) { console.error("Figlet error:", e.message); }
-      
-      const replyMsg = "Dạ đây là tác phẩm ASCII của anh/chị nè! ✨\n```\n" + asciiText + "\n```";
+    // Modular Command Dispatcher (System Commands)
+    const commandReply = await handleCommand(cleanPrompt, { platform: "TELEGRAM", userId, senderName, chatId });
+    if (commandReply) {
       const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, createdAt: new Date().toISOString() };
-      const botMsgData = { role: "model", text: replyMsg, createdAt: new Date().toISOString() };
+      const botMsgData = { role: "model", text: commandReply, createdAt: new Date().toISOString() };
       appendRawMessage(String(chatId), userMsgData, botMsgData).catch(e => console.error(e));
-      await telegram.reply(chatId, replyMsg).catch(e => console.error(e));
+      await telegram.reply(chatId, commandReply, { parse_mode: "Markdown" }).catch(e => console.error(e));
       return res.end();
     }
 
@@ -1461,20 +1425,13 @@ exports.webhook = onRequest({
       // Gửi chat action 'typing' (Loading Animation) để người dùng nhận được UX phản hồi tức thì
       line.showLoadingAnimation(sessionId, 5).catch(e => console.error("[LINE] Lỗi showLoadingAnimation:", e.message));
 
-      // ASCII Art (Zero Cost)
-      const asciiMatch = cleanPrompt.match(/vẽ (chữ|tên|ascii)\s+(.+)/i);
-      if (asciiMatch) {
-        const textToDraw = asciiMatch[2];
-        let asciiText = "Lỗi tạo ASCII";
-        try {
-          asciiText = figlet.textSync(textToDraw, { font: "Standard" });
-        } catch (e) { console.error("Figlet error:", e.message); }
-        
-        const replyMsg = "Dạ đây là tác phẩm ASCII của anh/chị nè! ✨\n" + asciiText;
+      // Modular Command Dispatcher (System Commands)
+      const commandReply = await handleCommand(cleanPrompt, { platform: "LINE", userId, senderName, chatId: sessionId });
+      if (commandReply) {
         const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, lineMessageId: eventMessageId, createdAt: new Date().toISOString() };
-        const botMsgData = { role: "model", text: replyMsg, createdAt: new Date().toISOString() };
+        const botMsgData = { role: "model", text: commandReply, createdAt: new Date().toISOString() };
         await appendRawMessage(sessionId, userMsgData, botMsgData).catch(e => console.error(e));
-        await line.reply(event.replyToken, [{ type: "text", text: replyMsg }]).catch(e => console.error(e));
+        await line.reply(event.replyToken, [{ type: "text", text: commandReply }]).catch(e => console.error(e));
         continue;
       }
 

@@ -1,6 +1,6 @@
 const { GoogleGenAI } = require("@google/genai");
 const fs = require("fs");
-const { db } = require("./db");
+const { db, rtdb } = require("./db");
 let aiInstance = null;
 const getAI = () => {
   if (!aiInstance) aiInstance = new GoogleGenAI({ apiKey: process.env.API_KEY || "dummy_key_to_bypass_init_error" });
@@ -8,6 +8,26 @@ const getAI = () => {
 };
 const GEMINI_MODEL = "gemini-2.5-flash";
 
+async function logGeminiUsage(response) {
+  try {
+    if (response.usageMetadata) {
+      const todayDate = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Ho_Chi_Minh" });
+      const promptTokens = response.usageMetadata.promptTokenCount || 0;
+      const compTokens = response.usageMetadata.candidatesTokenCount || 0;
+      const totalTokens = response.usageMetadata.totalTokenCount || (promptTokens + compTokens);
+      
+      const updates = {};
+      if (promptTokens) updates[`metrics/daily_tokens/${todayDate}/${GEMINI_MODEL}/prompt_tokens`] = rtdb.ServerValue.increment(promptTokens);
+      if (compTokens) updates[`metrics/daily_tokens/${todayDate}/${GEMINI_MODEL}/completion_tokens`] = rtdb.ServerValue.increment(compTokens);
+      if (totalTokens) updates[`metrics/daily_tokens/${todayDate}/${GEMINI_MODEL}/total_tokens`] = rtdb.ServerValue.increment(totalTokens);
+      updates[`metrics/daily_tokens/${todayDate}/${GEMINI_MODEL}/requests`] = rtdb.ServerValue.increment(1);
+      
+      await rtdb.ref().update(updates);
+    }
+  } catch(e) {
+    console.error("[Gemini] Lỗi ghi nhận token:", e.message);
+  }
+}
 
 /**
  * Phân tích và mô tả một bức ảnh (multimodal).
@@ -27,6 +47,7 @@ const multimodal = async (imageBinary) => {
       }
     ]
   });
+  await logGeminiUsage(response);
   return response.text;
 };
 
@@ -55,6 +76,7 @@ const analyzeDocument = async (localFilePath) => {
         }
       ]
     });
+    await logGeminiUsage(response);
     return response.text;
   } catch (error) {
     console.error("[Gemini] Lỗi phân tích document:", error.message);
@@ -125,6 +147,7 @@ ${formattedChat}`;
         responseMimeType: "application/json"
       }
     });
+    await logGeminiUsage(response);
     const textResp = response.text.trim();
     
     let jsonObj = null;
