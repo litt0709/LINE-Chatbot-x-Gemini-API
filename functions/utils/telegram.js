@@ -87,6 +87,9 @@ const reply = async (chatId, text) => {
     const chunk = chunks[i];
     let htmlText = chunk.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>");
     
+    // Convert markdown bullet points
+    htmlText = htmlText.replace(/^[-*]\s+/gm, "• ");
+    
     // Convert markdown code blocks to <pre>
     htmlText = htmlText.replace(/```([\s\S]*?)```/g, "<pre>$1</pre>");
     // Convert inline code to <code>

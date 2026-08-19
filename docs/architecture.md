@@ -1,5 +1,5 @@
 # Kiến trúc tổng thể hệ thống (Architecture)
-_Cập nhật lần cuối: 2026-08-05_
+_Cập nhật lần cuối: 2026-08-06_
 
 ## Sơ đồ Kiến trúc (Architecture Diagram)
 
@@ -25,6 +25,7 @@ _Cập nhật lần cuối: 2026-08-05_
 | - EQ Empathy Analysis (Emoji/Sticker -> Emotion Injection)      |
 | - Action Tag Parser (<PROFILE>, <FACT>, <SCHEDULE>, <REACT>...) |
 | - Strict Mention Resolution (Word Boundary Matching)            |
+| - Fast Path Regex (Ngăn LLM, gọi thẳng learning.js)             |
 | - Chặn File PDF/Media > 5MB bảo vệ tài nguyên                   |
 | - MasterScheduler (Idempotency RTDB state & Đa nền tảng)        |
 +-----------------------------------------------------------------+
@@ -54,7 +55,7 @@ _Cập nhật lần cuối: 2026-08-05_
 | Lớp (Layer) | Chức năng chính | Các File liên quan |
 |---|---|---|
 | **Request Layer** | Nhận Request, kiểm tra Token, xử lý lệnh `/report` đa nền tảng, lọc trùng lặp Webhook, chặn Prompt Leakage, sinh ASCII Art. | `index.js`, `commands/report.js` |
-| **Processing Layer** | Điều phối luồng, bóc tách Action Tags, chặn File/PDF >5MB, trích xuất cảm xúc (EQ), xử lý Strict Mention, định tuyến Cron Jobs (kèm Idempotency lock). | `index.js` |
+| **Processing Layer** | Điều phối luồng, bóc tách Action Tags, chặn File/PDF >5MB, trích xuất cảm xúc (EQ), xử lý Strict Mention, định tuyến Cron Jobs (kèm Idempotency lock), xử lý Fast Path (Self-Learning). | `index.js`, `learning.js` |
 | **LLM Layer** | Tương tác AI, định tuyến (Dual-Process) giữa V4-Flash/V4-Pro. Gemini dùng File API phân tích PDF/Ảnh và nén bộ nhớ (LTM, MBTI). | `llm.js`, `deepseek.js`, `gemini.js`, `news.js` |
 | **Search Layer** | Truy xuất thông tin thời gian thực, tải PDF Buffer từ Link, phân loại (NEWS, DEV, SOCIAL, FINANCE) để chọn API (Tavily/Exa). | `search.js`, `tavily.js`, `exa.js` |
 | **Storage Layer** | Lưu trữ đa tầng (RAM -> RTDB -> Firestore). Firestore lưu JSON Core Memory, MBTI Profile. Lưu System State của Scheduler. | `db.js` |
@@ -66,6 +67,7 @@ User gửi tin nhắn
    |
    +-> 1. index.js: Xác thực & kiểm tra Idempotency
    |      +-> [Zero-cost] Nếu lệnh `/vẽ`: Trả về luôn ASCII art qua `figlet`.
+   |      +-> [Zero-cost] Nếu hỏi "bot tự học": Gọi `learning.js` trả về Báo cáo học tập.
    |
    +-> 2. Tải Bot Config, User/Group Profile (JSON Core_Memory, MBTI, Skill Vectors)
    |      +-> [Tối ưu] Chỉ load Full Traits nếu User là Sender hoặc bị Mentioned (Strict Regex)
@@ -102,7 +104,7 @@ Hệ thống được thiết kế tối ưu cực đoan về chi phí (Cost-eff
 | **Tin nhắn trò chuyện thô** | Firebase RTDB (Realtime Database) | **Free/Rất rẻ** (Không tính phí Write document) |
 | **Hồ sơ (LTM, MBTI, Skills)** | RAM Cache (L1) -> Firestore (L2) | **Rẻ** (Chỉ ghi khi nén JSON LTM lúc 3h sáng hoặc có `<PROFILE>`) |
 | **Cấu hình Bot (botConfig)** | RAM Cache (L1) -> Firestore (L2) | **Gần như Free** (Cache RAM) |
-| **Vẽ ASCII Art** | Node.js (figlet) | **Hoàn toàn Free** (Local Compute) |
+| **Vẽ ASCII Art / Self-Learning** | Node.js (figlet / learning.js) | **Hoàn toàn Free** (Local Compute & RTDB Read) |
 | **Audit Logs (Lịch sử lỗi)** | Firestore (Xóa bằng MasterScheduler) | **Có phí** (Ghi tự động khi Gemini review ban đêm) |
 | **Chat Text (System 1)** | DeepSeek V4 Flash | **Siêu rẻ** (Cho 90% giao tiếp thông thường) |
 | **Chat Text (System 2)** | DeepSeek V4 Pro | **Trả phí theo usage** (Chỉ trigger cho câu hỏi phức tạp/CoT) |

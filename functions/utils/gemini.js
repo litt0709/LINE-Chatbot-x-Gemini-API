@@ -8,6 +8,8 @@ const getAI = () => {
 };
 const GEMINI_MODEL = "gemini-2.5-flash";
 
+const admin = require("firebase-admin");
+
 async function logGeminiUsage(response) {
   try {
     if (response.usageMetadata) {
@@ -16,11 +18,13 @@ async function logGeminiUsage(response) {
       const compTokens = response.usageMetadata.candidatesTokenCount || 0;
       const totalTokens = response.usageMetadata.totalTokenCount || (promptTokens + compTokens);
       
+      const safeModelKey = GEMINI_MODEL.replace(/\./g, "_");
+      
       const updates = {};
-      if (promptTokens) updates[`metrics/daily_tokens/${todayDate}/${GEMINI_MODEL}/prompt_tokens`] = rtdb.ServerValue.increment(promptTokens);
-      if (compTokens) updates[`metrics/daily_tokens/${todayDate}/${GEMINI_MODEL}/completion_tokens`] = rtdb.ServerValue.increment(compTokens);
-      if (totalTokens) updates[`metrics/daily_tokens/${todayDate}/${GEMINI_MODEL}/total_tokens`] = rtdb.ServerValue.increment(totalTokens);
-      updates[`metrics/daily_tokens/${todayDate}/${GEMINI_MODEL}/requests`] = rtdb.ServerValue.increment(1);
+      if (promptTokens) updates[`metrics/daily_tokens/${todayDate}/${safeModelKey}/prompt_tokens`] = admin.database.ServerValue.increment(promptTokens);
+      if (compTokens) updates[`metrics/daily_tokens/${todayDate}/${safeModelKey}/completion_tokens`] = admin.database.ServerValue.increment(compTokens);
+      if (totalTokens) updates[`metrics/daily_tokens/${todayDate}/${safeModelKey}/total_tokens`] = admin.database.ServerValue.increment(totalTokens);
+      updates[`metrics/daily_tokens/${todayDate}/${safeModelKey}/requests`] = admin.database.ServerValue.increment(1);
       
       await rtdb.ref().update(updates);
     }
@@ -223,4 +227,29 @@ ${formattedChat}`;
   }
 };
 
-module.exports = { multimodal, analyzeDocument, summarizeHistory };
+/**
+ * Hàm sinh phản hồi chat dự phòng qua Gemini 2.5 Flash
+ * @param {Array} contents
+ * @param {string} systemInstruction
+ * @returns {Promise<string>}
+ */
+const generateChatReply = async (contents, systemInstruction = "") => {
+  try {
+    const config = {};
+    if (systemInstruction) {
+      config.systemInstruction = { parts: [{ text: systemInstruction }] };
+    }
+    const response = await getAI().models.generateContent({
+      model: GEMINI_MODEL,
+      contents: contents,
+      config: Object.keys(config).length > 0 ? config : undefined
+    });
+    await logGeminiUsage(response);
+    return response.text ? response.text.trim() : "";
+  } catch (err) {
+    console.error("[Gemini] Lỗi generateChatReply:", err.message);
+    throw err;
+  }
+};
+
+module.exports = { multimodal, analyzeDocument, summarizeHistory, generateChatReply, getAI };

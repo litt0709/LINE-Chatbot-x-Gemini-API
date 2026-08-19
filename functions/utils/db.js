@@ -4,7 +4,23 @@ const { FieldValue } = require("firebase-admin/firestore");
 let isInit = false;
 const initAdmin = () => {
   if (!isInit && admin.apps.length === 0) {
-    admin.initializeApp();
+    const isTelegram = process.env.PLATFORM === "TELEGRAM" || (process.env.TELEGRAM_BOT_TOKEN && !process.env.CHANNEL_SECRET);
+    const defaultProject = isTelegram ? "tele-ai-chatbot" : "line-ai-chatbot-eab18";
+    let projectId = process.env.GCLOUD_PROJECT;
+    if (!projectId && process.env.FIREBASE_CONFIG) {
+      try {
+        projectId = JSON.parse(process.env.FIREBASE_CONFIG).projectId;
+      } catch (e) {}
+    }
+    if (!projectId) {
+      projectId = defaultProject;
+    }
+    const databaseURL = process.env.DATABASE_URL || `https://${projectId}-default-rtdb.asia-southeast1.firebasedatabase.app`;
+
+    admin.initializeApp({
+      projectId,
+      databaseURL
+    });
   }
   isInit = true;
 };
@@ -223,10 +239,21 @@ const getUserProfile = async (userId) => {
   }
 };
 
+const isCanonicalPlatformId = (id) => {
+  if (!id || typeof id !== "string") return false;
+  // LINE ID (U...), numeric Telegram ID, or UUID
+  return /^U[a-f0-9]{32}$/i.test(id) || /^\d+$/.test(id) || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+};
+
 const saveUserProfile = async (userId, data) => {
   try {
-    await db.collection("user_profiles").doc(String(userId)).set(data, { merge: true });
-    console.log(`[Firestore] Đã lưu profile User ${userId}:`, data);
+    const cleanId = String(userId).trim();
+    if (!isCanonicalPlatformId(cleanId)) {
+      console.warn(`[Firestore Guard] Từ chối lưu profile với ID không hợp lệ: "${cleanId}"`);
+      return;
+    }
+    await db.collection("user_profiles").doc(cleanId).set(data, { merge: true });
+    console.log(`[Firestore] Đã lưu profile User ${cleanId}:`, data);
   } catch (error) {
     console.error(`[Firestore] Lỗi lưu profile User ${userId}:`, error.message);
   }
@@ -249,6 +276,13 @@ const saveFact = async (type, targetId, factId, topic, keywords, content, link =
     };
     if (link) detailData.link = link;
     await rtdb.ref(`${basePath}/detail/${factId}`).set(detailData);
+    
+    try {
+      const logger = require("./logger");
+      await logger.logSystem("FACT_LEARNED", `Đã học fact mới về "${topic}"`, "SUCCESS");
+    } catch (err) {
+      console.error("[RTDB] Lỗi ghi log FACT_LEARNED:", err.message);
+    }
     
     console.log(`[RTDB] Đã lưu fact ${factId} (${type} - ${targetId || "global"})`);
   } catch (error) {

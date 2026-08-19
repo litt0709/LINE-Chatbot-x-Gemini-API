@@ -138,12 +138,18 @@ const checkNeedsSearch = (prompt) => {
  */
 const scrapeUrl = async (url) => {
   if (url.includes("x.com/") || url.includes("twitter.com/")) {
-    return "[Hệ thống: Tường lửa đã chặn bot đọc link X/Twitter. Cần báo lỗi không thể đọc cho User.]";
+    return "[Hệ thống: Hệ thống không hỗ trợ bot đọc link X/Twitter. Cần báo thành thật với User là không xem được link này.]";
   }
   const axios = require("axios");
+  const browserHeaders = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "vi,en-US;q=0.9,en;q=0.8"
+  };
+
   try {
     const headRes = await axios.head(url, {
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1)" },
+      headers: browserHeaders,
       timeout: 5000
     }).catch(() => null);
 
@@ -163,7 +169,7 @@ const scrapeUrl = async (url) => {
       }
       console.log(`[Scraper] Bắt đầu tải file PDF từ URL: ${url}`);
       const { data: pdfBuffer } = await axios.get(url, {
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1)" },
+        headers: browserHeaders,
         responseType: "arraybuffer",
         timeout: 15000
       });
@@ -183,7 +189,7 @@ const scrapeUrl = async (url) => {
     }
 
     const { data: html } = await axios.get(url, {
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1)" },
+      headers: browserHeaders,
       timeout: 8000
     });
     if (typeof html !== "string") return null;
@@ -222,6 +228,30 @@ const resolveWebContext = async (prompt, isPreOptimized = false, sessionId = nul
     const targetUrl = urls[0];
     console.log(`[Scraper] Đọc nội dung từ: ${targetUrl}`);
     urlText = await scrapeUrl(targetUrl);
+    
+    // Fallback: nếu scrape URL thất bại, thử trích xuất slug để search internet
+    if (!urlText) {
+      try {
+        const parsed = new URL(targetUrl);
+        const pathSlug = parsed.pathname
+          .replace(/\.[a-zA-Z0-9]+$/, "")
+          .replace(/[^a-zA-Z0-9\-_]/g, " ")
+          .split(/[-_\s]+/)
+          .filter(w => w.length >= 2 && isNaN(w))
+          .join(" ");
+        const domainName = parsed.hostname.replace("www.", "");
+        if (pathSlug) {
+          const fallbackQuery = `${pathSlug} ${domainName}`.trim();
+          console.log(`[Scraper Fallback] Kích hoạt search theo slug URL: "${fallbackQuery}"`);
+          const fallbackRes = await searchTavily(fallbackQuery);
+          if (fallbackRes && fallbackRes.summary) {
+            urlText = `[Thông tin từ tìm kiếm liên quan đến link ${targetUrl}]:\n${fallbackRes.summary}`;
+          }
+        }
+      } catch (e) {
+        console.error("[Scraper Fallback] Lỗi:", e.message);
+      }
+    }
   }
 
   // Tải cache webContext ngắn hạn (5 phút) trên RTDB để tối ưu chi phí
@@ -294,18 +324,6 @@ const resolveWebContext = async (prompt, isPreOptimized = false, sessionId = nul
       finalQuery = extractionResult.query;
     }
     
-    const { TODAY_KEYWORDS } = require("./tavily");
-    const isTodaySensitive = TODAY_KEYWORDS.some(kw => cleanQuery.toLowerCase().includes(kw));
-    if (isTodaySensitive) {
-      const todayStr = new Date().toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
-      finalQuery = `${finalQuery} ngày ${todayStr}`;
-    } else {
-      if (!/\b20\d{2}\b/.test(finalQuery)) {
-        const currentYear = new Date().getFullYear();
-        finalQuery = `${finalQuery} năm ${currentYear}`;
-      }
-    }
-
     const botConfig = await getBotConfig();
     const CATEGORY_REGEX = {
       NEWS: new RegExp(botConfig.search_keywords.NEWS || "bóng đá|tin tức|thời sự", "i"),
@@ -318,6 +336,18 @@ const resolveWebContext = async (prompt, isPreOptimized = false, sessionId = nul
     if (CATEGORY_REGEX.DEV.test(finalQuery)) category = "DEV";
     else if (CATEGORY_REGEX.SOCIAL.test(finalQuery)) category = "SOCIAL";
     else if (CATEGORY_REGEX.NEWS.test(finalQuery) || CATEGORY_REGEX.FINANCE.test(finalQuery)) category = "NEWS";
+
+    const { TODAY_KEYWORDS } = require("./tavily");
+    const isTodaySensitive = TODAY_KEYWORDS.some(kw => cleanQuery.toLowerCase().includes(kw));
+    if (isTodaySensitive) {
+      const todayStr = new Date().toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
+      finalQuery = `${finalQuery} ngày ${todayStr}`;
+    } else if (category === "NEWS") {
+      if (!/\b20\d{2}\b/.test(finalQuery)) {
+        const currentYear = new Date().getFullYear();
+        finalQuery = `${finalQuery} năm ${currentYear}`;
+      }
+    }
 
     console.log(`[Search Router] Kích hoạt tìm kiếm: "${finalQuery}" | Category: ${category}`);
     

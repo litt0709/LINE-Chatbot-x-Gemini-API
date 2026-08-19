@@ -87,14 +87,26 @@ const searchTavily = async (query, options = {}) => {
 
   let targetDomains;
   if (hasVnKeyword) {
-    targetDomains = sources.vn;
+    targetDomains = [...sources.vn];
     console.log(`[Tavily Router] Nhánh 1: CÓ Keyword VN -> Ép nguồn VIỆT NAM (GMT+7)`);
   } else if (hasIntlKeyword) {
-    targetDomains = sources.intl;
+    targetDomains = [...sources.intl];
     console.log(`[Tavily Router] Nhánh 2: CÓ Keyword INTL -> Ép nguồn QUỐC TẾ`);
   } else {
     targetDomains = [...sources.vn, ...sources.intl];
     console.log(`[Tavily Router] Nhánh 3 (Default): KHÔNG rõ ràng -> Gộp CẢ HAI nguồn`);
+  }
+
+  // Nhận diện domain do người dùng chỉ định trong query (VD: techcrunch.com, github.com...)
+  const domainMatches = query.match(/\b(?:https?:\/\/)?(?:www\.)?([a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})?)\b/g);
+  if (domainMatches) {
+    const explicitDomains = domainMatches
+      .map(d => d.replace(/^https?:\/\//, "").replace(/^www\./, "").toLowerCase())
+      .filter(d => !/\.(png|jpg|jpeg|gif|webp|svg|html|js|css|json)$/i.test(d));
+    if (explicitDomains.length > 0) {
+      targetDomains = [...new Set([...explicitDomains, ...targetDomains])];
+      console.log(`[Tavily Router] Bổ sung domain chỉ định vào search target: ${explicitDomains.join(", ")}`);
+    }
   }
 
   // Đã tháo Prompt Injection tự động cho các truy vấn giải đấu (Issue #2)

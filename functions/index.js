@@ -25,6 +25,7 @@ const llm = require("./utils/llm");
 const { generateDailyNewsDigest } = require("./utils/news");
 const { getBotConfig } = require("./utils/configCache");
 const logger = require("./utils/logger");
+const learning = require("./utils/learning");
 const { handleCommand } = require("./commands");
 
 let cachedTgParticipants = null;
@@ -178,8 +179,13 @@ const buildGroupProfileContext = async (participantsMap, promptText = "", sender
   const uniqueIds = [...new Set(Object.values(participantsMap))].filter(Boolean);
   const lowerPrompt = promptText.toLowerCase();
   
+  // Lọc bỏ các danh từ ghép phổ biến để tránh nhận diện nhầm tên riêng trong nhóm
+  const sanitizedPrompt = lowerPrompt
+    .replace(/\b(châu\s+(á|âu|mỹ|phi|đại dương|lục|thổ|quỳ|chấu)|trân\s+châu)\b/gi, " ")
+    .replace(/\b(hải\s+(sản|quan|phòng|dương|đăng|trình|ngoại|lý|cảng)|du\s+(lịch|khách|thuyền|hành|xuân)|lâm\s+(nghiệp|sản|tặc|thời|sàng))\b/gi, " ");
+
   // Pad the prompt for simple word boundary checking (since JS \b is bad with Unicode)
-  const paddedPrompt = ` ${lowerPrompt.replace(/[.,!?()[\]{}"':;]/g, ' ')} `;
+  const paddedPrompt = ` ${sanitizedPrompt.replace(/[.,!?()[\]{}"':;]/g, ' ')} `;
 
   const PROFILE_TRIGGER_KEYWORDS = [" anh ", " chị ", " tôi ", " mình ", " em ", " nhớ ", " quên ", " sở thích ", " tên gì ", " làm gì ", " quê "];
   const hasTrigger = PROFILE_TRIGGER_KEYWORDS.some(kw => paddedPrompt.includes(kw));
@@ -254,6 +260,71 @@ const removeAccents = (str) => {
     .replace(/Đ/g, "D");
 };
 
+const resolveCanonicalUserId = async (userIdAttr, senderId, participants = {}, platform = "Telegram") => {
+  const isPlatformId = (id) => {
+    if (!id || typeof id !== "string") return false;
+    if (platform.toUpperCase() === "LINE") {
+      return /^U[a-f0-9]{32}$/i.test(id) || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    }
+    return /^\d+$/.test(id);
+  };
+
+  if (!userIdAttr || userIdAttr.trim() === "") {
+    return isPlatformId(String(senderId)) ? String(senderId) : null;
+  }
+  
+  const trimmed = userIdAttr.trim();
+  if (isPlatformId(trimmed)) return trimmed;
+
+  const rawLower = trimmed.toLowerCase();
+  const noAccentLower = removeAccents(rawLower);
+
+  // 1. Dò trong participants session
+  if (participants[rawLower] && isPlatformId(String(participants[rawLower]))) {
+    return String(participants[rawLower]);
+  }
+  if (participants[noAccentLower] && isPlatformId(String(participants[noAccentLower]))) {
+    return String(participants[noAccentLower]);
+  }
+  for (const [k, v] of Object.entries(participants)) {
+    const kLower = k.toLowerCase();
+    const kNoAccent = removeAccents(kLower);
+    if (kLower.includes(rawLower) || rawLower.includes(kLower) || kNoAccent.includes(noAccentLower) || noAccentLower.includes(kNoAccent)) {
+      if (isPlatformId(String(v))) return String(v);
+    }
+  }
+
+  // 2. Dò trong global participants của nền tảng
+  try {
+    const globalKey = platform.toUpperCase() === "LINE" ? "line" : "tg";
+    const globalPart = (globalKey === "line" ? cachedLineParticipants : cachedTgParticipants) || await getGlobalParticipants(globalKey);
+    if (globalPart) {
+      if (globalPart[rawLower] && isPlatformId(String(globalPart[rawLower]))) {
+        return String(globalPart[rawLower]);
+      }
+      if (globalPart[noAccentLower] && isPlatformId(String(globalPart[noAccentLower]))) {
+        return String(globalPart[noAccentLower]);
+      }
+      for (const [k, v] of Object.entries(globalPart)) {
+        const kLower = k.toLowerCase();
+        const kNoAccent = removeAccents(kLower);
+        if (kLower.includes(rawLower) || rawLower.includes(kLower) || kNoAccent.includes(noAccentLower) || noAccentLower.includes(kNoAccent)) {
+          if (isPlatformId(String(v))) return String(v);
+        }
+      }
+    }
+  } catch (e) {
+    console.error("[Profile] Lỗi tra cứu global participants:", e.message);
+  }
+
+  // Nếu không tìm thấy, nếu senderId hợp lệ thì fallback về senderId
+  if (senderId && isPlatformId(String(senderId))) {
+    return String(senderId);
+  }
+
+  return null;
+};
+
 const processAndExtractProfile = async (text, senderId, participants = {}, sessionId = null, senderName = "User", platform = "Telegram") => {
   let cleanedText = text;
 
@@ -286,16 +357,12 @@ const processAndExtractProfile = async (text, senderId, participants = {}, sessi
     const public_traits = getAttr("public_traits");
     const private_traits = getAttr("private_traits");
 
-    let uid = userIdAttr || senderId;
+    const uid = await resolveCanonicalUserId(userIdAttr, senderId, participants, platform);
 
-    if (userIdAttr) {
-      const lowerUid = removeAccents(userIdAttr.trim().toLowerCase());
-      if (participants[lowerUid]) {
-        uid = participants[lowerUid];
-        console.log(`[Profile] Phân giải tên "${userIdAttr}" thành ID thực: ${uid}`);
-      } else {
-        console.log(`[Profile] Không tìm thấy ID thực cho "${userIdAttr}", dùng tạm làm ID.`);
-      }
+    if (!uid) {
+      console.warn(`[Profile Guard] Bỏ qua trích xuất hồ sơ vì không tìm thấy Canonical ID cho "${userIdAttr || senderId}" trên ${platform}`);
+      cleanedText = cleanedText.replace(match[0], "");
+      continue;
     }
 
     if (action || real_name || gender || public_traits || private_traits) {
@@ -874,6 +941,12 @@ exports.webhook = onRequest({
       return res.end();
     }
 
+    const learningReply = await learning.handleLearningRegex(messageContent);
+    if (learningReply) {
+      await telegram.reply(chatId, learningReply);
+      return res.end();
+    }
+
 
     let isImage = false;
 
@@ -893,7 +966,8 @@ exports.webhook = onRequest({
       const focus = focusModeCache.get(String(chatId));
       if (focus && focus.userId === String(userId) && Date.now() < focus.expiresAt) {
         const hasOtherMentions = /@\w+\b/gi.test(messageContent) && !messageContent.toLowerCase().includes(`@${botUsername}`);
-        if (!hasOtherMentions) {
+        const isQuestionOrCommand = /\?/.test(messageContent) || /(tại sao|vì sao|làm sao|như nào|thế nào|bao nhiêu|nhỉ|hả\b|nhé\b|đi\b|kể|tính)/i.test(messageContent);
+        if (!hasOtherMentions && isQuestionOrCommand) {
           isImplicitlyTargeted = true;
           console.log(`[Focus Mode] Telegram: Bot tự động follow up với User ${userId} trong Group ${chatId}`);
         }
@@ -979,7 +1053,7 @@ exports.webhook = onRequest({
         : message.document.file_id;
       const mediaType = message.photo ? "image" : "document";
       const fileSize = message.photo ? 0 : message.document.file_size;
-      const isPdf = message.document && (message.document.file_name || "").toLowerCase().endsWith(".pdf");
+      const isPdf = !!(message.document && (message.document.file_name || "").toLowerCase().endsWith(".pdf"));
       const placeholderText = message.photo
         ? "[HÌNH ẢNH]"
         : `[TÀI LIỆU: ${message.document.file_name || "document"}]`;
@@ -1345,6 +1419,11 @@ exports.webhook = onRequest({
 
       if (!messageContent) continue;
 
+      const learningReply = await learning.handleLearningRegex(messageContent);
+      if (learningReply) {
+        await line.reply(event.replyToken, [{ type: "text", text: learningReply }]);
+        continue;
+      }
 
       const sessionId = event.source.groupId || event.source.roomId || userId;
 
@@ -1536,9 +1615,12 @@ exports.webhook = onRequest({
       if (isGroup && !isDirectlyTargeted) {
         const focus = focusModeCache.get(String(sessionId));
         if (focus && focus.userId === String(userId) && Date.now() < focus.expiresAt) {
-          isDirectlyTargeted = true;
-          forceIgnoreCheck = false;
-          console.log(`[Focus Mode] LINE: Bot tự động follow up với User ${userId} trong Group ${sessionId}`);
+          const isQuestionOrCommand = /\?/.test(messageContent) || /(tại sao|vì sao|làm sao|như nào|thế nào|bao nhiêu|nhỉ|hả\b|nhé\b|đi\b|kể|tính)/i.test(messageContent);
+          if (isQuestionOrCommand) {
+            isDirectlyTargeted = true;
+            forceIgnoreCheck = false;
+            console.log(`[Focus Mode] LINE: Bot tự động follow up với User ${userId} trong Group ${sessionId}`);
+          }
         }
       }
 
@@ -1608,6 +1690,7 @@ const sendNotifications = async (type = "afternoon") => {
 
   console.log(`[Schedule] Bắt đầu tạo bản tin ngày cho ${targetIds.length} mục tiêu (loại: ${type})...`);
   const newsDigest = await generateDailyNewsDigest(type);
+  if (!newsDigest) return;
 
   // Phân biệt theo đúng môi trường triển khai
   const platform = (process.env.PLATFORM || "LINE").toUpperCase();
@@ -1670,7 +1753,7 @@ exports.masterScheduler = onSchedule({
   // Tiến hoá vô hạn (Infinite Evolution Framework): 3:00 AM
   if (hour === 3 && minute < 5) {
     console.log("[Scheduler] Kích hoạt Tiến hóa Vô hạn & Dọn dẹp Logs");
-    logger.logSystem("CRON_JOB", "Kích hoạt Tiến hóa Vô hạn & Dọn dẹp Logs", "SUCCESS");
+    await logger.logSystem("CRON_JOB", "Kích hoạt Tiến hóa Vô hạn & Dọn dẹp Logs", "SUCCESS");
     
     // Tiến hóa
     const { runDailyEvolution } = require("./utils/evolution");

@@ -1,8 +1,11 @@
 const { db } = require("./db");
 const axios = require("axios");
-const { DEEPSEEK_API_KEY, DEEPSEEK_URL, DEEPSEEK_MODEL } = require("../config");
-const { resolveWebContext } = require("./deepseek");
 const logger = require("./logger");
+const { resolveWebContext } = require("./search");
+
+const DEEPSEEK_URL = process.env.DEEPSEEK_URL || "https://api.deepseek.com/chat/completions";
+const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 
 const askOptimizer = async (prompt) => {
   try {
@@ -57,12 +60,12 @@ const dailyHumanStudy = async () => {
         }
         await configRef.set({ human_insights: insights }, { merge: true });
         console.log("[Evolution] Đã nạp Human Insight:", newInsight);
-        logger.logSystem("EVOLUTION_HUMAN_STUDY", `Đã nạp Human Insight: ${newInsight}`, "SUCCESS");
+        await logger.logSystem("EVOLUTION_HUMAN_STUDY", `Đã tầm sư học đạo chủ đề "${randomTopic}", đúc kết được: ${newInsight}`, "SUCCESS");
       }
     }
   } catch (err) {
     console.error("[Evolution] Lỗi Tầm Sư Học Đạo:", err.message);
-    logger.logSystem("EVOLUTION_HUMAN_STUDY", `Lỗi: ${err.message}`, "FAILED");
+    await logger.logSystem("EVOLUTION_HUMAN_STUDY", `Lỗi: ${err.message}`, "FAILED");
   }
 };
 
@@ -103,7 +106,7 @@ const processAuditIssues = async () => {
         }
         await configRef.set({ dynamic_guardrails: guardrails }, { merge: true });
         console.log("[Evolution] Đã nạp Guardrail mới:", newGuardrail);
-        logger.logSystem("EVOLUTION_GUARDRAIL", `Đã nạp Guardrail mới: ${newGuardrail}`, "SUCCESS");
+        await logger.logSystem("EVOLUTION_GUARDRAIL", `Đã nạp Guardrail mới: ${newGuardrail}`, "SUCCESS");
         
         // Xóa audit_issues đã xử lý
         const batch = db.batch();
@@ -115,7 +118,7 @@ const processAuditIssues = async () => {
     }
   } catch (err) {
     console.error("[Evolution] Lỗi xử lý Audit Issues:", err.message);
-    logger.logSystem("EVOLUTION_GUARDRAIL", `Lỗi: ${err.message}`, "FAILED");
+    await logger.logSystem("EVOLUTION_GUARDRAIL", `Lỗi: ${err.message}`, "FAILED");
   }
 };
 

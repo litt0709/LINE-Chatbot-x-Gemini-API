@@ -52,11 +52,9 @@ ${webContext}`;
 Nhiệm vụ: Lọc 5 tin tức nóng nhất từ [THÔNG TIN TỪ INTERNET] để làm Bản tin Chiều.
 Format bắt buộc:
 1. Chào đầu: Chào buổi chiều, xốc lại tinh thần sau giờ nghỉ trưa (Ví dụ: "Ting ting! Cập nhật tin nóng buổi chiều đây ạ! 🌸").
-2. 5 tin nổi bật nhất: Tóm tắt ý chính. Định dạng tiêu đề: 🔥 *[Tiêu đề tin tức]*
-3. Nguồn gốc: Dưới mỗi tin, bắt buộc ghi rõ [Nguồn: Tên Báo] (Tuyệt đối KHÔNG đính kèm link URL).
-4. Bình luận: Dưới mỗi tin, chèn: 💬 *Annie bình luận:* [1 câu nhận định ngắn gọn, sắc sảo hoặc hài hước].
-5. Lời chúc kết: Chúc làm việc buổi chiều tỉnh táo, hiệu quả và chốt đơn ầm ầm.
-Rule: Chỉ dùng thông tin thật, không bịa đặt.
+2. 5 tin nổi bật nhất: Tóm tắt thật ngắn gọn ý chính. Định dạng tiêu đề: 🔥 *[Tiêu đề tin tức]*
+3. Lời chúc kết: Chúc làm việc buổi chiều tỉnh táo, hiệu quả và chốt đơn ầm ầm.
+Rule: KHÔNG BAO GIỜ chèn link nguồn hay URL (ẩn nguồn 100%) để bản tin ngắn gọn tối đa. Nội dung từng tin phải cực kỳ súc tích, đi thẳng vào vấn đề chính.
 ${webContext}`;
   }
 
@@ -86,8 +84,8 @@ ${webContext}`;
     const replyText = response.data.choices[0].message.content;
     return replyText;
   } catch (error) {
-    console.error("[News] Lỗi gọi DeepSeek:", error?.response?.data || error.message);
-    return "Anh chị ơi, em đang bị lỗi kết nối không làm bản tin được ạ. (｡T_T｡)";
+    console.error("[News API] Lỗi tạo bản tin:", error.message);
+    return null;
   }
 };
 

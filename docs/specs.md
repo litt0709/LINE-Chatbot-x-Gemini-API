@@ -1,5 +1,5 @@
 # Luồng kỹ thuật chi tiết (Technical Specs)
-_Cập nhật lần cuối: 2026-08-05_
+_Cập nhật lần cuối: 2026-08-06_
 
 ## Tóm tắt Module
 
@@ -18,6 +18,7 @@ _Cập nhật lần cuối: 2026-08-05_
 | `functions/utils/telegram.js` | Thao tác API Telegram (Gửi tin nhắn, chunking nội dung dài, phím bấm, reaction). |
 | `functions/utils/line.js` | Thao tác API LINE (Gửi tin nhắn định dạng textV2 chứa mention, push message). |
 | `functions/utils/logger.js` | Log sự kiện vận hành. |
+| `functions/utils/learning.js` | Tạo Báo cáo học hỏi (Self-Learning Report). Trích xuất dữ liệu từ logs để giải đáp câu hỏi "bot đã học được gì". |
 
 ---
 
@@ -27,6 +28,7 @@ _Cập nhật lần cuối: 2026-08-05_
 1. **Tiếp nhận & Validate**: Webhook vào `index.js`. Kiểm tra `processedWebhooks` (RAM Cache). Kiểm tra Secret Token (Telegram).
 2. **Tiền xử lý (Offline)**: 
    - Nếu lệnh `/vẽ`: Sinh tức thời ASCII Art bằng thư viện `figlet` và trả về ngay lập tức (Zero-cost logic).
+   - Nếu câu hỏi tự học (Regex: "mày học được gì"): Gọi thẳng `learning.js` trích xuất Báo cáo học hỏi và trả về ngay (Zero-cost logic).
    - Nếu tin thường: Nhận diện cảm xúc từ Emojis/Stickers thành `System Alert` nội suy. Kiểm tra rò rỉ prompt. 
 3. **Thu thập Ngữ cảnh**: 
    - RTDB: Đọc lịch sử 25 tin nhắn gần nhất.
@@ -71,7 +73,7 @@ _Cập nhật lần cuối: 2026-08-05_
 ### 4. DeepSeek Chat function (Tool Calling / Dual-Process)
 - **Dual-Process Classifier**: Tự động đánh giá prompt. Các câu hỏi logic phức tạp hoặc code sẽ được bẻ lái sang `deepseek-v4-pro`. Các câu hỏi thường dùng `deepseek-v4-flash`.
 - **Vòng lặp ReAct**: 
-  - LLM tự động gọi tool `google_search`.
+  - LLM tự động gọi tool `google_search`. (Lưu ý: Tool này bị ẨN đi nếu hệ thống đã cào thành công WebContext ở bước trước, giúp triệt tiêu việc search trùng lặp tốn kém).
   - Kết quả search bơm lại vào context để LLM trả về câu trả lời cuối (Giới hạn 2 lượt để tránh infinite loop).
 
 ### 5. MasterScheduler (Cron tasks)
@@ -97,7 +99,7 @@ Hệ thống kết hợp 3 tầng dữ liệu để tối ưu tốc độ và ch
 - **Dynamic Rules Extraction**: Khả năng tự học luật ứng xử thông qua luồng nén lịch sử và tự đưa vào prompt.
 - **Mention Resolution**: 
   - LINE: Tự động đổi `@tên` thành `{user_X}` và gán `substitution`.
-  - Telegram: Tự động đổi `@tên` thành `<a href="tg://user?id=X">tên</a>`.
+  - Telegram: Tự động đổi `@tên` thành `<a href="tg://user?id=X">tên</a>`. Bổ sung rule chống Ignore: Khi bị tag chung với bot khác, AI sẽ thi đấu "đua top" thay vì từ chối trả lời.
 
 ---
 
@@ -117,6 +119,13 @@ Hệ thống kết hợp 3 tầng dữ liệu để tối ưu tốc độ và ch
       },
       "messages": {
         "msg_push_id": { "role": "user", "text": "Tin nhắn...", "senderName": "ABC" }
+      }
+    }
+  },
+  "logs": {
+    "system_logs": {
+      "YYYY-MM-DD": {
+        "logId": { "action": "FACT_LEARNED", "details": "...", "timestamp": 1722744000000 }
       }
     }
   }

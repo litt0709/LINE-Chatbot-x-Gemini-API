@@ -58,27 +58,36 @@ async function generateTokenReport() {
     }
 
     // 1. Fetch Primary DB
-    const primaryTokensSnap = await rtdb.ref("metrics/daily_tokens").once("value");
-    const primaryCallsSnap = await rtdb.ref("metrics/monthly_calls").once("value");
-    const primaryTokens = primaryTokensSnap.exists() ? primaryTokensSnap.val() : {};
-    const primaryCalls = primaryCallsSnap.exists() ? primaryCallsSnap.val() : {};
 
-    // 2. Fetch Secondary DB
+
+    // 1. Fetch Primary and Secondary DB
     let secondaryTokens = {};
     let secondaryCalls = {};
+    let secondaryFirebase = {};
     const secDb = getSecondaryDb();
     if (secDb) {
       try {
-        const [secTokSnap, secCallSnap] = await Promise.all([
+        const [secTokSnap, secCallSnap, secFbSnap] = await Promise.all([
           secDb.ref("metrics/daily_tokens").once("value"),
-          secDb.ref("metrics/monthly_calls").once("value")
+          secDb.ref("metrics/monthly_calls").once("value"),
+          secDb.ref(`metrics/daily_usage/${todayDate}/firebase`).once("value")
         ]);
         secondaryTokens = secTokSnap.exists() ? secTokSnap.val() : {};
         secondaryCalls = secCallSnap.exists() ? secCallSnap.val() : {};
+        secondaryFirebase = secFbSnap.exists() ? secFbSnap.val() : {};
       } catch(e) {
         console.error("Lỗi đọc từ secondary db:", e);
       }
     }
+
+    const [primaryTokensSnap, primaryCallsSnap, primaryFbSnap] = await Promise.all([
+      rtdb.ref("metrics/daily_tokens").once("value"),
+      rtdb.ref("metrics/monthly_calls").once("value"),
+      rtdb.ref(`metrics/daily_usage/${todayDate}/firebase`).once("value")
+    ]);
+    const primaryTokens = primaryTokensSnap.exists() ? primaryTokensSnap.val() : {};
+    const primaryCalls = primaryCallsSnap.exists() ? primaryCallsSnap.val() : {};
+    const primaryFirebase = primaryFbSnap.exists() ? primaryFbSnap.val() : {};
 
     // 3. Merge data
     const combinedTokens = {};
@@ -99,20 +108,41 @@ async function generateTokenReport() {
     const combinedSearches = {};
     const mergeSearches = (data) => {
       for (const [month, usage] of Object.entries(data || {})) {
-        if (!combinedSearches[month]) combinedSearches[month] = 0;
-        combinedSearches[month] += (usage.tavily || 0);
+        if (!combinedSearches[month]) combinedSearches[month] = { tavily: 0, exa: 0 };
+        combinedSearches[month].tavily += (usage.tavily || 0);
+        combinedSearches[month].exa += (usage.exa || 0);
       }
     };
     mergeSearches(primaryCalls);
     mergeSearches(secondaryCalls);
+    
+    // Merge Firebase Usage (Today)
+    let firebaseToday = { functions: 0, rtdb: 0 };
+    firebaseToday.functions += (primaryFirebase.functions_invocations || 0) + (secondaryFirebase.functions_invocations || 0);
+    firebaseToday.rtdb += (primaryFirebase.rtdb_writes || 0) + (secondaryFirebase.rtdb_writes || 0);
+
+    const USD_TO_VND = 25400;
 
     // 4. Calculate monthly stats
     const monthlyStats = {};
     targetMonths.forEach(m => {
+      const tavilyCalls = combinedSearches[m]?.tavily || 0;
+      const exaCalls = combinedSearches[m]?.exa || 0;
+      
+      // Calculate Web Search Cost considering Free Tier
+      let search_usd = 0;
+      if (tavilyCalls > 1000) {
+        search_usd += (tavilyCalls - 1000) * WEB_SEARCH_PRICE;
+      }
+      if (exaCalls > 950) {
+        search_usd += (exaCalls - 950) * WEB_SEARCH_PRICE;
+      }
+      
       monthlyStats[m] = {
         tokens_usd: 0,
-        search_count: combinedSearches[m] || 0,
-        search_usd: (combinedSearches[m] || 0) * WEB_SEARCH_PRICE,
+        tavily_count: tavilyCalls,
+        exa_count: exaCalls,
+        search_usd: search_usd,
         total_usd: 0,
         models: {}
       };
@@ -162,29 +192,51 @@ async function generateTokenReport() {
 
     targetMonths.forEach(m => {
       const stat = monthlyStats[m];
-      reportText += `📅 **Tháng ${m}**\n`;
-      reportText += `- Tiền Token: $${stat.tokens_usd.toFixed(4)}\n`;
-      reportText += `- Tiền Web Search (${stat.search_count} lượt): $${stat.search_usd.toFixed(4)}\n`;
-      reportText += `=> **Tổng cộng: $${stat.total_usd.toFixed(4)}**\n\n`;
+      reportText += `📅 **Tháng ${m}**\n\n`;
 
       if (Object.keys(stat.models).length > 0) {
-        reportText += `*Chi tiết Model trong tháng ${m}:*\n`;
         for (const [model, mData] of Object.entries(stat.models)) {
-          reportText += `  • **${model}**: ${mData.prompt_tokens.toLocaleString()} in | ${mData.completion_tokens.toLocaleString()} out ($${mData.usd_cost.toFixed(4)})\n`;
+          const totalTok = mData.prompt_tokens + mData.completion_tokens;
+          const vndCost = Math.round(mData.usd_cost * USD_TO_VND);
+          reportText += `- Model: ${model}\n`;
+          reportText += `- Prompt: ${mData.prompt_tokens.toLocaleString()}\n`;
+          reportText += `- Output: ${mData.completion_tokens.toLocaleString()}\n`;
+          reportText += `- Tổng Token: ${totalTok.toLocaleString()}\n`;
+          reportText += `- Chi phí: $${mData.usd_cost.toFixed(6)} (~${vndCost.toLocaleString()} VNĐ)\n\n`;
         }
-        reportText += `\n`;
       }
+      
+      reportText += `🔍 **WEB SEARCH (Quota Tháng ${m})**\n`;
+      reportText += `- Tavily (Search): ${stat.tavily_count} / 1000\n`;
+      reportText += `- Exa (Deep Web): ${stat.exa_count} / 950\n`;
+      const searchVnd = Math.round(stat.search_usd * USD_TO_VND);
+      if (stat.search_usd === 0) {
+        reportText += `- Chi phí Web Search: $0 (Nằm trong Free Tier)\n\n`;
+      } else {
+        reportText += `- Chi phí Web Search: $${stat.search_usd.toFixed(5)} (~${searchVnd.toLocaleString()} VNĐ)\n\n`;
+      }
+
+      const totalVnd = Math.round(stat.total_usd * USD_TO_VND);
+      reportText += `=> **Tổng Cộng Tháng ${m}: $${stat.total_usd.toFixed(5)} (~${totalVnd.toLocaleString()} VNĐ)**\n\n`;
+      reportText += `----------\n\n`;
     });
 
     // Báo cáo Gemini
     reportText += "⚡ **GEMINI (AI Nền Tảng - Hôm Nay)**\n";
     const GEMINI_RPD_LIMIT = 1500;
     const geminiPct = ((geminiToday.requests / GEMINI_RPD_LIMIT) * 100).toFixed(1);
-    reportText += `- **Request**: ${geminiToday.requests.toLocaleString()} / ${GEMINI_RPD_LIMIT} (${geminiPct}%)\n`;
-    reportText += `- **Tổng Token**: ${geminiToday.total_tokens.toLocaleString()}\n`;
+    reportText += `- Request: ${geminiToday.requests.toLocaleString()} / ${GEMINI_RPD_LIMIT} (${geminiPct}%)\n`;
+    reportText += `- Tổng Token: ${geminiToday.total_tokens.toLocaleString()}\n`;
     reportText += `=> ${geminiToday.requests >= GEMINI_RPD_LIMIT ? "🔴 Vượt hạn mức" : "🟢 An toàn"}\n\n`;
+    
+    reportText += "🔥 **FIREBASE USAGE (Hôm Nay)**\n";
+    const CF_FREE_LIMIT = 66000;
+    const cfPct = ((firebaseToday.functions / CF_FREE_LIMIT) * 100).toFixed(1);
+    reportText += `- Cloud Functions: ${firebaseToday.functions.toLocaleString()} / ${CF_FREE_LIMIT.toLocaleString()} (${cfPct}%)\n`;
+    reportText += `- RTDB Messages Saved: ${firebaseToday.rtdb.toLocaleString()} tin nhắn\n`;
+    reportText += `- Ước tính chi phí: $0 (Nằm trong Free Tier)\n\n`;
 
-    reportText += `> Lưu ý: Chi phí Web Search (Tavily) được ước tính là $0.005/lần. Dữ liệu đếm Token và Search được lưu trực tiếp trên RTDB với chi phí 0đ.\n`;
+    reportText += `> Lưu ý: Dữ liệu thống kê được tính gộp từ cả LINE và Telegram. Tỷ giá tham khảo $1 = ${USD_TO_VND.toLocaleString()} VNĐ.\n`;
 
     return reportText.trim();
   } catch (error) {

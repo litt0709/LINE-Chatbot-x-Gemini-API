@@ -51,3 +51,15 @@ Tài liệu này liệt kê danh sách các tính năng (features) của Bot, ba
 ## 12. Báo Cáo Sức Khỏe & Quản Lý Lệnh Hệ Thống (Modular Commands)
 - **Modular Command Dispatcher**: Tách biệt logic xử lý các lệnh hệ thống (như `/vẽ`, `/report`, `/health`) ra khỏi luồng xử lý NLP/LLM chính.
 - **System Health Report (`/health`)**: Cung cấp báo cáo thời gian thực về sức khỏe của Runtime Node.js, trạng thái DB (ping latency), các Agents đang chạy, và các tác vụ ngầm (Cron Jobs).
+
+## 13. Báo cáo Tự Học (Self-Learning Report)
+- **Cơ chế:** Hệ thống tự động ghi nhận lại những kiến thức bot học được từ cộng đồng (Facts) và từ quá trình tự học lúc 3h sáng (Tầm sư học đạo, Tự kiểm điểm lỗi).
+- **Cách hoạt động:** Dữ liệu học hỏi được lưu tập trung vào RTDB (`logs/system_logs`). Người dùng có thể yêu cầu bot báo cáo lại những gì đã học trong 3-7 ngày qua thông qua lệnh trực tiếp `/learning` hoặc qua chat tự nhiên (VD: "mày học được gì?"). Dữ liệu cũ hơn 7 ngày tự động bị dọn dẹp để tiết kiệm không gian.
+
+## 14. Tìm kiếm & Trích xuất Web Thông Minh (Smart Web Search & Scraping Fallback)
+- **Cơ chế:** Bot tự động trích xuất nội dung từ các đường link URL người dùng gửi (hỗ trợ cả HTML và PDF), đồng thời tìm kiếm dữ liệu thời gian thực qua Tavily/Exa.
+- **Cơ chế Fallback & Tên miền động:** Khi trang báo/web chặn scraping (WAF/Cloudflare), hệ thống tự động bóc tách slug bài viết và tên miền từ URL để search internet thay thế mà không báo lỗi cụt. Hệ thống tự động trích xuất các domain chỉ định trong query (VD: `techcrunch.com`, `theverge.com`...) để mở rộng phạm vi tìm kiếm nguồn tin chính xác.
+
+## 15. Quản lý Hồ sơ Người dùng Chuẩn hóa (Canonical User Profile & Platform Isolation)
+- **Cơ chế:** Mỗi người dùng trên một nền tảng (LINE / Telegram) chỉ sở hữu duy nhất một hồ sơ cá nhân trên Firestore, được định danh theo đúng Canonical Platform ID (LINE ID `U...` hoặc Telegram numeric ID).
+- **Phân giải & Bảo vệ:** Hệ thống tự động phân giải tên/nickname trong nhóm qua bảng map `participants` về Canonical ID thực tế. Chặn đứng việc tạo document rác mang tên riêng (như "Châu", "Acatms") và lọc bỏ các danh từ ghép phổ biến ("Châu Á", "Châu Âu", "Hải sản"...) để tránh nhận diện nhầm tên riêng của người dùng.
