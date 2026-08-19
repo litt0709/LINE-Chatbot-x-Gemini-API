@@ -325,11 +325,19 @@ const resolveWebContext = async (prompt, isPreOptimized = false, sessionId = nul
     }
     
     const botConfig = await getBotConfig();
+    const safeCatRegex = (pattern, fallback) => {
+      try {
+        return new RegExp(pattern || fallback, "i");
+      } catch (e) {
+        return new RegExp(fallback, "i");
+      }
+    };
+    const searchKws = botConfig.search_keywords || {};
     const CATEGORY_REGEX = {
-      NEWS: new RegExp(botConfig.search_keywords.NEWS || "bóng đá|tin tức|thời sự", "i"),
-      FINANCE: new RegExp(botConfig.search_keywords.FINANCE || "giá vàng|tỷ giá|chứng khoán", "i"),
-      DEV: new RegExp(botConfig.search_keywords.DEV || "code|lập trình|api", "i"),
-      SOCIAL: new RegExp(botConfig.search_keywords.SOCIAL || "drama|phốt|twitter|x\\b", "i")
+      NEWS: safeCatRegex(searchKws.NEWS, "bóng đá|tin tức|thời sự"),
+      FINANCE: safeCatRegex(searchKws.FINANCE, "giá vàng|tỷ giá|chứng khoán"),
+      DEV: safeCatRegex(searchKws.DEV, "code|lập trình|api"),
+      SOCIAL: safeCatRegex(searchKws.SOCIAL, "drama|phốt|twitter|x\\b")
     };
 
     let category = "GENERAL";

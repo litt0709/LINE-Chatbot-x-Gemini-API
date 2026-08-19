@@ -17,7 +17,7 @@ const httpsAgent = new https.Agent({
 
 const DEFAULT_DEEPSEEK_HEADERS = {
   "Content-Type": "application/json",
-  "Accept-Encoding": "gzip, deflate",
+  "Accept-Encoding": "gzip, deflate, br",
   Authorization: `Bearer ${DEEPSEEK_API_KEY}`
 };
 
@@ -208,7 +208,13 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   let webContext = "";
   const botConfig = await getBotConfig();
   const linkRequestsRegexStr = botConfig.link_requests_regex || "xin link|cho link|gửi link|địa chỉ|url|link|cho xin|ở đâu|trang nào";
-  const LINK_REQUEST_REGEX = new RegExp(linkRequestsRegexStr, "i");
+  let LINK_REQUEST_REGEX;
+  try {
+    LINK_REQUEST_REGEX = new RegExp(linkRequestsRegexStr, "i");
+  } catch (err) {
+    console.error("[DeepSeek] Invalid dynamic link_requests_regex, fallback default:", err.message);
+    LINK_REQUEST_REGEX = /xin link|cho link|gửi link|địa chỉ|url|link|cho xin|ở đâu|trang nào/i;
+  }
 
   // ★ Fast path: Xin link
   if (LINK_REQUEST_REGEX.test(cleanPrompt)) {
@@ -335,7 +341,13 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   // ─── Phát hiện "đổi chủ đề đột ngột" (Topic Switch Detection) ─────────────
   let isStandaloneTopic = false;
   if (botConfig.standalone_topics && botConfig.standalone_topics.length > 0) {
-    isStandaloneTopic = botConfig.standalone_topics.some(t => new RegExp(t, "i").test(prompt));
+    isStandaloneTopic = botConfig.standalone_topics.some(t => {
+      try {
+        return new RegExp(t, "i").test(prompt);
+      } catch (err) {
+        return prompt.toLowerCase().includes(t.toLowerCase());
+      }
+    });
   }
 
   // 3. Build message list

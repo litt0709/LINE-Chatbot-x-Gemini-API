@@ -63,3 +63,8 @@ Tài liệu này liệt kê danh sách các tính năng (features) của Bot, ba
 ## 15. Quản lý Hồ sơ Người dùng Chuẩn hóa (Canonical User Profile & Platform Isolation)
 - **Cơ chế:** Mỗi người dùng trên một nền tảng (LINE / Telegram) chỉ sở hữu duy nhất một hồ sơ cá nhân trên Firestore, được định danh theo đúng Canonical Platform ID (LINE ID `U...` hoặc Telegram numeric ID).
 - **Phân giải & Bảo vệ:** Hệ thống tự động phân giải tên/nickname trong nhóm qua bảng map `participants` về Canonical ID thực tế. Chặn đứng việc tạo document rác mang tên riêng (như "Châu", "Acatms") và lọc bỏ các danh từ ghép phổ biến ("Châu Á", "Châu Âu", "Hải sản"...) để tránh nhận diện nhầm tên riêng của người dùng.
+
+## 16. Bugfix: Brotli Encoding (Accept-Encoding Header) — 2026-08-19
+- **Vấn đề:** Bot báo "máy chủ AI đang bận" ngẫu nhiên tại cả nhóm LINE và Telegram DCL. Root cause: DeepSeek server trả response nén bằng **Brotli (`br`)** khi response dài (câu hỏi phức tạp / deepseek-v4-pro), nhưng Axios chỉ khai báo `Accept-Encoding: gzip, deflate` → Node.js `BrotliDecompress` stream lỗi → `Error: aborted` → bot báo bận.
+- **Fix:** Thêm `br` vào header trong `utils/deepseek.js`: `"Accept-Encoding": "gzip, deflate, br"`. Fix 1 dòng, không thay đổi logic, không chỉnh System Prompt.
+- **Điều kiện xảy ra:** Chỉ xảy ra với câu hỏi phức tạp (trigger Dual-Process Classifier → deepseek-v4-pro) tạo ra response dài → server tự động chọn Brotli để nén hiệu quả hơn.
