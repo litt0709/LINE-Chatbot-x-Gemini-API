@@ -219,6 +219,8 @@ const buildGroupProfileContext = async (participantsMap, promptText = "", sender
 
     if (profile.real_name) {
       name = profile.real_name;
+    } else if (profile.name) {
+      name = profile.name;
     } else if (isSender && senderName) {
       name = senderName;
     }
@@ -279,33 +281,27 @@ const resolveCanonicalUserId = async (userIdAttr, senderId, participants = {}, p
   const rawLower = trimmed.toLowerCase();
   const noAccentLower = removeAccents(rawLower);
 
-  // 1. Dò trong participants session
-  if (participants[rawLower] && isPlatformId(String(participants[rawLower]))) {
-    return String(participants[rawLower]);
-  }
-  if (participants[noAccentLower] && isPlatformId(String(participants[noAccentLower]))) {
-    return String(participants[noAccentLower]);
-  }
-  for (const [k, v] of Object.entries(participants)) {
-    const kLower = k.toLowerCase();
-    const kNoAccent = removeAccents(kLower);
-    if (kLower.includes(rawLower) || rawLower.includes(kLower) || kNoAccent.includes(noAccentLower) || noAccentLower.includes(kNoAccent)) {
-      if (isPlatformId(String(v))) return String(v);
-    }
-  }
+  const matchInMap = (mapObj) => {
+    if (!mapObj || typeof mapObj !== "object") return null;
+    // 1. Exact match
+    if (mapObj[rawLower] && isPlatformId(String(mapObj[rawLower]))) return String(mapObj[rawLower]);
+    if (mapObj[noAccentLower] && isPlatformId(String(mapObj[noAccentLower]))) return String(mapObj[noAccentLower]);
 
-  // 2. Dò trong global participants của nền tảng
-  try {
-    const globalKey = platform.toUpperCase() === "LINE" ? "line" : "tg";
-    const globalPart = (globalKey === "line" ? cachedLineParticipants : cachedTgParticipants) || await getGlobalParticipants(globalKey);
-    if (globalPart) {
-      if (globalPart[rawLower] && isPlatformId(String(globalPart[rawLower]))) {
-        return String(globalPart[rawLower]);
+    // 2. Word boundary match
+    for (const [k, v] of Object.entries(mapObj)) {
+      const kLower = k.toLowerCase();
+      const kNoAccent = removeAccents(kLower);
+      const kWords = kLower.split(/\s+/);
+      const kNoAccentWords = kNoAccent.split(/\s+/);
+
+      if (kWords.includes(rawLower) || kNoAccentWords.includes(noAccentLower)) {
+        if (isPlatformId(String(v))) return String(v);
       }
-      if (globalPart[noAccentLower] && isPlatformId(String(globalPart[noAccentLower]))) {
-        return String(globalPart[noAccentLower]);
-      }
-      for (const [k, v] of Object.entries(globalPart)) {
+    }
+
+    // 3. Fallback contains for multi-word phrases (>= 3 chars)
+    if (rawLower.length >= 3) {
+      for (const [k, v] of Object.entries(mapObj)) {
         const kLower = k.toLowerCase();
         const kNoAccent = removeAccents(kLower);
         if (kLower.includes(rawLower) || rawLower.includes(kLower) || kNoAccent.includes(noAccentLower) || noAccentLower.includes(kNoAccent)) {
@@ -313,6 +309,19 @@ const resolveCanonicalUserId = async (userIdAttr, senderId, participants = {}, p
         }
       }
     }
+    return null;
+  };
+
+  // 1. Dò trong participants session
+  const sessionMatch = matchInMap(participants);
+  if (sessionMatch) return sessionMatch;
+
+  // 2. Dò trong global participants của nền tảng
+  try {
+    const globalKey = platform.toUpperCase() === "LINE" ? "line" : "tg";
+    const globalPart = (globalKey === "line" ? cachedLineParticipants : cachedTgParticipants) || await getGlobalParticipants(globalKey);
+    const globalMapMatch = matchInMap(globalPart);
+    if (globalMapMatch) return globalMapMatch;
   } catch (e) {
     console.error("[Profile] Lỗi tra cứu global participants:", e.message);
   }
@@ -336,6 +345,7 @@ const processAndExtractProfile = async (text, senderId, participants = {}, sessi
     cleanedText = cleanedText.replace(/<TOPIC>.*?<\/TOPIC>/gi, "");
   }
 
+  const isGroupChat = sessionId && String(sessionId) !== String(senderId);
   const profileRegex = /<PROFILE\s+([^>]*)\/?>/gi;
   let match;
 
@@ -365,12 +375,23 @@ const processAndExtractProfile = async (text, senderId, participants = {}, sessi
       continue;
     }
 
-    if (action || real_name || gender || public_traits || private_traits) {
+    // Bảo vệ: Trong group chat, nếu không có userId cụ thể thì CẤM đổi real_name của sender trừ khi người gửi tự giới thiệu rõ ràng
+    let allowRealNameUpdate = true;
+    if (real_name && isGroupChat && (!userIdAttr || userIdAttr.trim() === "")) {
+      // Chỉ cho phép nếu user profile chưa có real_name hoặc user trực tiếp nói về tên mình
+      const existing = userProfileCache.get(uid);
+      if (existing && existing.real_name && existing.real_name.toLowerCase() !== real_name.toLowerCase()) {
+        console.warn(`[Profile Guard] Chặn ghi đè real_name từ "${existing.real_name}" sang "${real_name}" cho sender ${uid} trong group`);
+        allowRealNameUpdate = false;
+      }
+    }
+
+    if (action || (real_name && allowRealNameUpdate) || gender || public_traits || private_traits) {
       const existing = userProfileCache.get(uid) || {};
       const updateData = {};
       let traitsArray = existing.traits ? (Array.isArray(existing.traits) ? [...existing.traits] : [existing.traits]) : [];
 
-      if (real_name) updateData.real_name = real_name;
+      if (real_name && allowRealNameUpdate) updateData.real_name = real_name;
       if (gender) updateData.gender = gender;
 
       if (public_traits) updateData.public_traits = existing.public_traits ? existing.public_traits + ", " + public_traits : public_traits;
@@ -1046,7 +1067,9 @@ exports.webhook = onRequest({
     if (isRawMedia) {
       let senderNameForPlaceholder = message.from.first_name || message.from.username || "User";
       const profileForPlaceholder = await getUserProfile(userId);
-      if (profileForPlaceholder?.real_name) senderNameForPlaceholder = profileForPlaceholder.real_name;
+      if (profileForPlaceholder?.real_name || profileForPlaceholder?.name) {
+        senderNameForPlaceholder = profileForPlaceholder.real_name || profileForPlaceholder.name;
+      }
 
       const mediaId = message.photo
         ? message.photo[message.photo.length - 1].file_id
@@ -1079,8 +1102,8 @@ exports.webhook = onRequest({
 
     let senderName = message.from.first_name || message.from.username || "User";
     const profile = await getUserProfile(userId);
-    if (profile && profile.real_name) {
-      senderName = profile.real_name;
+    if (profile && (profile.real_name || profile.name)) {
+      senderName = profile.real_name || profile.name;
     }
 
     // Lệnh bí mật: force nén dữ liệu
@@ -1474,8 +1497,8 @@ exports.webhook = onRequest({
           const profile = await line.getUserProfile(userId, sessionId);
           let senderName = profile?.displayName || "User";
           const userProfile = await getUserProfile(userId);
-          if (userProfile && userProfile.real_name) {
-            senderName = userProfile.real_name;
+          if (userProfile && (userProfile.real_name || userProfile.name)) {
+            senderName = userProfile.real_name || userProfile.name;
           }
           await appendRawMessage(sessionId, {
             role: "user",
@@ -1494,8 +1517,8 @@ exports.webhook = onRequest({
       const profile = await line.getUserProfile(userId, profileGroupId);
       let senderName = profile?.displayName || "User";
       const userProfile = await getUserProfile(userId);
-      if (userProfile && userProfile.real_name) {
-        senderName = userProfile.real_name;
+      if (userProfile && (userProfile.real_name || userProfile.name)) {
+        senderName = userProfile.real_name || userProfile.name;
       }
 
       // Lệnh reset bộ nhớ
@@ -1887,7 +1910,7 @@ exports.masterScheduler = onSchedule({
       const prompt = `Đây là lịch hẹn đến hạn cần thực hiện. Nội dung yêu cầu của người dùng là: "${schedule.prompt}". Hãy hoàn thành nội dung này (ví dụ như tạo câu chúc, tóm tắt, báo cáo...) thật tự nhiên và đáng yêu, nhắn trực tiếp cho người dùng. TUYỆT ĐỐI KHÔNG lặp lại câu hỏi. KHÔNG sinh ra thẻ <SCHEDULE>.`;
 
       const payload = {
-        model: process.env.DEEPSEEK_MODEL || "deepseek-v4-flash",
+        model: process.env.DEEPSEEK_MODEL || "deepseek-chat",
         messages: [
           { role: "system", content: "Role: Annie. Xưng 'em', gọi 'anh/chị'. Bạn đang đóng vai trò trợ lý tự động gửi kết quả lịch hẹn/nhắc nhở cho người dùng. Trả lời ngay vào kết quả, tự nhiên, vui vẻ." },
           { role: "user", content: prompt }

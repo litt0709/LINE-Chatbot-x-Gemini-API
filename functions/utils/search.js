@@ -346,6 +346,14 @@ const resolveWebContext = async (prompt, isPreOptimized = false, sessionId = nul
     else if (CATEGORY_REGEX.NEWS.test(finalQuery) || CATEGORY_REGEX.FINANCE.test(finalQuery)) category = "NEWS";
 
     const { TODAY_KEYWORDS } = require("./tavily");
+    const isWeatherQuery = /thời tiết|nhiệt độ|dự báo thời tiết|trời mưa|trời nắng/i.test(finalQuery);
+    if (isWeatherQuery) {
+      const hasLocation = /hà nội|hanoi|sài gòn|tp\.?hcm|hồ chí minh|đà nẵng|hải phòng|cần thơ|nha trang|huế|đà lạt|vũng tàu|quảng ninh|nghệ an|thanh hóa|bình dương|đồng nai|bắc bộ|nam bộ|trung bộ/i.test(finalQuery);
+      if (!hasLocation) {
+        finalQuery = `dự báo ${finalQuery} Hà Nội`;
+      }
+    }
+
     const isTodaySensitive = TODAY_KEYWORDS.some(kw => cleanQuery.toLowerCase().includes(kw));
     if (isTodaySensitive) {
       const todayStr = new Date().toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });

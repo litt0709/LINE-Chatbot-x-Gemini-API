@@ -111,6 +111,7 @@ const searchTavily = async (query, options = {}) => {
 
   // Đã tháo Prompt Injection tự động cho các truy vấn giải đấu (Issue #2)
   let optimizedQuery = query;
+  const isWeather = /thời tiết|nhiệt độ|dự báo thời tiết|trời mưa|trời nắng/i.test(queryLower);
 
   const params = {
     api_key: TAVILY_API_KEY,
@@ -122,7 +123,7 @@ const searchTavily = async (query, options = {}) => {
     include_domains: targetDomains,
     sort_by: "date",
     ...(options.topic === "news" && { days: 90 }),
-    ...(isTodaySensitive && { time_range: "day" })
+    ...(isTodaySensitive && !isWeather && { time_range: "day" })
   };
 
   try {

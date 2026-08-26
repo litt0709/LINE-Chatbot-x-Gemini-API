@@ -37,11 +37,9 @@ _Cập nhật lần cuối: 2026-08-06_
    - **Tối ưu Group Context**: Nhận diện Mention thông qua Regex Strict Boundaries để tiết kiệm Token, chỉ nhồi Profile nếu User bị nhắc tên đích danh hoặc Sender dùng đại từ xưng hô.
 4. **Phân giải Ngữ cảnh Web (Web Context Resolution)**: Xử lý các đường dẫn (URL) hoặc từ khóa qua `search.js`.
 5. **Khởi tạo Prompt LLM**: Xây dựng `System Prompt` tại `deepseek.js`. Áp dụng `Persona Anchor` chống ba phải.
-6. **LLM Phản hồi**: Dual-Process tự động chọn model:
-   - Dễ: `deepseek-v4-flash`.
-   - Khó: `deepseek-v4-pro`.
+6. **LLM Phản hồi**: Sử dụng `deepseek-chat` (DeepSeek-V3) tối ưu chi phí (tạm ngưng `deepseek-v4-pro`):
    - **DeepSeek Auto-Retry**: Nếu lỗi kết nối mạng (ECONNRESET/aborted), tự động retry 2 lần (cách 1s) trước khi văng lỗi.
-   - **DeepSeek Fallback**: Nếu `v4-pro` sập kết nối hoàn toàn -> Tự động gọi lại bằng `v4-flash` ngay lập tức để đảm bảo bot không bao giờ "câm".
+   - **Gemini Fallback**: Nếu DeepSeek gặp sự cố/quá tải -> Tự động fallback sang Gemini 2.5 Flash ngay lập tức để đảm bảo bot luôn phản hồi.
 7. **Parse Action Tags & Mentions**: `index.js` bóc tách `<PROFILE>`, `<FACT>`, `<SCHEDULE>`, `<REACT>`. Chuẩn hóa các `@tên`.
 8. **Phản hồi User**: Chặt nội dung thành từng đoạn 2000 ký tự (Telegram) hoặc gửi đi bằng API Reply (LINE dùng textV2 mention).
 9. **Lưu trữ**: Lưu tin nhắn vào RTDB.
@@ -71,7 +69,7 @@ _Cập nhật lần cuối: 2026-08-06_
 4. **Giới hạn & Fail-safe**: Nếu Tavily bị rate limit (429), fallback sang Exa. Quản lý Quota của Exa thông qua biến đếm (max 950) trong Firestore.
 
 ### 4. DeepSeek Chat function (Tool Calling / Dual-Process)
-- **Dual-Process Classifier**: Tự động đánh giá prompt. Các câu hỏi logic phức tạp hoặc code sẽ được bẻ lái sang `deepseek-v4-pro`. Các câu hỏi thường dùng `deepseek-v4-flash`.
+- **Model Selection & ReAct**: Sử dụng `deepseek-chat` làm model chính thống nhất cho các yêu cầu xử lý (tạm dừng định tuyến `deepseek-v4-pro` để tối ưu chi phí).
 - **Vòng lặp ReAct**: 
   - LLM tự động gọi tool `google_search`. (Lưu ý: Tool này bị ẨN đi nếu hệ thống đã cào thành công WebContext ở bước trước, giúp triệt tiêu việc search trùng lặp tốn kém).
   - Kết quả search bơm lại vào context để LLM trả về câu trả lời cuối (Giới hạn 2 lượt để tránh infinite loop).
@@ -155,7 +153,7 @@ Hệ thống kết hợp 3 tầng dữ liệu để tối ưu tốc độ và ch
 |---|---|
 | `PLATFORM` | Chọn môi trường triển khai (`LINE` hoặc `TELEGRAM`). |
 | `DEEPSEEK_API_KEY` | Key giao tiếp với AI DeepSeek (Chat/Reasoning). |
-| `DEEPSEEK_MODEL` | Default model của DeepSeek (VD: deepseek-v4-flash). |
+| `DEEPSEEK_MODEL` | Default model của DeepSeek (VD: deepseek-chat). |
 | `API_KEY` | Key giao tiếp với AI Gemini (Multimodal/Summarize). |
 | `LLM_PROVIDER` | Phân luồng mặc định (`DEEPSEEK` hoặc `GEMINI`). |
 | `TAVILY_API_KEY` | Key gọi Search API (News/General). |

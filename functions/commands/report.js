@@ -2,6 +2,7 @@ const { rtdb } = require('../utils/db');
 const fs = require('fs');
 
 const PRICES = {
+  "deepseek-chat": { prompt: 0.27 / 1000000, completion: 1.10 / 1000000 },
   "deepseek-v4-flash": { prompt: 0.07 / 1000000, completion: 0.14 / 1000000 },
   "deepseek-v4-pro": { prompt: 0.55 / 1000000, completion: 2.19 / 1000000 }
 };
@@ -284,7 +285,7 @@ async function generateHealthReport() {
     }
 
     // 4. Agents
-    const agentsStatus = "DeepSeek-V4 (Flash/Pro) & Gemini";
+    const agentsStatus = "DeepSeek-Chat & Gemini";
 
     let reportText = "🩺 **BÁO CÁO SỨC KHỎE HỆ THỐNG**\n\n";
     

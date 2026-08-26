@@ -6,7 +6,7 @@ const { getBotConfig } = require("./configCache");
 const logger = require("./logger");
 
 const DEEPSEEK_URL = process.env.DEEPSEEK_URL || "https://api.deepseek.com/chat/completions";
-const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
+const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 
 const httpsAgent = new https.Agent({
@@ -87,7 +87,7 @@ const buildSystemPrompt = (webContext = "", groupContext = "", isGroup = false, 
   Persona: Chân thành, nhiệt huyết, hồn nhiên. Linh hoạt đồng cảm với [HỒ SƠ TÂM LÝ USER], CẤM hùa theo quan điểm độc hại. TUYỆT ĐỐI KHÔNG tự suy diễn quan điểm, sở thích của User nếu họ không trực tiếp phát biểu.
   Style: Tự nhiên, nữ tính, ngoan. Trình bày ĐẸP MẮT: BẮT BUỘC dùng NHIỀU emoji 📊💡🌟 làm bullet points. CẤM dùng bảng biểu (table) hay markdown phức tạp. Cần in đậm thì bắt buộc dùng Markdown **nội dung** (tuyệt đối KHÔNG dùng thẻ HTML <b>). Chỉ @tên khi khẩn cấp.
   Rules:
-  0. Xưng hô: Mặc định gọi "anh" nếu chưa rõ giới tính trong nhóm hoặc tên trung tính; chỉ gọi "chị" khi hồ sơ xác nhận là Nữ. BẮT BUỘC gọi đúng TÊN. CẤM nhầm người. TUYỆT ĐỐI KHÔNG lấy dữ liệu/hình ảnh/hồ sơ của User này gán cho User khác.
+  0. Xưng hô: Mặc định gọi "anh" nếu chưa rõ giới tính trong nhóm hoặc tên trung tính; chỉ gọi "chị" khi hồ sơ xác nhận là Nữ. BẮT BUỘC gọi đúng TÊN và ƯU TIÊN TÊN THẬT trong hồ sơ (ví dụ: gọi "anh Trịnh" thay vì "anh TrinhNX", "anh Lâm" thay vì "anh litt0709/Eddy", "anh Du" thay vì "anh badpaybad"). CẤM gọi bằng nickname/username kỹ thuật (đuôi NX, DD, số ID). CẤM nhầm người. TUYỆT ĐỐI KHÔNG lấy dữ liệu/hình ảnh/hồ sơ của User này gán cho User khác.
   1. Thời gian: Now=${now}. Lấy ngày hôm nay từ Now, CẤM lấy ngày bài báo làm ngày hiện tại. KHÔNG tự chèn thêm năm vào lịch hẹn tuần này.
   2. Data: 100% dựa vào [INTERNET]. CẤM bịa số liệu/chế tên địa điểm. BẮT BUỘC giữ 100% fact (không bóp méo vì vần điệu). Không biết -> "Không biết".
   2.1. Nguồn & URL: CẤM BỊA URL. ẨN NGUỒN: KHÔNG trích dẫn URL hay nguồn trong câu trả lời ĐỂ GIẢM NHỨC MẮT, TRỪ KHI User chủ động hỏi xin link/nguồn. Lỗi URL thì báo thành thật, không tự bịa lý do mạng.
@@ -432,14 +432,8 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   const MAX_SEARCH_CALLS = 2; // Hard Limit 2 calls
   let replyText = "";
   
-  // ─── Dual-Process Classifier (System 1 vs System 2) ─────────────
+  // ─── Model Selection (Tạm thời vô hiệu hóa v4-pro, dùng deepseek-chat để tối ưu chi phí) ─────────────
   let targetModel = DEEPSEEK_MODEL;
-  const complexPatterns = [/tại sao/i, /nguyên nhân/i, /phân tích/i, /so sánh/i, /kế hoạch/i, /chiến lược/i, /kiến trúc/i, /code/i, /debug/i, /thuật toán/i];
-  const isComplex = complexPatterns.some(p => p.test(prompt)) || prompt.length > 300;
-  if (isComplex && targetModel.includes("flash")) {
-    targetModel = "deepseek-v4-pro";
-    console.log(`[Dual-Process] Câu hỏi phức tạp. Định tuyến sang System 2: ${targetModel}`);
-  }
   
   try {
     while (true) {
@@ -465,34 +459,16 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
           const res = await axios.post(
             DEEPSEEK_URL,
             payload,
-            { httpsAgent, headers: DEFAULT_DEEPSEEK_HEADERS, timeout: targetModel === "deepseek-v4-pro" ? 35000 : 25000 }
+            { httpsAgent, headers: DEFAULT_DEEPSEEK_HEADERS, timeout: 25000 }
           );
           data = res.data;
           break;
         } catch (err) {
           if (retries === 0) {
-            if (targetModel === "deepseek-v4-pro") {
-              console.warn(`[DeepSeek] Lỗi gọi v4-pro (${err.message}), đang fallback sang v4-flash...`);
-              payload.model = "deepseek-v4-flash";
-              try {
-                const fallbackRes = await axios.post(
-                  DEEPSEEK_URL,
-                  payload,
-                  { httpsAgent, headers: DEFAULT_DEEPSEEK_HEADERS, timeout: 25000 }
-                );
-                data = fallbackRes.data;
-              } catch (fallbackErr) {
-                console.warn(`[DeepSeek] Lỗi v4-flash (${fallbackErr.message}), kích hoạt Gemini 2.5 Flash cứu cánh...`);
-                const geminiReply = await fallbackToGemini(messages);
-                if (geminiReply) return geminiReply;
-                throw fallbackErr;
-              }
-            } else {
-              console.warn(`[DeepSeek] Lỗi DeepSeek (${err.message}), kích hoạt Gemini 2.5 Flash cứu cánh...`);
-              const geminiReply = await fallbackToGemini(messages);
-              if (geminiReply) return geminiReply;
-              throw err; // throw lên nếu cả hai đều lỗi
-            }
+            console.warn(`[DeepSeek] Lỗi DeepSeek (${err.message}), kích hoạt Gemini 2.5 Flash cứu cánh...`);
+            const geminiReply = await fallbackToGemini(messages);
+            if (geminiReply) return geminiReply;
+            throw err; // throw lên nếu cả hai đều lỗi
           } else {
             console.warn(`[DeepSeek] Lỗi mạng (${err.message}), đang thử lại (${retries} lần nữa)...`);
             retries--;

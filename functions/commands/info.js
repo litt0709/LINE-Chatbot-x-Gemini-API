@@ -16,7 +16,7 @@ _Lưu ý: Các lệnh hệ thống được thực thi độc lập (Zero-cost) 
     return `ℹ️ **Thông tin hệ thống (About):**
 
 - **Bot Identity**: Annie (Trợ lý thông minh)
-- **Engine**: DeepSeek-V4 (Flash/Pro) kết hợp RAG Memory & Web Search
+- **Engine**: DeepSeek-Chat kết hợp RAG Memory & Web Search
 - **Architecture**: Modular Command Dispatcher + LLM Router
 - **Runtime**: Node.js trên Firebase Cloud Functions (Serverless)
 - **Database**: Firebase Realtime DB & Firestore

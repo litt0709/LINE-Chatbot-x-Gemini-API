@@ -81,10 +81,8 @@ User gửi tin nhắn
    +-> 5. Tìm kiếm Facts liên quan trong Cache
    |
    +-> 6. deepseek.js: Ghép System Prompt (Context, Persona Anchor, RAG Skills, JSON LTM)
-   |      +-> Phân loại độ khó (Dual-Process Classifier)
-   |      +-> Nếu Dễ: Gọi deepseek-v4-flash
-   |      +-> Nếu Khó: Gọi deepseek-v4-pro
-   |      +-> [Fallback/Auto-Retry]: Tự động thử lại 2 lần nếu lỗi mạng (ECONNRESET), nếu fail v4-pro thì gọi v4-flash.
+   |      +-> Sử dụng deepseek-chat làm engine chính (tạm dừng deepseek-v4-pro)
+   |      +-> [Fallback/Auto-Retry]: Tự động thử lại 2 lần nếu lỗi mạng, fallback Gemini 2.5 Flash nếu lỗi API.
    |
    +-> 7. Trả về Text -> index.js parse các thẻ (<PROFILE>, <FACT>, <SCHEDULE>...)
    |
