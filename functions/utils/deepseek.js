@@ -57,8 +57,27 @@ const fallbackToGemini = async (messages) => {
   }
 };
 
+const matchRelevantInsight = (promptText, humanInsights) => {
+  if (!promptText || !Array.isArray(humanInsights) || humanInsights.length === 0) return null;
+  const clean = promptText.toLowerCase();
+
+  for (const item of humanInsights) {
+    if (item && item.triggers && Array.isArray(item.triggers)) {
+      const isMatch = item.triggers.some(trig => {
+        const t = String(trig).toLowerCase().trim();
+        if (!t) return false;
+        return clean.includes(t);
+      });
+      if (isMatch && item.insight) {
+        return item.insight;
+      }
+    }
+  }
+  return null;
+};
+
 // System prompt chung — định nghĩa tính cách, xưng hô, phong cách của Annie
-const buildSystemPrompt = (webContext = "", groupContext = "", isGroup = false, factsContext = "", botConfig = null, isSummaryRequest = false, mbtiProfile = "", skillVectors = "") => {
+const buildSystemPrompt = (webContext = "", groupContext = "", isGroup = false, factsContext = "", botConfig = null, isSummaryRequest = false, mbtiProfile = "", skillVectors = "", promptText = "") => {
   const pad = (n) => String(n).padStart(2, '0');
   const vnDate = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }));
   const now = `${pad(vnDate.getHours())}:${pad(vnDate.getMinutes())} ${pad(vnDate.getDate())}/${pad(vnDate.getMonth() + 1)}/${vnDate.getFullYear()}`;
@@ -76,7 +95,10 @@ const buildSystemPrompt = (webContext = "", groupContext = "", isGroup = false, 
   }
   if (botConfig) {
     if (botConfig.human_insights && botConfig.human_insights.length > 0) {
-      dynamicRules += "\n\n[Triết lý giao tiếp (BẮT BUỘC TUÂN THỦ)]:\n- " + botConfig.human_insights.join("\n- ");
+      const matchedInsight = matchRelevantInsight(promptText, botConfig.human_insights);
+      if (matchedInsight) {
+        dynamicRules += `\n\n[Triết lý giao tiếp theo ngữ cảnh (BẮT BUỘC TUÂN THỦ)]:\n- ${matchedInsight}`;
+      }
     }
     if (botConfig.dynamic_guardrails && botConfig.dynamic_guardrails.length > 0) {
       dynamicRules += "\n\n[LUẬT KỶ LUẬT THÉP (CẤM VI PHẠM)]:\n- " + botConfig.dynamic_guardrails.join("\n- ");
@@ -377,7 +399,7 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
 
   const userContent = `[NEW] [${senderName}]: ${prompt}${guardrails}`;
 
-  history.unshift({ role: "system", content: buildSystemPrompt(webContext, groupContext, isGroup, factsContext, botConfig, isSummaryReq, mbtiProfile, skillVectorsStr) });
+  history.unshift({ role: "system", content: buildSystemPrompt(webContext, groupContext, isGroup, factsContext, botConfig, isSummaryReq, mbtiProfile, skillVectorsStr, prompt) });
   let sysContent = history[0].content;
   if (forceIgnoreCheck) {
     sysContent += "\n\nBẮT BUỘC: Bạn đang ở trong group chat. Người dùng có thể chỉ vô tình nhắc tên bạn khi nói chuyện với người khác. BẠN PHẢI đánh giá xem họ CÓ THỰC SỰ ĐANG NÓI CHUYỆN VỚI BẠN HAY KHÔNG. Nếu họ ĐANG NÓI VỚI NGƯỜI KHÁC (nhắc bạn ở ngôi thứ 3), BẠN PHẢI trả lời chính xác bằng 1 chữ: IGNORE. Tuyệt đối không giải thích thêm. Nếu họ đang hỏi hoặc gọi bạn, hãy trả lời bình thường.";

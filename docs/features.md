@@ -83,3 +83,10 @@ Tài liệu này liệt kê danh sách các tính năng (features) của Bot, ba
   - Tự động bổ sung địa danh mặc định (Hà Nội) khi người dùng hỏi thời tiết chung chung không kèm tên tỉnh/thành phố, đảm bảo bot luôn trả về thông tin thời tiết chính xác, đầy đủ nhiệt độ mà không bị hiện tượng "không tìm thấy dữ liệu".
 - **Xử lý Tham chiếu Ngữ cảnh Nối tiếp (Contextual Follow-up Query Resolution):** Khi người dùng trong nhóm chat hỏi câu nối tiếp (ví dụ: *"theo tin mới nhất được phát hành tiếp"*, *"vụ này sao rồi"*), Bot tự động liên hệ với chủ đề/thực thể vừa thảo luận trong lịch sử (như truyện Cổ Chân Nhân) và ghép vào query tìm kiếm (`google_search`) để kiểm chứng ngay lập tức, không hỏi lại người dùng xin link hay tiêu đề một cách máy móc.
 
+## 19. Thư viện Tri thức Triết lý Giao tiếp Động (Dynamic RAG Human Insights) — 2026-08-26
+- **Tích trữ Không giới hạn (Unlimited Knowledge Library):** Loại bỏ giới hạn nén/cắt tối đa 5 mục trong `dailyHumanStudy()`. Các bài học tâm lý và triết lý giao tiếp học được lúc 3h sáng được lưu trữ vĩnh viễn dưới dạng cấu trúc có `topic`, `insight`, và danh sách từ khóa cảm xúc `triggers`.
+- **Rút xuất Động theo Ngữ cảnh (Context-Aware Injection):** 
+  - Hàm `matchRelevantInsight(prompt, humanInsights)` tự động quét cảm xúc người dùng (buồn, giận, thất bại, từ chối, đùa vui...).
+  - Chỉ tiêm đúng **1 triết lý đắc địa nhất** vào System Prompt khi có tình huống cảm xúc tương ứng.
+  - Khi người dùng hỏi các câu hỏi thông thường (thời tiết, giá vàng, code, bóng đá...), không tiêm triết lý để **tiết kiệm 100% token** và giữ Context Window sạch sẽ.
+

@@ -27,7 +27,18 @@ const askOptimizer = async (prompt) => {
 const dailyHumanStudy = async () => {
   try {
     console.log("[Evolution] Đang bắt đầu Tầm Sư Học Đạo...");
-    const topics = ["Cách an ủi người đang buồn", "Tâm lý học về sự tức giận", "Cách nói chuyện có duyên và hài hước", "Kỹ năng giao tiếp thấu cảm", "Làm sao để làm bạn với người hướng nội", "Cách từ chối khéo léo"];
+    const topics = [
+      "Cách an ủi người đang buồn",
+      "Tâm lý học về sự tức giận",
+      "Cách nói chuyện có duyên và hài hước",
+      "Kỹ năng giao tiếp thấu cảm",
+      "Làm sao để làm bạn với người hướng nội",
+      "Cách từ chối khéo léo",
+      "Cách động viên người gặp thất bại",
+      "Nghệ thuật lắng nghe chủ động",
+      "Cách xoa dịu xung đột trong nhóm",
+      "Cách khen ngợi chân thành"
+    ];
     const randomTopic = topics[Math.floor(Math.random() * topics.length)];
     
     // Search Google via existing resolveWebContext tool (simulated search)
@@ -35,32 +46,53 @@ const dailyHumanStudy = async () => {
     const article = searchRes ? searchRes.context : "";
     
     if (article) {
-      const prompt = `Từ bài viết sau về '${randomTopic}', hãy đúc kết ra ĐÚNG 1 QUY TẮC MỀM (Human Insight) ngắn gọn nhất (dưới 30 chữ) để áp dụng vào giao tiếp.\nBài viết:\n${article}`;
-      let newInsight = await askOptimizer(prompt);
-      if (newInsight) {
-        newInsight = newInsight.replace(/["']/g, ""); // Remove quotes
-        
-        // Push to config
-        const configRef = db.collection("system_configs").doc("bot_config");
-        const doc = await configRef.get();
-        let insights = doc.exists ? doc.data().human_insights || [] : [];
-        insights.push(newInsight);
-        
-        if (insights.length > 5) {
-          const compressPrompt = `Hãy gộp ${insights.length} triết lý giao tiếp sau thành TỐI ĐA 5 triết lý sâu sắc và bao quát nhất. Trả về định dạng JSON mảng các string: ["Triết lý 1", "Triết lý 2", ...]\nTriết lý:\n${insights.join("\n")}`;
-          const compressedText = await askOptimizer(compressPrompt);
-          try {
-             const jsonMatch = compressedText.match(/\[.*\]/s);
-             if (jsonMatch) {
-               insights = JSON.parse(jsonMatch[0]);
-             } else {
-               insights = insights.slice(-5); // fallback
-             }
-          } catch(e) { insights = insights.slice(-5); }
+      const prompt = `Từ bài viết sau về '${randomTopic}', hãy đúc kết ra:
+1. 'insight': 1 quy tắc giao tiếp mềm ngắn gọn (dưới 35 chữ).
+2. 'triggers': Mảng 6-12 từ khóa tiếng Việt (cả có dấu và không dấu) liên quan đến cảm xúc/tình huống của người dùng kích hoạt quy tắc này.
+Trả về định dạng JSON duy nhất: {"topic": "${randomTopic}", "insight": "...", "triggers": ["...", "..."]}
+Bài viết:
+${article}`;
+      let structuredJsonStr = await askOptimizer(prompt);
+      if (structuredJsonStr) {
+        let parsed = null;
+        try {
+          const match = structuredJsonStr.match(/\{[\s\S]*\}/);
+          if (match) parsed = JSON.parse(match[0]);
+        } catch (e) {}
+
+        if (parsed && parsed.insight && Array.isArray(parsed.triggers)) {
+          const configRef = db.collection("system_configs").doc("bot_config");
+          const doc = await configRef.get();
+          let insights = doc.exists ? doc.data().human_insights || [] : [];
+          
+          // Chuẩn hóa sang mảng object nếu dữ liệu cũ còn string
+          insights = insights.map(item => {
+            if (typeof item === "string") {
+              return { topic: randomTopic, insight: item, triggers: [] };
+            }
+            return item;
+          });
+
+          // Cập nhật nếu trùng topic hoặc append mới
+          const existingIndex = insights.findIndex(i => i.topic?.toLowerCase() === randomTopic.toLowerCase());
+          const newEntry = {
+            id: "insight_" + Date.now(),
+            topic: randomTopic,
+            insight: parsed.insight.replace(/["']/g, "").trim(),
+            triggers: parsed.triggers.map(t => String(t).toLowerCase().trim()).filter(Boolean)
+          };
+
+          if (existingIndex >= 0) {
+            insights[existingIndex] = newEntry;
+          } else {
+            insights.push(newEntry);
+          }
+
+          // Lưu trọn vẹn thư viện tri thức không bị nén cắt
+          await configRef.set({ human_insights: insights }, { merge: true });
+          console.log("[Evolution] Đã nạp Human Insight mới vào Thư viện:", newEntry.insight);
+          await logger.logSystem("EVOLUTION_HUMAN_STUDY", `Đã tầm sư học đạo chủ đề "${randomTopic}", đúc kết được: ${newEntry.insight}`, "SUCCESS");
         }
-        await configRef.set({ human_insights: insights }, { merge: true });
-        console.log("[Evolution] Đã nạp Human Insight:", newInsight);
-        await logger.logSystem("EVOLUTION_HUMAN_STUDY", `Đã tầm sư học đạo chủ đề "${randomTopic}", đúc kết được: ${newInsight}`, "SUCCESS");
       }
     }
   } catch (err) {
