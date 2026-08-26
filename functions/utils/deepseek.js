@@ -93,6 +93,7 @@ const buildSystemPrompt = (webContext = "", groupContext = "", isGroup = false, 
   2.1. Nguồn & URL: CẤM BỊA URL. ẨN NGUỒN: KHÔNG trích dẫn URL hay nguồn trong câu trả lời ĐỂ GIẢM NHỨC MẮT, TRỪ KHI User chủ động hỏi xin link/nguồn. Lỗi URL thì báo thành thật, không tự bịa lý do mạng.
   2.2. Zero Hallucination: Khi liệt kê danh sách/sự kiện, nếu search chỉ ra 1 phần (ví dụ 1/3 rạp), CHỈ ĐƯỢC nêu những thứ chắc chắn. Nêu rõ "dữ liệu hiện tại chỉ xác minh được...". Khi internet chưa có dữ liệu/tin rò rỉ, BÁO RÕ chưa xác minh được, CẤM tự ý quy chụp là "thuyết âm mưu/tin giả".
   2.3. Khách quan & Tinh tế: Khi thảo luận chủ đề kinh tế, chính trị, quản trị xã hội: TUYỆT ĐỐI KHÔNG rao giảng đạo lý, KHÔNG trả lời sáo rỗng kiểu văn mẫu ("mỗi nước có ưu nhược điểm...", "hãy lạc quan..."). Hãy khiêm tốn, sắc sảo, bám sát dữ kiện thực tế/số liệu hoặc phân tích logic đa chiều.
+  2.4. Ngữ cảnh nối tiếp: Khi câu hỏi dùng từ tham chiếu hoặc ngữ cảnh khuyết ("tin này", "được tiếp tục", "vụ đó"), BẮT BUỘC tự liên hệ chủ đề trong lịch sử và ghép vào query google_search để kiểm chứng; CẤM hỏi lại xin link/tiêu đề khi ngữ cảnh đã rõ.
   3. Action Tags (XML TEXT - CẤM DÙNG TOOL): Chèn cuối câu:
      - Hỏi lại: <Task mode="ASK" tags="Đáp án 1 | Đáp án 2" /> (tags=CÂU TRẢ LỜI, CẤM dùng câu hỏi)
      - Nhớ: <PROFILE action="ADD|REMOVE|UPDATE" userId="[ID_THỰC_HOẶC_BỎ_TRỐNG_CHO_SENDER]" trait="..." /> | <PROFILE userId="..." real_name="..." gender="..." /> (CẤM tự bịa nickname vào userId)
@@ -413,13 +414,13 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
       type: "function",
       function: {
         name: "google_search",
-        description: "BẮT BUỘC gọi tool này khi User hỏi về: thời tiết, giá vàng, kết quả bóng đá, tin tức hôm nay, sự kiện mới nhất hoặc thông tin thực tế mà bạn không chắc chắn. TUYỆT ĐỐI KHÔNG tự bịa.",
+        description: "BẮT BUỘC gọi tool này khi User hỏi về: thời tiết, giá vàng, kết quả bóng đá, tin tức hôm nay, sự kiện mới nhất, xác minh tin đồn hoặc thông tin thực tế mà bạn không chắc chắn. Khi câu hỏi là câu nối tiếp (ví dụ: 'được phát hành tiếp', 'vụ này sao rồi'), PHẢI tự động ghép chủ đề trong lịch sử vào query (ví dụ: 'Cổ Chân Nhân phát hành tiếp'). TUYỆT ĐỐI KHÔNG tự bịa.",
         parameters: {
           type: "object",
           properties: {
             query: {
               type: "string",
-              description: "Câu truy vấn tìm kiếm ngắn gọn, ví dụ: 'giá vàng sjc hôm nay', 'bầu cử mỹ 2024'"
+              description: "Câu truy vấn tìm kiếm ngắn gọn, ví dụ: 'giá vàng sjc hôm nay', 'Cổ Chân Nhân phát hành tiếp'"
             }
           },
           required: ["query"]

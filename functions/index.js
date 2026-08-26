@@ -139,7 +139,7 @@ const findRelevantFacts = async (targetId, query) => {
     });
 
     const details = await Promise.all(detailPromises);
-    const validDetails = details.filter(Boolean);
+    const validDetails = [...new Set(details.filter(Boolean))];
 
     if (validDetails.length === 0) return "";
     return `\n\n[TRI THỨC BỘ NHỚ TỰ HỌC]:\n${validDetails.join("\n")}`;

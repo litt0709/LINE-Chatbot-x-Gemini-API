@@ -143,7 +143,8 @@ const searchExa = async (query, options = {}) => {
       const todayDate = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Ho_Chi_Minh" });
       const monthDate = todayDate.substring(0, 7);
       const updates = {};
-      updates[`metrics/monthly_calls/${monthDate}/exa`] = rtdb.ServerValue.increment(1);
+      const admin = require("firebase-admin");
+      updates[`metrics/monthly_calls/${monthDate}/exa`] = admin.database.ServerValue.increment(1);
       await rtdb.ref().update(updates);
     } catch(e) { console.error("[Exa] Lỗi ghi nhận token:", e.message); }
 

@@ -74,11 +74,12 @@ Tài liệu này liệt kê danh sách các tính năng (features) của Bot, ba
 - **Tạm dừng System 2 (v4-pro):** Tạm thời vô hiệu hóa việc chuyển hướng sang `deepseek-v4-pro` đối với các câu hỏi phân tích/phức tạp/code, tất cả các câu hỏi được xử lý đồng nhất qua `deepseek-chat` với cơ chế ReAct Tool Calling & Gemini Fallback.
 - **Tính toán chi phí:** Bổ sung mức giá của `deepseek-chat` vào công cụ thống kê (`/report`) với giá $0.27/1M input tokens và $1.10/1M output tokens.
 
-## 18. Chuẩn hóa Tên thật Hồ sơ & Tối ưu Tra cứu Thời tiết (Profile Name Priority & Weather Search) — 2026-08-26
+## 18. Chuẩn hóa Tên thật Hồ sơ & Tối ưu Tra cứu Thời tiết, Ngữ cảnh nối tiếp (Profile Name Priority, Weather & Follow-up Context) — 2026-08-26
 - **Ưu tiên Tên thật (Real Name Priority):** Hệ thống và System Prompt ưu tiên sử dụng tên thật (`real_name` / `name`) trong hồ sơ người dùng để xưng hô tự nhiên (ví dụ: "anh Trịnh" thay vì "anh TrinhNX", "anh Lâm" thay vì "anh litt0709" hay "anh Eddy", "anh Du" thay vì "anh badpaybad"). Tuyệt đối tránh xưng hô bằng nickname kỹ thuật có chứa đuôi viết tắt hoặc ID.
 - **Bảo vệ Profile trong Group Chat (Group Profile Guard):** Ngăn chặn việc bot tự động ghi đè trường `real_name` của người gửi khi trò chuyện trong group chat nếu thiếu `userId` rõ ràng hoặc chỉ đang nhắc đến tên thành viên khác.
 - **Tối ưu Tìm kiếm Thời tiết (Smart Weather Search):**
   - Mở rộng phạm vi tìm kiếm sang các trang khí tượng / dự báo thời tiết chuyên dụng (`nchmf.gov.vn`, `dubaothoitiet.edu.vn`, `accuweather.com`, `weather.com`, `vtcnews.vn`...).
   - Loại bỏ giới hạn `time_range: "day"` đối với intent thời tiết để không bỏ lỡ các bản tin dự báo được phát hành từ chiều/tối hôm trước.
   - Tự động bổ sung địa danh mặc định (Hà Nội) khi người dùng hỏi thời tiết chung chung không kèm tên tỉnh/thành phố, đảm bảo bot luôn trả về thông tin thời tiết chính xác, đầy đủ nhiệt độ mà không bị hiện tượng "không tìm thấy dữ liệu".
+- **Xử lý Tham chiếu Ngữ cảnh Nối tiếp (Contextual Follow-up Query Resolution):** Khi người dùng trong nhóm chat hỏi câu nối tiếp (ví dụ: *"theo tin mới nhất được phát hành tiếp"*, *"vụ này sao rồi"*), Bot tự động liên hệ với chủ đề/thực thể vừa thảo luận trong lịch sử (như truyện Cổ Chân Nhân) và ghép vào query tìm kiếm (`google_search`) để kiểm chứng ngay lập tức, không hỏi lại người dùng xin link hay tiêu đề một cách máy móc.
 
