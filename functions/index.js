@@ -611,6 +611,7 @@ const processAndExtractProfile = async (text, senderId, participants = {}, sessi
     .replace(/\[TOPIC\].*?\[\/TOPIC\]/gi, "")
     .replace(/<REACT[^>]*>|<\/REACT>/gi, "")
     .replace(/\[TAGS:.*?\]/gi, "")
+    .replace(/\[SYSTEM\b[^\]]*\]/gi, "")
     .replace(/\[THÔNG TIN TỪ INTERNET\]/gi, "thông tin trên Internet")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
