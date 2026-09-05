@@ -9,7 +9,8 @@ Tài liệu này liệt kê danh sách các tính năng (features) của Bot, ba
 
 ## 2. Bám sát hội thoại (Focus Mode)
 - **Cơ chế:** Khi bot vừa tương tác với một người dùng trong group, bot sẽ vào trạng thái "Tập trung" vào user đó trong vòng 3 phút.
-- **Cách hoạt động:** Nếu user đó nhắn tiếp một câu (không chứa tag bot khác), bot sẽ tự động xem xét câu đó như đang nói chuyện với mình. Nếu nội dung chỉ là nói chuyện với người khác, LLM sẽ xuất `IGNORE` và tự ngắt Focus Mode.
+- **Cách hoạt động:** Nếu user đó nhắn tiếp một câu dạng văn bản (không chứa tag bot khác và khớp mẫu câu hỏi/yêu cầu `QUESTION_OR_COMMAND_REGEX`), bot sẽ tự động xem xét câu đó như đang nói chuyện với mình. Nếu nội dung chỉ là nói chuyện với người khác, LLM sẽ xuất `IGNORE` và tự ngắt Focus Mode.
+- **Quy tắc Sticker & Media:** Sticker hoặc hình ảnh/tài liệu gửi thuần không kèm lời gọi bot trong group chat sẽ **tuyệt đối không kích hoạt Focus Mode hay Proactive Intervention** (chỉ lưu vào background history) nhằm tránh kích hoạt bot nhầm lẫn và tối ưu 100% chi phí token.
 
 ## 3. Bản tin hàng ngày (Daily News Digest)
 - **Cơ chế:** Hàng ngày vào lúc 8:00 sáng và 13:30 chiều (từ Thứ 2 đến Thứ 6), bot sẽ tự động gửi bản tin công nghệ mới nhất hoặc câu chúc ngày mới vào các group/user đã đăng ký nhận thông báo.

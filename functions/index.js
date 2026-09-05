@@ -43,6 +43,8 @@ const userFactsIndexCache = new Map(); // key: userId/groupId -> { data: {...}, 
 const focusModeCache = new Map(); // key: chatId -> { userId, expiresAt }
 const proactiveRateLimitCache = new Map(); // key: chatId -> nextAllowedTimestamp
 // PROACTIVE_TRIGGER_WORDS is now fetched from botConfig
+const QUESTION_OR_COMMAND_REGEX = /\?|(?:^|\s)(?:tại sao|vì sao|làm sao|như nào|thế nào|bao nhiêu|kể|tính)(?=[.,?!:;\s]|$)|(?:^|\s)(?:nhỉ|hả|nhé|đi)(?=[.?!,;:\s]*$)/i;
+
 
 // Cấu hình Cache Idempotency chống lặp retry webhook
 const processedWebhooks = new Set();
@@ -949,9 +951,11 @@ exports.webhook = onRequest({
     }
 
     // Xử lý tin nhắn (Text, Ảnh, Document, Sticker)
-    let messageContent = message.text || message.caption || null;
+    const rawText = message.text || message.caption || "";
+    let messageContent = rawText || null;
+    const isSticker = !messageContent && !!message.sticker;
 
-    if (!messageContent && message.sticker) {
+    if (isSticker) {
        const emoji = message.sticker.emoji || "";
        const emotion = analyzeEmotion(emoji);
        const emotionStr = getEmotionSystemPrompt(emotion);
@@ -984,11 +988,11 @@ exports.webhook = onRequest({
     let isProactiveTargeted = false;
 
     // --- Smart Group Chat: Focus Mode ---
-    if (chatType !== "private" && !isDirectlyTargeted && !isImplicitlyTargeted) {
+    if (chatType !== "private" && !isDirectlyTargeted && !isImplicitlyTargeted && !isSticker) {
       const focus = focusModeCache.get(String(chatId));
       if (focus && focus.userId === String(userId) && Date.now() < focus.expiresAt) {
-        const hasOtherMentions = /@\w+\b/gi.test(messageContent) && !messageContent.toLowerCase().includes(`@${botUsername}`);
-        const isQuestionOrCommand = /\?/.test(messageContent) || /(tại sao|vì sao|làm sao|như nào|thế nào|bao nhiêu|nhỉ|hả\b|nhé\b|đi\b|kể|tính)/i.test(messageContent);
+        const hasOtherMentions = /@\w+\b/gi.test(rawText) && !rawText.toLowerCase().includes(`@${botUsername}`);
+        const isQuestionOrCommand = QUESTION_OR_COMMAND_REGEX.test(rawText);
         if (!hasOtherMentions && isQuestionOrCommand) {
           isImplicitlyTargeted = true;
           console.log(`[Focus Mode] Telegram: Bot tự động follow up với User ${userId} trong Group ${chatId}`);
@@ -997,8 +1001,8 @@ exports.webhook = onRequest({
     }
 
     // --- Smart Group Chat: Proactive Intervention ---
-    if (chatType !== "private" && !isDirectlyTargeted && !isImplicitlyTargeted && messageContent) {
-      const hasTrigger = messageContent.length > 10 && (botConfig.proactive_trigger_words || []).some(w => messageContent.toLowerCase().includes(w));
+    if (chatType !== "private" && !isDirectlyTargeted && !isImplicitlyTargeted && !isSticker && rawText) {
+      const hasTrigger = rawText.length > 10 && (botConfig.proactive_trigger_words || []).some(w => rawText.toLowerCase().includes(w));
       if (hasTrigger) {
         const nextAllowed = proactiveRateLimitCache.get(String(chatId)) || 0;
         if (Date.now() >= nextAllowed) {
@@ -1353,6 +1357,7 @@ exports.webhook = onRequest({
       // ── Xử lý tin nhắn (Text hoặc Image trong 1-1)
       let messageContent = null;
       let isImage = false;
+      let isSticker = false;
       const eventMessageId = event.message?.id || `postback_${Date.now()}`;
 
       let isPostback = false;
@@ -1389,6 +1394,7 @@ exports.webhook = onRequest({
         const emotion = analyzeEmotion(keywords);
         const emotionStr = getEmotionSystemPrompt(emotion);
         messageContent = `[Người dùng vừa gửi một Sticker biểu cảm: ${keywords}]${emotionStr}`.trim();
+        isSticker = true;
       } else if (event.message?.type === "image") {
         const sessionId = event.source.groupId || event.source.roomId || userId;
         const sessionData = await getSessionMetadata(sessionId);
@@ -1492,6 +1498,17 @@ exports.webhook = onRequest({
           isDirectlyTargeted = true;
         } else if (/\bannie\b/i.test(messageContent)) {
           isImplicitlyTargeted = true;
+        } else if (!isSticker) {
+          // --- Smart Group Chat: Focus Mode ---
+          const focus = focusModeCache.get(String(sessionId));
+          if (focus && focus.userId === String(userId) && Date.now() < focus.expiresAt) {
+            const rawText = (event.type === "message" && event.message.type === "text") ? (event.message.text || "") : "";
+            const isQuestionOrCommand = QUESTION_OR_COMMAND_REGEX.test(rawText);
+            if (isQuestionOrCommand) {
+              isImplicitlyTargeted = true;
+              console.log(`[Focus Mode] LINE: Bot tự động follow up với User ${userId} trong Group ${sessionId}`);
+            }
+          }
         }
 
         if (!isDirectlyTargeted && !isImplicitlyTargeted) {
@@ -1634,19 +1651,6 @@ exports.webhook = onRequest({
 
       let forceIgnoreCheck = (!isDirectlyTargeted && isImplicitlyTargeted);
       const isGroup = event.source.type !== "user";
-      
-      // --- Smart Group Chat: Focus Mode ---
-      if (isGroup && !isDirectlyTargeted) {
-        const focus = focusModeCache.get(String(sessionId));
-        if (focus && focus.userId === String(userId) && Date.now() < focus.expiresAt) {
-          const isQuestionOrCommand = /\?/.test(messageContent) || /(tại sao|vì sao|làm sao|như nào|thế nào|bao nhiêu|nhỉ|hả\b|nhé\b|đi\b|kể|tính)/i.test(messageContent);
-          if (isQuestionOrCommand) {
-            isDirectlyTargeted = true;
-            forceIgnoreCheck = false;
-            console.log(`[Focus Mode] LINE: Bot tự động follow up với User ${userId} trong Group ${sessionId}`);
-          }
-        }
-      }
 
       // Gom các truy vấn I/O độc lập chạy song song để tối ưu tốc độ
       const [groupContext, factsContext] = await Promise.all([
