@@ -22,6 +22,68 @@ const DEFAULT_DEEPSEEK_HEADERS = {
   Authorization: `Bearer ${DEEPSEEK_API_KEY}`
 };
 
+// RAM Cache 5 phút cho user_profiles để chuẩn hóa nhãn người nói (0 extra reads lặp lại)
+const speakerProfileCache = new Map(); // uid -> { data, expiresAt }
+const SPEAKER_CACHE_TTL_MS = 5 * 60 * 1000;
+
+const getCachedSpeakerProfile = async (uid) => {
+  if (!uid) return null;
+  const key = String(uid);
+  const now = Date.now();
+  const cached = speakerProfileCache.get(key);
+  if (cached && now < cached.expiresAt) return cached.data;
+  try {
+    const data = await getUserProfile(key);
+    speakerProfileCache.set(key, { data: data || null, expiresAt: now + SPEAKER_CACHE_TTL_MS });
+    return data || null;
+  } catch (e) {
+    return null;
+  }
+};
+
+const formatHonorificName = (rawName, gender = "") => {
+  const clean = String(rawName || "User").trim();
+  if (!clean || clean.toLowerCase() === "user") return "anh/chị";
+  if (/^(anh|chị|chi|em|bác|cô|chú)\s+/i.test(clean)) return clean;
+  const isFemale = /nữ|nu|female|woman/i.test(String(gender || ""));
+  return `${isFemale ? "chị" : "anh"} ${clean}`;
+};
+
+/**
+ * Chuẩn hóa toàn bộ senderId trong phiên chat thành nhãn Ground Truth: "anh/chị + Tên thật mới nhất".
+ * Triệt tiêu tình trạng tin nhắn cũ trong RTDB còn lưu nick cũ (vd: Badpaybad) hoặc tên trống không.
+ */
+const buildCanonicalSpeakerMap = async (messagesArray, currentSenderId, currentSenderName) => {
+  const uniqueIds = new Set();
+  if (currentSenderId) uniqueIds.add(String(currentSenderId));
+  for (const m of (messagesArray || [])) {
+    if (m && m.role === "user" && m.senderId) uniqueIds.add(String(m.senderId));
+  }
+
+  const labelById = new Map();
+  await Promise.all([...uniqueIds].map(async (uid) => {
+    const profile = await getCachedSpeakerProfile(uid);
+    if (profile && (profile.real_name || profile.name)) {
+      labelById.set(uid, formatHonorificName(profile.real_name || profile.name, profile.gender));
+    } else if (profile && profile.gender) {
+      // Chưa có real_name, vẫn lưu gender để ghép với senderName
+      labelById.set(`__gender_${uid}`, profile.gender);
+    }
+  }));
+
+  const resolveSpeakerLabel = (uid, fallbackName) => {
+    const key = uid ? String(uid) : "";
+    if (key && labelById.has(key)) return labelById.get(key);
+    const gender = key ? (labelById.get(`__gender_${key}`) || "") : "";
+    return formatHonorificName(fallbackName || "User", gender);
+  };
+
+  return {
+    resolveSpeakerLabel,
+    currentSenderLabel: resolveSpeakerLabel(currentSenderId, currentSenderName)
+  };
+};
+
 /**
  * Fallback sang Gemini 2.5 Flash khi DeepSeek gặp sự cố bất khả kháng
  */
@@ -450,10 +512,12 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   ]);
 
   const history = [];
+  const { resolveSpeakerLabel, currentSenderLabel } = await buildCanonicalSpeakerMap(messagesArray, senderId, senderName);
 
   // Xử lý cách ly dữ liệu khi tổng hợp 1 người cụ thể (Speaker Isolation)
   if (isTargetedSpeakerSummary) {
-    console.log(`[DeepSeek] Phát hiện yêu cầu tổng hợp riêng cho Speaker: "${targetSpeaker.targetName}" (id: ${targetSpeaker.targetId})`);
+    const canonicalTargetLabel = resolveSpeakerLabel(targetSpeaker.targetId, targetSpeaker.targetName);
+    console.log(`[DeepSeek] Phát hiện yêu cầu tổng hợp riêng cho Speaker: "${canonicalTargetLabel}" (id: ${targetSpeaker.targetId})`);
     const normTarget = removeAccents(targetSpeaker.targetName.toLowerCase());
 
     const speakerMessages = (messagesArray || []).filter(m => {
@@ -472,7 +536,8 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
     const recentContextMsgs = (messagesArray || []).slice(-6);
     for (const msg of recentContextMsgs) {
       if (msg.role === "user") {
-        history.push({ role: "user", content: `[${msg.senderName || "User"}]: ${msg.text || ""}` });
+        const label = resolveSpeakerLabel(msg.senderId, msg.senderName);
+        history.push({ role: "user", content: `[${label}]: ${msg.text || ""}` });
       } else if (msg.role === "model") {
         history.push({ role: "assistant", content: msg.text || "" });
       }
@@ -480,16 +545,16 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
 
     // Bơm khối dữ liệu độc quyền của người nói đó vào history
     if (speakerMessages.length > 0) {
-      const formatted = speakerMessages.map((m, idx) => `${idx + 1}. [${m.senderName || targetSpeaker.targetName}]: ${m.text || ""}`).join("\n");
+      const formatted = speakerMessages.map((m, idx) => `${idx + 1}. [${canonicalTargetLabel}]: ${m.text || ""}`).join("\n");
       history.push({
         role: "assistant",
-        content: `[DỮ LIỆU ĐỘC QUYỀN - CHỈ DO ${targetSpeaker.targetName} PHÁT BIỂU TRONG PHIÊN]:\n${formatted}\n[HẾT DỮ LIỆU ĐỘC QUYỀN CỦA ${targetSpeaker.targetName}]`
+        content: `[DỮ LIỆU ĐỘC QUYỀN - CHỈ DO ${canonicalTargetLabel} PHÁT BIỂU TRONG PHIÊN]:\n${formatted}\n[HẾT DỮ LIỆU ĐỘC QUYỀN CỦA ${canonicalTargetLabel}]`
       });
-      console.log(`[DeepSeek] Đã cách ly và nạp ${speakerMessages.length} tin nhắn của ${targetSpeaker.targetName}`);
+      console.log(`[DeepSeek] Đã cách ly và nạp ${speakerMessages.length} tin nhắn của ${canonicalTargetLabel}`);
     } else {
       history.push({
         role: "assistant",
-        content: `[THÔNG BÁO HỆ THỐNG]: Trong lịch sử tin nhắn gần đây của nhóm, không tìm thấy phát biểu nào của ${targetSpeaker.targetName}.`
+        content: `[THÔNG BÁO HỆ THỐNG]: Trong lịch sử tin nhắn gần đây của nhóm, không tìm thấy phát biểu nào của ${canonicalTargetLabel}.`
       });
     }
   } else {
@@ -497,7 +562,8 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
     if (messagesArray && messagesArray.length > 0) {
       for (const msg of messagesArray) {
         if (msg.role === "user") {
-          history.push({ role: "user", content: `[${msg.senderName || "User"}]: ${msg.text || ""}` });
+          const label = resolveSpeakerLabel(msg.senderId, msg.senderName);
+          history.push({ role: "user", content: `[${label}]: ${msg.text || ""}` });
         } else if (msg.role === "model") {
           history.push({ role: "assistant", content: msg.text || "" });
         }
@@ -590,7 +656,7 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
     }
   }
 
-  const userContent = `[NEW] [${senderName}]: ${prompt}${guardrails}`;
+  const userContent = `[NEW] [${currentSenderLabel}]: ${prompt}${guardrails}`;
 
   history.unshift({ role: "system", content: buildSystemPrompt(webContext, groupContext, isGroup, factsContext, botConfig, isSummaryReq, mbtiProfile, skillVectorsStr, prompt, botSkills) });
   let sysContent = history[0].content;

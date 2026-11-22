@@ -214,6 +214,9 @@ Tài liệu này liệt kê danh sách các tính năng (features) của Bot, ba
 - **Lệnh Quản lý trên Telegram ([skills.js](file:///Users/snow/Documents/www/LINE-Chatbot/functions/commands/skills.js) — $0 LLM Cost):**
   - `/skills`: Liệt kê toàn bộ custom skills bot đã học theo nhóm kèm `slug`, `version` và mô tả ngắn.
   - `/skills_detail <tên skill>`: Tra cứu linh hoạt theo `slug` hoặc tên gần đúng, hiển thị chi tiết kèm toàn văn Custom Prompt từ database.
+- **Chuẩn hóa Nhãn Người Nói Đồng bộ từ `user_profiles` (`buildCanonicalSpeakerMap` trong [deepseek.js](file:///Users/snow/Documents/www/LINE-Chatbot/functions/utils/deepseek.js)):**
+  - Mọi tin nhắn cũ/mới bơm vào `history` và `[NEW]` đều được ánh xạ động qua `senderId` → `user_profiles` (RAM cache 5 phút) thành nhãn chuẩn `[anh/chị + Tên thật mới nhất]` (0% hardcode). Triệt tiêu hoàn toàn tình trạng lẫn nick cũ (`Badpaybad`) với tên thật (`anh Du`) hay gọi tên trống không (`Lâm`).
+
 
 
 
