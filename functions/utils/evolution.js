@@ -5,6 +5,7 @@ const fs = require("fs");
 const admin = require("firebase-admin");
 const logger = require("./logger");
 const { DEFAULT_TAXONOMY, mergeTaxonomy } = require("./taxonomyRouter");
+const { DEFAULT_SKILLS, mergeAndDedupSkill } = require("./skillLibrary");
 
 const DEEPSEEK_URL = process.env.DEEPSEEK_URL || "https://api.deepseek.com/chat/completions";
 const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
@@ -534,8 +535,118 @@ QUY TẮC BẮT BUỘC:
   }
 };
 
+const MAX_CUSTOM_SKILLS = 30;
+
+/**
+ * Cơ chế Tự học & Tối ưu Custom Skills hàng ngày (tách biệt với Tầm Sư Học Đạo).
+ * - Lưu tại Firestore system_configs/bot_skills (1 read / 5 phút via RAM cache).
+ * - 2 lớp chống trùng lặp (LLM Semantic Dedup + Offline slug/name/trigger overlap).
+ * - Đồng bộ 2 chiều LINE <-> Telegram.
+ */
+const dailySkillEvolution = async () => {
+  try {
+    const skillsRef = db.collection("system_configs").doc("bot_skills");
+    const snap = await skillsRef.get();
+    const docData = snap.exists ? snap.data() : {};
+
+    const vnTime = new Date(Date.now() + 7 * 60 * 60 * 1000);
+    const todayStr = vnTime.toISOString().split("T")[0];
+
+    if (docData.last_skill_study_date === todayStr) {
+      console.log(`[Evolution] Hôm nay (${todayStr}) đã hoàn tất học/tối ưu Skills. Bỏ qua.`);
+      return;
+    }
+
+    let skillsMap = (docData.skills && Object.keys(docData.skills).length > 0)
+      ? { ...docData.skills }
+      : { ...DEFAULT_SKILLS };
+
+    const existingList = Object.values(skillsMap);
+    const existingCatalog = existingList
+      .map(s => `- ${s.slug} | ${s.name} (v${s.version || 1}): ${s.summary}`)
+      .join("\n");
+
+    const canAddMore = existingList.length < MAX_CUSTOM_SKILLS;
+    // Chọn 1 skill có version thấp nhất để tinh chỉnh thêm nếu cần
+    const lowestVerSkill = [...existingList].sort((a, b) => (a.version || 1) - (b.version || 1))[0];
+
+    const prompt = `Bạn là Skill Architect của chatbot Annie (trợ lý thân thiện, thông minh, tinh tế cho người Việt).
+Kho kỹ năng hiện tại (${existingList.length}/${MAX_CUSTOM_SKILLS}):
+${existingCatalog}
+
+NHIỆM VỤ HÔM NAY:
+${canAddMore ? "1. Đề xuất ĐÚNG 1 kỹ năng MỚI có giá trị thực tiễn cao cho đời sống/công việc/học tập/giải trí (KHÔNG trùng bản chất hay mục đích với BẤT KỲ kỹ năng nào trong danh sách trên, dù đặt tên khác)." : "1. Kho đã đạt trần, KHÔNG tạo thêm kỹ năng mới (để new_skill = null)."}
+2. Tinh chỉnh (refine) kỹ năng "${lowestVerSkill?.slug}" (hiện tại: "${lowestVerSkill?.prompt}") cho ngắn gọn, sắc bén, khoa học và tự nhiên hơn nếu có thể cải thiện (nếu đã tối ưu rồi thì để refined_skill = null).
+
+QUY TẮC BẮT BUỘC:
+- Prompt mỗi skill PHẢI cực kỳ ngắn gọn, mạch lạc (<= 65 từ), không dài dòng gây tốn token, đảm bảo câu trả lời tự nhiên, thân thiện, tinh tế.
+- Triggers: 4-6 cụm từ khóa tiếng Việt tự nhiên (>= 2 từ, viết thường) mà người dùng hay gõ khi cần kỹ năng đó.
+- category thuộc: creative | tech | finance | language | communication | thinking | productivity | lifestyle.
+
+Trả về DUY NHẤT JSON:
+{
+  "new_skill": { "slug": "snake_case", "name": "...", "category": "...", "summary": "...", "triggers": ["..."], "prompt": "..." },
+  "refined_skill": { "slug": "${lowestVerSkill?.slug || ""}", "name": "${lowestVerSkill?.name || ""}", "category": "${lowestVerSkill?.category || "general"}", "summary": "...", "triggers": ["..."], "prompt": "..." }
+}`;
+
+    const aiReply = await askOptimizer(prompt);
+    const changes = [];
+
+    if (aiReply) {
+      try {
+        const match = aiReply.match(/\{[\s\S]*\}/);
+        if (match) {
+          const parsed = JSON.parse(match[0]);
+          if (parsed.new_skill && canAddMore) {
+            const res = mergeAndDedupSkill(skillsMap, parsed.new_skill, MAX_CUSTOM_SKILLS);
+            skillsMap = res.skills;
+            if (res.action === "ADDED") changes.push(`Học mới skill "${parsed.new_skill.name}" (${res.slug})`);
+            else if (res.action === "REFINED") changes.push(`Gộp/tối ưu skill "${res.slug}"`);
+          }
+          if (parsed.refined_skill && parsed.refined_skill.slug && skillsMap[parsed.refined_skill.slug]) {
+            const res = mergeAndDedupSkill(skillsMap, parsed.refined_skill, MAX_CUSTOM_SKILLS);
+            skillsMap = res.skills;
+            if (res.action === "REFINED") changes.push(`Nâng cấp skill "${res.slug}" lên v${skillsMap[res.slug].version}`);
+          }
+        }
+      } catch (parseErr) {
+        console.warn("[Evolution] Lỗi parse JSON dailySkillEvolution:", parseErr.message);
+      }
+    }
+
+    const payload = {
+      skills: skillsMap,
+      last_skill_study_date: todayStr,
+      updated_at: admin.firestore.FieldValue.serverTimestamp()
+    };
+
+    await skillsRef.set(payload, { merge: true });
+
+    // Đồng bộ 2 chiều sang Companion Project (LINE <-> Telegram)
+    const companion = getCompanionDb();
+    if (companion) {
+      try {
+        await companion.collection("system_configs").doc("bot_skills").set(payload, { merge: true });
+        console.log("[Evolution] Đã đồng bộ bot_skills sang Companion Project!");
+      } catch (syncErr) {
+        console.warn("[Evolution] Lỗi đồng bộ bot_skills sang Companion Project:", syncErr.message);
+      }
+    }
+
+    const logMsg = changes.length > 0
+      ? `Tiến hóa Custom Skills: ${changes.join("; ")} (Tổng: ${Object.keys(skillsMap).length} skills).`
+      : `Đã đồng bộ kho ${Object.keys(skillsMap).length} Custom Skills.`;
+    console.log(`[Evolution] ${logMsg}`);
+    await logger.logSystem("EVOLUTION_SKILL", logMsg, "SUCCESS");
+  } catch (err) {
+    console.error("[Evolution] Lỗi dailySkillEvolution:", err.message);
+    await logger.logSystem("EVOLUTION_SKILL", `Lỗi: ${err.message}`, "FAILED");
+  }
+};
+
 const runDailyEvolution = async () => {
   await dailyHumanStudy();
+  await dailySkillEvolution();
   await processAuditIssues();
   await evolveTaxonomyFromLogs();
 };

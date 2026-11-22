@@ -2,6 +2,7 @@ const { handleAsciiCommand } = require('./ascii');
 const { handleReportCommand } = require('./report');
 const { handleInfoCommand } = require('./info');
 const { handleForgetCommand } = require('./forget');
+const { handleSkillsCommand } = require('./skills');
 
 /**
  * Command Dispatcher
@@ -42,6 +43,11 @@ async function handleCommand(prompt, context) {
   // 4. Lệnh Forget
   if (/^\/forget\s+.+/i.test(cleanPrompt)) {
     return handleForgetCommand(cleanPrompt);
+  }
+
+  // 5. Lệnh quản lý Custom Skills (/skills, /skills_detail <tên>)
+  if (/^\/skills(?:_detail)?(?:@\w+)?(?:\s+.*)?$/i.test(cleanPrompt)) {
+    return await handleSkillsCommand(cleanPrompt, context);
   }
 
   return null;

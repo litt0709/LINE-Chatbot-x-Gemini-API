@@ -202,6 +202,20 @@ Tài liệu này liệt kê danh sách các tính năng (features) của Bot, ba
   - Bắt buộc luôn kèm danh xưng `anh/chị` trước tên thành viên trong toàn bộ câu trả lời (kể cả khi tóm tắt hay nhắc lại ở ngôi thứ 3), tuyệt đối không gọi tên trống không.
   - Đã đồng bộ chuẩn `real_name: "Du"` cho `user_profiles/730806080` (`Badpaybad`) trên Firestore `line-ai-chatbot-eab18`.
 
+## 29. Kho Kỹ năng Tự tiến hóa & Lệnh `/skills` (Self-Evolving Modular Skill Library) — 2026-11-22
+- **Lưu trữ tập trung & Siêu tiết kiệm (`system_configs/bot_skills` + RAM Cache 5 phút):**
+  - Toàn bộ custom skills lưu trong 1 document `system_configs/bot_skills` (chỉ 1 Firestore Read / 5 phút), đồng bộ 2 chiều **LINE ↔ Telegram**, khởi tạo sẵn 10 kỹ năng nền tảng chất lượng cao (*Làm thơ Lục Bát*, *Review & Debug Code*, *Dịch thuật Tự nhiên*, *Phân tích Tài chính*, *So sánh Mua sắm*, *Viết Email Khéo léo*, *Tư duy Phản biện*, *Tóm tắt Tài liệu*, *Lịch trình Du lịch*, *Chơi chữ Hóm hỉnh*).
+  - Mỗi custom prompt bị giới hạn gọn sạch (≤ 70 từ ~100 tokens), mạch lạc và giữ đúng phong cách Annie tự nhiên, thân thiện, tinh tế.
+- **Kích hoạt Động "Just-in-Time" ([skillLibrary.js](file:///Users/snow/Documents/www/LINE-Chatbot/functions/utils/skillLibrary.js) & [deepseek.js](file:///Users/snow/Documents/www/LINE-Chatbot/functions/utils/deepseek.js)):**
+  - Chạy offline (< 1ms, $0 API cost), chỉ tiêm **duy nhất 1 skill khớp nhất** khi người dùng yêu cầu đúng ngữ cảnh, không bao giờ đổ cả kho skill gây loãng & tốn token.
+- **Tự học & Chống Trùng Lặp Hàng ngày (`dailySkillEvolution` trong [evolution.js](file:///Users/snow/Documents/www/LINE-Chatbot/functions/utils/evolution.js)):**
+  - Chạy tách biệt với `dailyHumanStudy` lúc `03:00` sáng trong `masterScheduler` (cờ `last_skill_study_date` chống chạy trùng giữa 2 nền tảng).
+  - Áp dụng **2 lớp chống trùng lặp** (LLM Semantic Dedup + Offline slug/tên/overlap > 50% triggers) và Hard Cap **30 skills** để kho kỹ năng luôn tinh hoa, không dư thừa.
+- **Lệnh Quản lý trên Telegram ([skills.js](file:///Users/snow/Documents/www/LINE-Chatbot/functions/commands/skills.js) — $0 LLM Cost):**
+  - `/skills`: Liệt kê toàn bộ custom skills bot đã học theo nhóm kèm `slug`, `version` và mô tả ngắn.
+  - `/skills_detail <tên skill>`: Tra cứu linh hoạt theo `slug` hoặc tên gần đúng, hiển thị chi tiết kèm toàn văn Custom Prompt từ database.
+
+
 
 
 

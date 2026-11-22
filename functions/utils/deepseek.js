@@ -3,6 +3,7 @@ const https = require("https");
 const { db, FieldValue, getUserProfile, getRawMessages } = require("./db");
 const { resolveWebContext } = require("./search");
 const { getBotConfig } = require("./configCache");
+const { getBotSkills, matchActiveSkill } = require("./skillLibrary");
 const logger = require("./logger");
 
 const DEEPSEEK_URL = process.env.DEEPSEEK_URL || "https://api.deepseek.com/chat/completions";
@@ -197,7 +198,7 @@ const extractTargetSpeaker = (prompt, participants = {}, senderName = "User", se
 };
 
 // System prompt chung — định nghĩa tính cách, xưng hô, phong cách của Annie
-const buildSystemPrompt = (webContext = "", groupContext = "", isGroup = false, factsContext = "", botConfig = null, isSummaryRequest = false, mbtiProfile = "", skillVectors = "", promptText = "") => {
+const buildSystemPrompt = (webContext = "", groupContext = "", isGroup = false, factsContext = "", botConfig = null, isSummaryRequest = false, mbtiProfile = "", skillVectors = "", promptText = "", botSkills = null) => {
   const pad = (n) => String(n).padStart(2, '0');
   const vnDate = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }));
   const days = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
@@ -224,6 +225,13 @@ const buildSystemPrompt = (webContext = "", groupContext = "", isGroup = false, 
     }
     if (botConfig.dynamic_guardrails && botConfig.dynamic_guardrails.length > 0) {
       dynamicRules += "\n\n[LUẬT KỶ LUẬT THÉP (CẤM VI PHẠM)]:\n- " + botConfig.dynamic_guardrails.join("\n- ");
+    }
+  }
+  if (botSkills && promptText) {
+    const activeSkill = matchActiveSkill(promptText, botSkills);
+    if (activeSkill) {
+      console.log(`[SkillLibrary] Kích hoạt động skill: "${activeSkill.name}" (${activeSkill.slug})`);
+      dynamicRules += `\n\n[KỸ NĂNG CHUYÊN SÂU KÍCH HOẠT: ${activeSkill.name}]:\n${activeSkill.prompt}\n(Áp dụng kỹ thuật trên một cách tự nhiên, thân thiện, tinh tế, khéo léo theo đúng tính cách Annie — KHÔNG cứng nhắc hay máy móc.)`;
     }
   }
 
@@ -365,7 +373,7 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
       console.error("[DeepSeek] Lỗi resolveWebContext cho URL:", err.message);
     }
   }
-  const botConfig = await getBotConfig();
+  const [botConfig, botSkills] = await Promise.all([getBotConfig(), getBotSkills()]);
   const linkRequestsRegexStr = botConfig.link_requests_regex || "xin link|cho link|gửi link|địa chỉ|url|link|cho xin|ở đâu|trang nào";
   let LINK_REQUEST_REGEX;
   try {
@@ -584,7 +592,7 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
 
   const userContent = `[NEW] [${senderName}]: ${prompt}${guardrails}`;
 
-  history.unshift({ role: "system", content: buildSystemPrompt(webContext, groupContext, isGroup, factsContext, botConfig, isSummaryReq, mbtiProfile, skillVectorsStr, prompt) });
+  history.unshift({ role: "system", content: buildSystemPrompt(webContext, groupContext, isGroup, factsContext, botConfig, isSummaryReq, mbtiProfile, skillVectorsStr, prompt, botSkills) });
   let sysContent = history[0].content;
   if (forceIgnoreCheck) {
     sysContent += "\n\nBẮT BUỘC: Bạn đang ở trong group chat. Người dùng có thể chỉ vô tình nhắc tên bạn khi nói chuyện với người khác. BẠN PHẢI đánh giá xem họ CÓ THỰC SỰ ĐANG NÓI CHUYỆN VỚI BẠN HAY KHÔNG. Nếu họ ĐANG NÓI VỚI NGƯỜI KHÁC (nhắc bạn ở ngôi thứ 3), BẠN PHẢI trả lời chính xác bằng 1 chữ: IGNORE. Tuyệt đối không giải thích thêm. Nếu họ đang hỏi hoặc gọi bạn, hãy trả lời bình thường.";
