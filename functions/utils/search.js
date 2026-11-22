@@ -1,6 +1,7 @@
 const { searchTavily, extractTavily, TODAY_KEYWORDS } = require("./tavily");
 const { searchExa } = require("./exa");
 const { getBotConfig } = require("./configCache");
+const { classifyQuery } = require("./taxonomyRouter");
 const axios = require("axios");
 const path = require("path");
 const fs = require("fs");
@@ -456,25 +457,7 @@ const resolveWebContext = async (prompt, isPreOptimized = false, sessionId = nul
     }
     
     const botConfig = await getBotConfig();
-    const safeCatRegex = (pattern, fallback) => {
-      try {
-        return new RegExp(pattern || fallback, "i");
-      } catch (e) {
-        return new RegExp(fallback, "i");
-      }
-    };
-    const searchKws = botConfig.search_keywords || {};
-    const CATEGORY_REGEX = {
-      NEWS: safeCatRegex(searchKws.NEWS, "bóng đá|tin tức|thời sự"),
-      FINANCE: safeCatRegex(searchKws.FINANCE, "giá vàng|tỷ giá|chứng khoán"),
-      DEV: safeCatRegex(searchKws.DEV, "code|lập trình|api"),
-      SOCIAL: safeCatRegex(searchKws.SOCIAL, "drama|phốt|twitter|x\\b")
-    };
-
-    let category = "GENERAL";
-    if (CATEGORY_REGEX.DEV.test(finalQuery)) category = "DEV";
-    else if (CATEGORY_REGEX.SOCIAL.test(finalQuery)) category = "SOCIAL";
-    else if (CATEGORY_REGEX.NEWS.test(finalQuery) || CATEGORY_REGEX.FINANCE.test(finalQuery)) category = "NEWS";
+    const cls = classifyQuery(finalQuery, botConfig.taxonomy);
 
     const { TODAY_KEYWORDS } = require("./tavily");
     const isWeatherQuery = /thời tiết|nhiệt độ|dự báo thời tiết|trời mưa|trời nắng/i.test(finalQuery);
@@ -489,30 +472,28 @@ const resolveWebContext = async (prompt, isPreOptimized = false, sessionId = nul
     if (isTodaySensitive) {
       const todayStr = new Date().toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
       finalQuery = `${finalQuery} ngày ${todayStr}`;
-    } else if (category === "NEWS") {
+    } else if (cls.tavilyTopic === "news") {
       if (!/\b20\d{2}\b/.test(finalQuery)) {
         const currentYear = new Date().getFullYear();
         finalQuery = `${finalQuery} năm ${currentYear}`;
       }
     }
 
-    console.log(`[Search Router] Kích hoạt tìm kiếm: "${finalQuery}" | Category: ${category}`);
+    console.log(`[Search Router] Kích hoạt tìm kiếm: "${finalQuery}" | Taxonomy: ${cls.domain} > ${cls.subTopic} (score=${cls.score}, route=${cls.route}, matched=[${cls.matchedConcepts.join(", ")}])`);
     
     try {
-      if (category === "DEV" || category === "SOCIAL") {
-        // Exa không còn hỗ trợ danh mục "tweet" và "github", thực hiện tìm kiếm chung không kèm category
+      if (cls.route === "EXA") {
         const res = await searchExa(finalQuery);
         if (res) { searchSummary = res.summary; searchUrls = res.urls; }
       } else {
-        const tavilyTopic = category === "NEWS" ? "news" : "general";
-        const res = await searchTavily(finalQuery, { topic: tavilyTopic });
+        const res = await searchTavily(finalQuery, { topic: cls.tavilyTopic });
         if (res) { searchSummary = res.summary; searchUrls = res.urls; }
       }
     } catch (err) {
-      console.log(`[Search Router] Nguồn chính lỗi, chạy fallback: ${err.message}`);
+      console.log(`[Search Router] Nguồn chính (${cls.route}) lỗi, chạy fallback: ${err.message}`);
       try {
-        if (category === "DEV" || category === "SOCIAL") {
-          const res = await searchTavily(finalQuery);
+        if (cls.route === "EXA") {
+          const res = await searchTavily(finalQuery, { topic: cls.tavilyTopic });
           if (res) { searchSummary = res.summary; searchUrls = res.urls; }
         } else {
           const res = await searchExa(finalQuery);

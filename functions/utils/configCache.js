@@ -31,6 +31,7 @@ const getBotConfig = async () => {
 
   // Fallback an toàn (phòng trường hợp lỗi DB hoặc mất mạng)
   return cachedConfig || {
+    taxonomy: null,
     search_keywords: { NEWS: "", FINANCE: "", DEV: "", SOCIAL: "" },
     standalone_topics: [],
     link_requests_regex: "xin link|cho link|gửi link|địa chỉ|url|link|cho xin|ở đâu|trang nào",

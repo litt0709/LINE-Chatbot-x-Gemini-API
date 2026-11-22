@@ -189,6 +189,21 @@ Tài liệu này liệt kê danh sách các tính năng (features) của Bot, ba
   - Chỉ nhắc tên thành viên khi cần phân biệt quan điểm trái chiều quan trọng, vẫn đảm bảo nguyên tắc không gán nhầm ý kiến giữa các thành viên.
   - Giữ nguyên cơ chế Cô lập Người nói (`Speaker Isolation`) khi user yêu cầu tổng hợp riêng một cá nhân cụ thể, đồng thời cô đọng theo các ý chính thay vì chép lại từng tin nhắn rời rạc.
 
+## 28. Phân loại Tìm kiếm Phân tầng 3 Lớp & Tự động Tiến hóa Hàng đêm (Hierarchical Taxonomy & Autonomous Evolution) — 2026-11-22
+- **Cây Phân loại 3 Tầng Tinh gọn (`functions/utils/taxonomyRouter.js` — <1ms, $0 API Cost):**
+  - Thay thế bộ regex phẳng ~2.000 từ khóa bằng cây 3 tầng gồm **6 Macro Domains** (`TECH`, `ECONOMY`, `SOCIETY_VN`, `WORLD_GEO`, `SOCIAL_TREND`, `LIFESTYLE`) → **15 Sub-topics** → **Weighted Common Concepts** (`core = 3`, `context = 1`).
+  - **Zero-Entity Bloat:** Tuyệt đối không lưu tên riêng cá nhân/sự kiện nhất thời (như `jensen huang`, `mr pips`, `vf3`). Tên riêng đi kèm ngữ cảnh (vd: *"Jensen Huang từ chức"*) tự định tuyến theo khái niệm ngữ cảnh (`ECONOMY > business`); tên riêng thuần túy tự rơi về `GENERAL` (`Tavily general`).
+  - Chấm điểm song song toàn cây theo ranh giới từ (hỗ trợ cả có dấu & không dấu `removeAccents`) để định tuyến chuẩn xác Search Engine (`Exa` vs `Tavily news/general`).
+- **Tự động Tiến hóa Hàng đêm (`evolveTaxonomyFromLogs` trong `functions/utils/evolution.js`):**
+  - Tự động chạy lúc `03:00` sáng hàng ngày trong `masterScheduler` (không cần gõ `/update` thủ công), có cờ `last_taxonomy_update_date` chống chạy lặp giữa LINE & Telegram.
+  - Gom toàn bộ `audit_logs` vào **1 batch DeepSeek duy nhất/ngày** đóng vai *Taxonomy Architect*: lọc bỏ tên riêng & nhiễu, khái quát hóa thành khái niệm phổ quát, áp dụng Hard Cap chống phình database (tối đa 25 concepts/tier/sub-topic, 150 proactive triggers, 200 standalone topics).
+  - Tự động đồng bộ 2 chiều **LINE ↔ Telegram**, dọn sạch `audit_logs` về **Inbox Zero**, và ghi log `EVOLUTION_TAXONOMY` vào RTDB để theo dõi qua `/learning`.
+- **Xưng hô Lịch sự Toàn văn & Đồng bộ Profile `anh Du` (`deepseek.js` + Firestore):**
+  - Bắt buộc luôn kèm danh xưng `anh/chị` trước tên thành viên trong toàn bộ câu trả lời (kể cả khi tóm tắt hay nhắc lại ở ngôi thứ 3), tuyệt đối không gọi tên trống không.
+  - Đã đồng bộ chuẩn `real_name: "Du"` cho `user_profiles/730806080` (`Badpaybad`) trên Firestore `line-ai-chatbot-eab18`.
+
+
+
 
 
 

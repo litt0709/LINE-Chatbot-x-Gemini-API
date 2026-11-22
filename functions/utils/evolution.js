@@ -4,6 +4,7 @@ const path = require("path");
 const fs = require("fs");
 const admin = require("firebase-admin");
 const logger = require("./logger");
+const { DEFAULT_TAXONOMY, mergeTaxonomy } = require("./taxonomyRouter");
 
 const DEEPSEEK_URL = process.env.DEEPSEEK_URL || "https://api.deepseek.com/chat/completions";
 const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
@@ -332,9 +333,211 @@ const processAuditIssues = async () => {
   }
 };
 
+const MAX_PROACTIVE_TRIGGERS = 150;
+const MAX_STANDALONE_TOPICS = 200;
+
+const escapeRegexSafe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Tự động tiến hóa cây Taxonomy 3 tầng & cấu hình từ audit_logs hàng đêm (Autonomous /update).
+ * - Loại bỏ 100% tên riêng cá nhân / sự kiện nhất thời / từ đơn gây nhiễu.
+ * - Khái quát hóa thành Common Concepts vào đúng nhánh Domain > SubTopic.
+ * - Đồng bộ 2 chiều LINE <-> Telegram và dọn sạch audit_logs (Inbox Zero).
+ */
+const evolveTaxonomyFromLogs = async () => {
+  try {
+    const configRef = db.collection("system_configs").doc("bot_config");
+    const cfgSnap = await configRef.get();
+    const cfg = cfgSnap.exists ? cfgSnap.data() : {};
+
+    const vnTime = new Date(Date.now() + 7 * 60 * 60 * 1000);
+    const todayStr = vnTime.toISOString().split("T")[0];
+
+    if (cfg.last_taxonomy_update_date === todayStr) {
+      console.log(`[Evolution] Hôm nay (${todayStr}) đã hoàn tất cập nhật Taxonomy. Bỏ qua.`);
+      return;
+    }
+
+    const logsSnapshot = await db.collection("audit_logs").limit(50).get();
+    if (logsSnapshot.empty) {
+      console.log("[Evolution] Không có audit_logs mới để cập nhật Taxonomy.");
+      return;
+    }
+
+    const rawKeywords = new Set();
+    const rawTopics = new Set();
+    const rawProactive = new Set();
+    const rawLinkReqs = new Set();
+
+    logsSnapshot.forEach(doc => {
+      const d = doc.data();
+      (d.audit_keywords || []).forEach(k => k?.word && rawKeywords.add(String(k.word).trim()));
+      (d.missed_topics || []).forEach(t => t && rawTopics.add(String(t).trim()));
+      (d.missed_proactive_keywords || []).forEach(p => p && rawProactive.add(String(p).trim()));
+      (d.missed_link_requests || []).forEach(l => l && rawLinkReqs.add(String(l).trim()));
+    });
+
+    if (rawKeywords.size === 0 && rawTopics.size === 0 && rawProactive.size === 0 && rawLinkReqs.size === 0) {
+      console.log("[Evolution] audit_logs không có keyword/topic mới.");
+      return;
+    }
+
+    const currentTaxonomy = (cfg.taxonomy && Object.keys(cfg.taxonomy).length > 0) ? cfg.taxonomy : DEFAULT_TAXONOMY;
+    const schemaSummary = Object.entries(currentTaxonomy)
+      .map(([dom, dCfg]) => `${dom}: [${Object.keys(dCfg.subtopics || {}).join(", ")}]`)
+      .join("\n");
+
+    const prompt = `Bạn là Taxonomy Architect của chatbot Annie. Hãy lọc và khái quát hóa dữ liệu thô sau thành khái niệm phổ quát:
+Cây Taxonomy hiện tại (Domain: [subtopics]):
+${schemaSummary}
+
+Dữ liệu thô từ lịch sử chat:
+- Keywords: ${[...rawKeywords].slice(0, 80).join(" | ")}
+- Topics: ${[...rawTopics].slice(0, 40).join(" | ")}
+- Proactive cues: ${[...rawProactive].slice(0, 40).join(" | ")}
+- Link requests: ${[...rawLinkReqs].slice(0, 15).join(" | ")}
+
+QUY TẮC BẮT BUỘC:
+1. TUYỆT ĐỐI LOẠI BỎ mọi tên riêng cá nhân (vd: jensen huang, shark bình, elon musk, mr pips, tên thành viên nhóm), tên sản phẩm/sự kiện nhất thời (vd: vf3, concert...), và từ đơn quá chung chung (vd: ai, us, vn, khó, buồn).
+2. Chỉ giữ lại KHÁI NIỆM PHỔ QUÁT (common concepts, viết thường, 1-3 từ) thực sự giúp phân loại chủ đề vào đúng Domain > subtopic có sẵn.
+3. Proactive cues: chỉ giữ cụm từ tự nhiên >= 2 từ biểu hiện cần hỗ trợ/hỏi ý kiến.
+4. Trả về JSON duy nhất đúng cấu trúc:
+{
+  "taxonomy_additions": [{"domain":"TECH","subtopic":"ai_llm","tier":"core","concept":"..."}],
+  "standalone_topics": ["..."],
+  "proactive_triggers": ["..."],
+  "link_requests": ["..."]
+}`;
+
+    const aiReply = await askOptimizer(prompt);
+    let parsed = null;
+    if (aiReply) {
+      try {
+        const match = aiReply.match(/\{[\s\S]*\}/);
+        if (match) parsed = JSON.parse(match[0]);
+      } catch (e) {
+        console.warn("[Evolution] Lỗi parse JSON Taxonomy:", e.message);
+      }
+    }
+
+    let summaryParts = [];
+    const updatePayload = { last_taxonomy_update_date: todayStr };
+
+    if (parsed) {
+      const { taxonomy: updatedTaxonomy, added: taxAdded } = mergeTaxonomy(currentTaxonomy, parsed.taxonomy_additions || [], 25);
+      updatePayload.taxonomy = updatedTaxonomy;
+      if (taxAdded.length > 0) summaryParts.push(`taxonomy(+${taxAdded.length})`);
+
+      if (Array.isArray(parsed.standalone_topics) && parsed.standalone_topics.length > 0) {
+        const cur = Array.isArray(cfg.standalone_topics) ? [...cfg.standalone_topics] : [];
+        const set = new Set(cur.map(x => String(x).toLowerCase().trim()));
+        let cnt = 0;
+        for (const t of parsed.standalone_topics) {
+          const clean = String(t || "").trim().toLowerCase();
+          if (clean.length >= 4 && !set.has(clean) && cur.length < MAX_STANDALONE_TOPICS) {
+            set.add(clean);
+            cur.push(clean);
+            cnt++;
+          }
+        }
+        if (cnt > 0) {
+          updatePayload.standalone_topics = cur;
+          summaryParts.push(`topics(+${cnt})`);
+        }
+      }
+
+      if (Array.isArray(parsed.proactive_triggers) && parsed.proactive_triggers.length > 0) {
+        const cur = Array.isArray(cfg.proactive_trigger_words) ? [...cfg.proactive_trigger_words] : [];
+        const set = new Set(cur.map(x => String(x).toLowerCase().trim()));
+        let cnt = 0;
+        for (const p of parsed.proactive_triggers) {
+          const clean = String(p || "").trim().toLowerCase();
+          if (clean.includes(" ") && clean.length >= 5 && !set.has(clean) && cur.length < MAX_PROACTIVE_TRIGGERS) {
+            set.add(clean);
+            cur.push(clean);
+            cnt++;
+          }
+        }
+        if (cnt > 0) {
+          updatePayload.proactive_trigger_words = cur;
+          summaryParts.push(`proactive(+${cnt})`);
+        }
+      }
+
+      if (Array.isArray(parsed.link_requests) && parsed.link_requests.length > 0) {
+        const existingParts = (cfg.link_requests_regex || "").split("|").map(s => s.trim()).filter(Boolean);
+        const set = new Set(existingParts.map(s => s.toLowerCase()));
+        let cnt = 0;
+        for (const l of parsed.link_requests) {
+          const clean = String(l || "").trim().toLowerCase();
+          if (clean.length >= 4 && !set.has(clean)) {
+            set.add(clean);
+            existingParts.push(escapeRegexSafe(clean));
+            cnt++;
+          }
+        }
+        if (cnt > 0) {
+          const mergedRegex = existingParts.join("|");
+          try {
+            new RegExp(mergedRegex, "i");
+            updatePayload.link_requests_regex = mergedRegex;
+            summaryParts.push(`link_req(+${cnt})`);
+          } catch (e) { /* skip invalid regex */ }
+        }
+      }
+    }
+
+    await configRef.set(updatePayload, { merge: true });
+
+    // Đồng bộ 2 chiều sang Companion Project (LINE <-> Telegram)
+    const companion = getCompanionDb();
+    if (companion) {
+      try {
+        await companion.collection("system_configs").doc("bot_config").set(updatePayload, { merge: true });
+        console.log("[Evolution] Đã đồng bộ Taxonomy sang Companion Project!");
+      } catch (syncErr) {
+        console.warn("[Evolution] Lỗi đồng bộ Taxonomy sang Companion Project:", syncErr.message);
+      }
+    }
+
+    // Dọn dẹp Inbox Zero trên audit_logs
+    const { FieldValue } = admin.firestore;
+    const batch = db.batch();
+    let deletedDocs = 0;
+    logsSnapshot.forEach(doc => {
+      const d = doc.data();
+      const hasIssues = Array.isArray(d.audit_issues) && d.audit_issues.length > 0;
+      if (!hasIssues) {
+        batch.delete(doc.ref);
+        deletedDocs++;
+      } else {
+        batch.update(doc.ref, {
+          audit_keywords: FieldValue.delete(),
+          missed_link_requests: FieldValue.delete(),
+          missed_topics: FieldValue.delete(),
+          missed_entities: FieldValue.delete(),
+          missed_proactive_keywords: FieldValue.delete(),
+          suggested_stopwords: FieldValue.delete()
+        });
+      }
+    });
+    await batch.commit();
+
+    const msg = summaryParts.length > 0
+      ? `Tự động tiến hóa Taxonomy: ${summaryParts.join(", ")} (đã dọn ${deletedDocs} audit_logs).`
+      : `Đã kiểm tra ${logsSnapshot.size} audit_logs (không phát sinh khái niệm phổ quát mới, đã dọn ${deletedDocs} docs).`;
+    console.log(`[Evolution] ${msg}`);
+    await logger.logSystem("EVOLUTION_TAXONOMY", msg, "SUCCESS");
+  } catch (err) {
+    console.error("[Evolution] Lỗi cập nhật Taxonomy tự động:", err.message);
+    await logger.logSystem("EVOLUTION_TAXONOMY", `Lỗi: ${err.message}`, "FAILED");
+  }
+};
+
 const runDailyEvolution = async () => {
   await dailyHumanStudy();
   await processAuditIssues();
+  await evolveTaxonomyFromLogs();
 };
 
 module.exports = { runDailyEvolution };
