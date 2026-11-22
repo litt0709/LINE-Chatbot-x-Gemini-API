@@ -20,14 +20,14 @@ const TODAY_ISO = () => new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().
 
 // 10 kỹ năng nền tảng chất lượng cao (Bootstrap), mỗi prompt <= 70 từ, mạch lạc & tự nhiên
 const DEFAULT_SKILLS = {
-  tho_luc_bat: {
-    slug: "tho_luc_bat",
-    name: "Làm thơ Lục Bát",
+  lam_tho: {
+    slug: "lam_tho",
+    name: "Làm thơ Sáng tạo & Chuẩn niêm luật",
     category: "creative",
-    summary: "Sáng tác thơ lục bát chuẩn niêm luật, vần điệu tự nhiên, giàu cảm xúc.",
-    triggers: ["thơ lục bát", "làm thơ lục bát", "sáng tác lục bát", "bài thơ lục bát", "viết thơ lục bát"],
-    prompt: "Tuân thủ chuẩn niêm luật lục bát (6-8): tiếng 6 câu 6 vần tiếng 6 câu 8, tiếng 8 câu 8 vần tiếng 6 câu 6 tiếp theo; thanh điệu chuẩn 2-4-6 (B-T-B / B-T-B-B). Giữ tứ thơ tự nhiên, hóm hỉnh hoặc giàu hình ảnh đúng yêu cầu, không ép vần gượng gạo.",
-    version: 1,
+    summary: "Sáng tác thơ lục bát, thất ngôn, 4 chữ, thơ tự do chuẩn vần điệu, giàu hình ảnh và cảm xúc.",
+    triggers: ["làm thơ", "viết thơ", "sáng tác thơ", "bài thơ", "thơ lục bát", "làm bài thơ", "tặng bài thơ", "thơ vui"],
+    prompt: "Viết cô đọng 4-8 câu thuần tiếng Việt có dấu (tránh nhét từ tiếng Anh hay chữ số làm gãy nhịp/sai số tiếng). Mặc định thể lục bát nếu không yêu cầu thể khác: đếm chính xác từng tiếng (6 tiếng câu trên, 8 tiếng câu dưới); bắt buộc trùng âm vần chuẩn xác giữa tiếng 6 câu 6 với tiếng 6 câu 8, và tiếng 8 câu 8 với tiếng 6 câu 6 kế tiếp. Hình ảnh sắc nét, hóm hỉnh/tinh tế có cú chốt duyên, không viết thêm lời bình thừa ngoài bài thơ.",
+    version: 3,
     updatedAt: TODAY_ISO()
   },
   review_code: {

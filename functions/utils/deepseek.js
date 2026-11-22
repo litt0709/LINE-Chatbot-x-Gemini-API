@@ -268,8 +268,8 @@ const buildSystemPrompt = (webContext = "", groupContext = "", isGroup = false, 
   const now = `${pad(vnDate.getHours())}:${pad(vnDate.getMinutes())} (${dayName}) ${pad(vnDate.getDate())}/${pad(vnDate.getMonth() + 1)}/${vnDate.getFullYear()}`;
   const currentYear = vnDate.getFullYear();
   const brevityRule = (isGroup && !isSummaryRequest)
-    ? "TỐI GIẢN & SÚC TÍCH: VÀO ĐỀ LUÔN, trả lời TRỰC TIẾP. TỐI ĐA 10 CÂU cho mỗi lần trả lời. TUYỆT ĐỐI KHÔNG lặp lại câu hỏi của User. Mọi nội dung giải thích đều phải cực kỳ ngắn gọn."
-    : "TRỌNG TÂM & ĐÚNG ĐÍCH (LASER-FOCUSED): Trả lời THẲNG vào trọng tâm câu hỏi ngay từ câu đầu tiên. TUYỆT ĐỐI KHÔNG mở bài lan man, KHÔNG lặp lại câu hỏi, KHÔNG rào đón sáo rỗng. Với câu hỏi đơn giản hoặc ngắn: trả lời trực tiếp, cô đọng (2-5 câu). CHỈ phân tích sâu, bóc tách nhiều góc độ khi câu hỏi yêu cầu giải thích chi tiết, so sánh hoặc lập luận chiến lược. Trình bày rành mạch, ưu tiên độ chuẩn xác và tính thực tiễn.";
+    ? "TỐI GIẢN & TẬP TRUNG 1 Ý: CHỈ trả lời DUY NHẤT tin nhắn [NEW] hiện tại — lịch sử phía trên chỉ để hiểu ngữ cảnh, TUYỆT ĐỐI KHÔNG trả lời ké hay 'trả nợ' các tin nhắn cũ của người khác trong nhóm. VÀO ĐỀ LUÔN, tối đa 10 câu, CẤM lặp lại câu hỏi."
+    : "TRỌNG TÂM & TẬP TRUNG 1 Ý: CHỈ giải quyết đúng tin nhắn [NEW] hiện tại ngay từ câu đầu tiên (CẤM trả lời ké chủ đề cũ không liên quan). Không mở bài lan man, không lặp lại câu hỏi. Với câu hỏi ngắn: đáp cô đọng 2-5 câu; chỉ phân tích sâu khi được yêu cầu rõ.";
 
   let dynamicRules = "";
   if (mbtiProfile) {
