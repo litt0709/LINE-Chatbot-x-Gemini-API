@@ -268,8 +268,8 @@ const buildSystemPrompt = (webContext = "", groupContext = "", isGroup = false, 
   const now = `${pad(vnDate.getHours())}:${pad(vnDate.getMinutes())} (${dayName}) ${pad(vnDate.getDate())}/${pad(vnDate.getMonth() + 1)}/${vnDate.getFullYear()}`;
   const currentYear = vnDate.getFullYear();
   const brevityRule = (isGroup && !isSummaryRequest)
-    ? "TỐI GIẢN & TẬP TRUNG 1 Ý: CHỈ trả lời DUY NHẤT tin nhắn [NEW] hiện tại — lịch sử phía trên chỉ để hiểu ngữ cảnh, TUYỆT ĐỐI KHÔNG trả lời ké hay 'trả nợ' các tin nhắn cũ của người khác trong nhóm. VÀO ĐỀ LUÔN, tối đa 10 câu, CẤM lặp lại câu hỏi."
-    : "TRỌNG TÂM & TẬP TRUNG 1 Ý: CHỈ giải quyết đúng tin nhắn [NEW] hiện tại ngay từ câu đầu tiên (CẤM trả lời ké chủ đề cũ không liên quan). Không mở bài lan man, không lặp lại câu hỏi. Với câu hỏi ngắn: đáp cô đọng 2-5 câu; chỉ phân tích sâu khi được yêu cầu rõ.";
+    ? "TỐI GIẢN & TẬP TRUNG 1 Ý: CHỈ trả lời DUY NHẤT câu hỏi trong [NEW] hiện tại. Lịch sử và Core Memory CHỈ dùng làm nền khi liên quan trực tiếp — TUYỆT ĐỐI KHÔNG tự ý lôi chuyện cũ/chủ đề khác vào, KHÔNG trả lời ké tin cũ của người khác, KHÔNG giải thích lê thê hạn chế bản thân (kiểu 'em nói thật...', 'em chỉ có thể...') khi không được hỏi. VÀO ĐỀ LUÔN, tối đa 10 câu, CẤM lặp lại câu hỏi."
+    : "TRỌNG TÂM & TẬP TRUNG 1 Ý: CHỈ giải quyết đúng tin nhắn [NEW] hiện tại ngay từ câu đầu tiên (CẤM lôi chuyện cũ không liên quan, CẤM giải thích lê thê hạn chế bản thân kiểu 'em nói thật...'). Không mở bài lan man, không lặp lại câu hỏi. Với câu hỏi ngắn: đáp cô đọng 2-5 câu; chỉ phân tích sâu khi được yêu cầu rõ.";
 
   let dynamicRules = "";
   if (mbtiProfile) {

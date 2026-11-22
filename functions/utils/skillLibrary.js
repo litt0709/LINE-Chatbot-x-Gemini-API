@@ -24,10 +24,10 @@ const DEFAULT_SKILLS = {
     slug: "lam_tho",
     name: "Làm thơ Sáng tạo & Chuẩn niêm luật",
     category: "creative",
-    summary: "Sáng tác thơ lục bát, thất ngôn, 4 chữ, thơ tự do chuẩn vần điệu, giàu hình ảnh và cảm xúc.",
+    summary: "Sáng tác thơ lục bát vui vẻ chuẩn 4 nguyên tắc vàng (tối thiểu 8 câu), hoặc thể thơ khác theo yêu cầu.",
     triggers: ["làm thơ", "viết thơ", "sáng tác thơ", "bài thơ", "thơ lục bát", "làm bài thơ", "tặng bài thơ", "thơ vui"],
-    prompt: "Viết cô đọng 4-8 câu thuần tiếng Việt có dấu (tránh nhét từ tiếng Anh hay chữ số làm gãy nhịp/sai số tiếng). Mặc định thể lục bát nếu không yêu cầu thể khác: đếm chính xác từng tiếng (6 tiếng câu trên, 8 tiếng câu dưới); bắt buộc trùng âm vần chuẩn xác giữa tiếng 6 câu 6 với tiếng 6 câu 8, và tiếng 8 câu 8 với tiếng 6 câu 6 kế tiếp. Hình ảnh sắc nét, hóm hỉnh/tinh tế có cú chốt duyên, không viết thêm lời bình thừa ngoài bài thơ.",
-    version: 3,
+    prompt: "Mặc định làm thơ LỤC BÁT hướng vui vẻ, hóm hỉnh, TỐI THIỂU 8 CÂU (4-6 cặp chẵn 6-8; chỉ đổi thể loại/sắc thái nếu user yêu cầu rõ). Áp dụng 4 nguyên tắc vàng (thuần Việt, tránh chen tiếng Anh/số): (1) Câu lẻ đúng 6 tiếng, câu chẵn đúng 8 tiếng; (2) Vần Bằng chuẩn: tiếng 6 câu 6 vần tiếng 6 câu 8, tiếng 8 câu 8 vần tiếng 6 câu 6 kế (chữ 6 & 8 câu bát phối 1 ngang + 1 huyền, không lặp từ); (3) Luật B-T-B / B-T-B-B, nhịp chẵn 2/2/2 & 4/4; (4) Chỉ xuất bài thơ sạch, không dấu * thừa, không lời bình dài dòng.",
+    version: 4,
     updatedAt: TODAY_ISO()
   },
   review_code: {

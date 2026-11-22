@@ -216,6 +216,11 @@ Tài liệu này liệt kê danh sách các tính năng (features) của Bot, ba
   - `/skills_detail <tên skill>`: Tra cứu linh hoạt theo `slug` hoặc tên gần đúng, hiển thị chi tiết kèm toàn văn Custom Prompt từ database.
 - **Chuẩn hóa Nhãn Người Nói Đồng bộ từ `user_profiles` (`buildCanonicalSpeakerMap` trong [deepseek.js](file:///Users/snow/Documents/www/LINE-Chatbot/functions/utils/deepseek.js)):**
   - Mọi tin nhắn cũ/mới bơm vào `history` và `[NEW]` đều được ánh xạ động qua `senderId` → `user_profiles` (RAM cache 5 phút) thành nhãn chuẩn `[anh/chị + Tên thật mới nhất]` (0% hardcode). Triệt tiêu hoàn toàn tình trạng lẫn nick cũ (`Badpaybad`) với tên thật (`anh Du`) hay gọi tên trống không (`Lâm`).
+- **Khóa Trọng tâm Tuyệt đối & Nâng cấp Skill `lam_tho` v4 ([deepseek.js](file:///Users/snow/Documents/www/LINE-Chatbot/functions/utils/deepseek.js), [commands/index.js](file:///Users/snow/Documents/www/LINE-Chatbot/functions/commands/index.js), Firestore `bot_skills`):**
+  - Siết chặt `brevityRule`: chỉ trả lời duy nhất câu hỏi `[NEW]`, cấm lôi chuyện cũ từ `Core_Memory`/lịch sử không liên quan và cấm giải thích lê thê hạn chế bản thân (*"em nói thật..."*).
+  - Bổ sung Fast Path nhận diện câu hỏi tự nhiên về kỹ năng của bot (vd *"em có những skill gì"*) → trả thẳng từ Firestore `$0` token.
+  - Nâng cấp `lam_tho` v4 theo **4 nguyên tắc vàng Lục Bát**: mặc định lục bát vui vẻ, hóm hỉnh, **tối thiểu 8 câu** (4–6 cặp chẵn 6–8), vần Bằng chuẩn phối ngang–huyền, luật `B-T-B` / `B-T-B-B`, nhịp chẵn `2/2/2` & `4/4` (chỉ đổi thể loại/sắc thái khi user yêu cầu rõ).
+
 
 
 

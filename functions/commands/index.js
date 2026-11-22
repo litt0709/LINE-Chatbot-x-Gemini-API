@@ -45,9 +45,12 @@ async function handleCommand(prompt, context) {
     return handleForgetCommand(cleanPrompt);
   }
 
-  // 5. Lệnh quản lý Custom Skills (/skills, /skills_detail <tên>)
+  // 5. Lệnh quản lý Custom Skills (/skills, /skills_detail <tên>, hoặc hỏi tự nhiên về skills của bot)
   if (/^\/skills(?:_detail)?(?:@\w+)?(?:\s+.*)?$/i.test(cleanPrompt)) {
     return await handleSkillsCommand(cleanPrompt, context);
+  }
+  if (/(?:em|bot|annie).*(?:có|học được).*(?:những\s+)?(?:skill|kỹ năng)\s*(?:gì|nào)|(?:danh sách|liệt kê|xem)\s*(?:các\s+)?(?:skill|kỹ năng)/i.test(cleanPrompt)) {
+    return await handleSkillsCommand("/skills", context);
   }
 
   return null;
