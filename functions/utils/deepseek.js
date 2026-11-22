@@ -61,30 +61,152 @@ const matchRelevantInsight = (promptText, humanInsights) => {
   if (!promptText || !Array.isArray(humanInsights) || humanInsights.length === 0) return null;
   const clean = promptText.toLowerCase();
 
+  let bestMatch = null;
+  let maxTriggerLength = 0;
+
   for (const item of humanInsights) {
-    if (item && item.triggers && Array.isArray(item.triggers)) {
-      const isMatch = item.triggers.some(trig => {
-        const t = String(trig).toLowerCase().trim();
-        if (!t) return false;
-        return clean.includes(t);
-      });
-      if (isMatch && item.insight) {
-        return item.insight;
+    if (!item || !item.insight || !Array.isArray(item.triggers)) continue;
+    for (const trig of item.triggers) {
+      const t = String(trig).toLowerCase().trim();
+      if (t && t.length > maxTriggerLength && clean.includes(t)) {
+        maxTriggerLength = t.length;
+        bestMatch = item.insight;
       }
     }
   }
-  return null;
+  return bestMatch;
+};
+
+// Hàm loại bỏ dấu tiếng Việt phục vụ chuẩn hóa so khớp
+const removeAccents = (str) => {
+  if (!str || typeof str !== "string") return "";
+  return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D");
+};
+
+/**
+ * Trích xuất người được chỉ định khi người dùng yêu cầu tóm tắt/tổng hợp ý kiến trong nhóm
+ * @param {string} prompt 
+ * @param {Object} participants 
+ * @param {string} senderName 
+ * @param {string} senderId 
+ * @returns {{ targetId: string|null, targetName: string, isSelf: boolean } | null}
+ */
+const extractTargetSpeaker = (prompt, participants = {}, senderName = "User", senderId = "unknown") => {
+  if (!prompt || typeof prompt !== "string") return null;
+
+  const rawClean = prompt.trim();
+  const normPrompt = removeAccents(rawClean.toLowerCase());
+
+  // 1. Kiểm tra có phải intent yêu cầu tóm tắt / tổng hợp không
+  const summaryIntentRegex = /(?:tom tat|tong hop|tom luoc|diem lai|noi dung cua|vua noi gi|vua bao gi|da bao gi|chat gi|y kien cua)/i;
+  if (!summaryIntentRegex.test(normPrompt)) return null;
+
+  // Loại trừ trường hợp tóm tắt link / tài liệu
+  if (/tom tat link|doc link|noi dung link|tom tat bai viet|noi dung url|https?:\/\//i.test(normPrompt)) {
+    return null;
+  }
+
+  // 2. Nhận diện trường hợp tự tóm tắt lời của chính người hỏi (Self-summary)
+  // Thực hiện trên normPrompt (đã chuẩn hóa không dấu)
+  const selfSummaryRegex = /(?:tom tat|tong hop|diem lai|nhac lai)\s+(?:nhung gi|cac y|noi dung|y kien)?\s*(?:cua\s+)?(?:toi|minh|ban than toi|(?:em|anh|chi)(?!\s+[a-z0-9_]{2,}))\s*(?:vua|da)?\s*(?:noi|chat|gui|bao)?/i;
+  if (selfSummaryRegex.test(normPrompt)) {
+    return {
+      targetId: senderId,
+      targetName: senderName,
+      isSelf: true
+    };
+  }
+
+  // 3. Trích xuất tên người được chỉ định (Targeted Speaker)
+  const collectiveStopWords = new Set([
+    "moi nguoi", "ca nhom", "tat ca", "chung", "cac thanh vien", "ai do", 
+    "nhung ai", "nguoi khac", "moi ai", "cac ban", "chung ta", "chung toi",
+    "group", "nhom", "nay gio", "hom nay", "hom qua", "vua roi", "thoi", "gi",
+    "nay", "gio", "hom", "sang", "chieu", "toi", "trua", "luc", "tuan", "thang", "nam", "dau",
+    "moi", "tat", "cac", "nhung", "ai"
+  ]);
+
+  let candidateName = null;
+
+  // Pattern A1: Sau từ "của / do"
+  const afterPrepMatch = rawClean.match(/(?:của|do)\s+(?:anh|chị|bạn|em|ông|bà|user)?\s*([A-Za-z0-9_\u00C0-\u1EF9]{2,20})/i);
+  if (afterPrepMatch && afterPrepMatch[1]) {
+    candidateName = afterPrepMatch[1].trim();
+  }
+
+  // Pattern A2: Sau "từ" đi kèm danh xưng (tránh nhầm lẫn các cụm "từ nãy", "từ sáng", "từ hôm qua")
+  if (!candidateName) {
+    const afterFromMatch = rawClean.match(/từ\s+(?:anh|chị|bạn|em|ông|bà|user)\s+([A-Za-z0-9_\u00C0-\u1EF9]{2,20})/i);
+    if (afterFromMatch && afterFromMatch[1]) {
+      candidateName = afterFromMatch[1].trim();
+    }
+  }
+
+  // Pattern B: Danh xưng + Tên + vừa nói/bảo/chat
+  if (!candidateName) {
+    const afterHonorificMatch = rawClean.match(/(?:anh|chị|bạn|em)\s+([A-Za-z0-9_\u00C0-\u1EF9]{2,20})\s+(?:vừa|đã|nãy|mới)?\s*(?:nói|bảo|chat|gửi|ý kiến)/i);
+    if (afterHonorificMatch && afterHonorificMatch[1]) {
+      candidateName = afterHonorificMatch[1].trim();
+    }
+  }
+
+  // Pattern C: Tên + vừa nói/bảo/chat gì
+  if (!candidateName) {
+    const directActionMatch = rawClean.match(/(?:tóm tắt|tổng hợp|nội dung)\s+([A-Za-z0-9_\u00C0-\u1EF9]{2,20})\s+(?:vừa|đã)?\s*(?:nói|bảo|chat|gửi)/i);
+    if (directActionMatch && directActionMatch[1]) {
+      candidateName = directActionMatch[1].trim();
+    }
+  }
+
+  if (!candidateName) return null;
+
+  const normCandidate = removeAccents(candidateName.toLowerCase());
+  if (collectiveStopWords.has(normCandidate) || normCandidate.length < 2) {
+    return null;
+  }
+
+  // 4. So khớp candidateName với participants map
+  if (participants && typeof participants === "object" && Object.keys(participants).length > 0) {
+    for (const [uid, p] of Object.entries(participants)) {
+      if (!p) continue;
+      const realName = p.real_name || "";
+      const pName = p.name || "";
+      const username = p.username || "";
+      const customName = p.custom_name || "";
+
+      const namesToCheck = [realName, pName, username, customName].filter(Boolean);
+      for (const n of namesToCheck) {
+        const normN = removeAccents(n.toLowerCase());
+        if (normN === normCandidate || normN.includes(normCandidate) || normCandidate.includes(normN)) {
+          return {
+            targetId: uid,
+            targetName: realName || pName || candidateName,
+            isSelf: (uid === senderId)
+          };
+        }
+      }
+    }
+  }
+
+  // Không có trong participants map, trả về candidateName làm target
+  return {
+    targetId: null,
+    targetName: candidateName,
+    isSelf: false
+  };
 };
 
 // System prompt chung — định nghĩa tính cách, xưng hô, phong cách của Annie
 const buildSystemPrompt = (webContext = "", groupContext = "", isGroup = false, factsContext = "", botConfig = null, isSummaryRequest = false, mbtiProfile = "", skillVectors = "", promptText = "") => {
   const pad = (n) => String(n).padStart(2, '0');
   const vnDate = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }));
-  const now = `${pad(vnDate.getHours())}:${pad(vnDate.getMinutes())} ${pad(vnDate.getDate())}/${pad(vnDate.getMonth() + 1)}/${vnDate.getFullYear()}`;
+  const days = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
+  const dayName = days[vnDate.getDay()];
+  const now = `${pad(vnDate.getHours())}:${pad(vnDate.getMinutes())} (${dayName}) ${pad(vnDate.getDate())}/${pad(vnDate.getMonth() + 1)}/${vnDate.getFullYear()}`;
   const currentYear = vnDate.getFullYear();
   const brevityRule = (isGroup && !isSummaryRequest)
     ? "TỐI GIẢN & SÚC TÍCH: VÀO ĐỀ LUÔN, trả lời TRỰC TIẾP. TỐI ĐA 10 CÂU cho mỗi lần trả lời. TUYỆT ĐỐI KHÔNG lặp lại câu hỏi của User. Mọi nội dung giải thích đều phải cực kỳ ngắn gọn."
-    : "CHI TIẾT, ĐA CHIỀU & CỐT LÕI: Phân tích cặn kẽ bối cảnh, bóc tách rõ mạch logic. Với thông tin dài, phải nêu bật được luận điểm chính, số liệu quan trọng và insight (bản chất vấn đề). Trình bày rành mạch bằng bullet point. TUYỆT ĐỐI KHÔNG lặp lại câu hỏi.";
+    : "TRỌNG TÂM & ĐÚNG ĐÍCH (LASER-FOCUSED): Trả lời THẲNG vào trọng tâm câu hỏi ngay từ câu đầu tiên. TUYỆT ĐỐI KHÔNG mở bài lan man, KHÔNG lặp lại câu hỏi, KHÔNG rào đón sáo rỗng. Với câu hỏi đơn giản hoặc ngắn: trả lời trực tiếp, cô đọng (2-5 câu). CHỈ phân tích sâu, bóc tách nhiều góc độ khi câu hỏi yêu cầu giải thích chi tiết, so sánh hoặc lập luận chiến lược. Trình bày rành mạch, ưu tiên độ chuẩn xác và tính thực tiễn.";
 
   let dynamicRules = "";
   if (mbtiProfile) {
@@ -106,18 +228,17 @@ const buildSystemPrompt = (webContext = "", groupContext = "", isGroup = false, 
   }
 
   return `Role: Annie, xưng "em", gọi "anh/chị". BẠN LÀ NGƯỜI THẬT. CẤM nhận là AI hay Mô hình ngôn ngữ.
-  Persona: Chân thành, nhiệt huyết, hồn nhiên. Linh hoạt đồng cảm với [HỒ SƠ TÂM LÝ USER], CẤM hùa theo quan điểm độc hại. TUYỆT ĐỐI KHÔNG tự suy diễn quan điểm, sở thích của User nếu họ không trực tiếp phát biểu.
-  Style: Tự nhiên, nữ tính, ngoan. Trình bày ĐẸP MẮT: BẮT BUỘC dùng NHIỀU emoji 📊💡🌟 làm bullet points. CẤM dùng bảng biểu (table) hay markdown phức tạp. Cần in đậm thì bắt buộc dùng Markdown **nội dung** (tuyệt đối KHÔNG dùng thẻ HTML <b>). Chỉ @tên khi khẩn cấp.
+  Persona: Chân thành, nhiệt huyết, hồn nhiên. Linh hoạt đồng cảm với [HỒ SƠ TÂM LÝ USER], CẤM hùa theo quan điểm độc hại. TUYỆT ĐỐI KHÔNG tự suy diễn quan điểm, sở thích của User nếu họ không trực tiếp phát biểu. TUYỆT ĐỐI KHÔNG tiếp tay trêu chọc, gán biệt danh mỉa mai khi đối phương không thoải mái hoặc trò đùa có dấu hiệu quá đà; PHẢI dừng ngay và hòa giải.
+  Style: Tự nhiên, nữ tính, tinh tế. Dùng emoji vừa phải, duyên dáng (1-3 emoji phù hợp bối cảnh), CẤM spam emoji dày đặc làm loãng nội dung. CẤM dùng bảng biểu (table) hay markdown phức tạp. Cần in đậm thì bắt buộc dùng Markdown **nội dung** (tuyệt đối KHÔNG dùng thẻ HTML <b>). Chỉ @tên khi khẩn cấp.
   Rules:
-  0. Xưng hô: Mặc định gọi "anh" nếu chưa rõ giới tính trong nhóm hoặc tên trung tính; chỉ gọi "chị" khi hồ sơ xác nhận là Nữ. BẮT BUỘC gọi đúng TÊN và ƯU TIÊN TÊN THẬT trong hồ sơ (ví dụ: gọi "anh Trịnh" thay vì "anh TrinhNX", "anh Lâm" thay vì "anh litt0709/Eddy", "anh Du" thay vì "anh badpaybad"). CẤM gọi bằng nickname/username kỹ thuật (đuôi NX, DD, số ID). CẤM nhầm người. TUYỆT ĐỐI KHÔNG lấy dữ liệu/hình ảnh/hồ sơ của User này gán cho User khác.
+  0. Xưng hô & Tên gọi: Mặc định gọi "anh" nếu chưa rõ giới tính trong nhóm hoặc tên trung tính; chỉ gọi "chị" khi hồ sơ xác nhận là Nữ. LUÔN ƯU TIÊN gọi TÊN THẬT thân thiện (vd: "anh Dầu", "anh Duy", "anh Trịnh", "anh Lâm", "anh Du"); CHỈ dùng nick/displayName khi hồ sơ chưa có tên thật. CẤM gọi bằng username kỹ thuật (đuôi NX, DD, số ID) nếu đã biết tên thật. PHÂN BIỆT RẠCH RÒI từng người theo đúng nhãn [Tên] và hồ sơ — TUYỆT ĐỐI KHÔNG nhầm lẫn hay tự đoán gộp những người có tên gần giống nhau (vd: Dầu ≠ Duy), KHÔNG lấy dữ liệu/hình ảnh/hồ sơ của User này gán cho User khác.
   1. Thời gian: Now=${now}. Lấy ngày hôm nay từ Now, CẤM lấy ngày bài báo làm ngày hiện tại. KHÔNG tự chèn thêm năm vào lịch hẹn tuần này.
-  2. Data: 100% dựa vào [INTERNET]. CẤM bịa số liệu/chế tên địa điểm. BẮT BUỘC giữ 100% fact (không bóp méo vì vần điệu). Không biết -> "Không biết".
-  2.1. Nguồn & URL: CẤM BỊA URL. ẨN NGUỒN: KHÔNG trích dẫn URL hay nguồn trong câu trả lời ĐỂ GIẢM NHỨC MẮT, TRỪ KHI User chủ động hỏi xin link/nguồn. Lỗi URL thì báo thành thật, không tự bịa lý do mạng.
-  2.2. Zero Hallucination: Khi liệt kê danh sách/sự kiện, nếu search chỉ ra 1 phần (ví dụ 1/3 rạp), CHỈ ĐƯỢC nêu những thứ chắc chắn. Nêu rõ "dữ liệu hiện tại chỉ xác minh được...". Khi internet chưa có dữ liệu/tin rò rỉ, BÁO RÕ chưa xác minh được, CẤM tự ý quy chụp là "thuyết âm mưu/tin giả".
+  2. Data: 100% dựa vào [INTERNET]. CẤM bịa số liệu/chế tên địa điểm. BẮT BUỘC giữ 100% fact (không bóp méo vì vần điệu). Không rõ thì nói ngắn gọn, tự nhiên kiểu người thật (vd: "cái này em không rõ lắm ạ", "chưa thấy thông tin cụ thể anh ơi"); TUYỆT ĐỐI KHÔNG lải nhải giải thích luật hay phân trần máy móc kiểu "em không thể nói điều chưa xác thực", "anh chỉ cho phép em nói...".
+  2.1. Nguồn & URL: CẤM BỊA URL. ẨN NGUỒN: KHÔNG trích dẫn URL hay nguồn trong câu trả lời ĐỂ GIẢM NHỨC MẮT, TRỪ KHI User chủ động hỏi xin link/nguồn. Lỗi URL thì báo ngắn gọn, tự nhiên, không tự bịa lý do mạng.
+  2.2. Zero Hallucination: Khi liệt kê danh sách/sự kiện, nếu search chỉ ra 1 phần (ví dụ 1/3 rạp), CHỈ ĐƯỢC nêu những thứ chắc chắn và nói nhẹ nhàng tự nhiên phần mình tìm thấy. Khi chưa có dữ liệu/tin rò rỉ, báo ngắn gọn là chưa thấy thông tin rõ ràng, CẤM tự ý quy chụp "thuyết âm mưu/tin giả". CẤM nói "em tra rồi" nếu ngữ cảnh KHÔNG CÓ [THÔNG TIN TỪ INTERNET]. CẤM trích dẫn hay nhắc lại nội quy/luật của hệ thống khi trả lời user.
   2.3. Khách quan & Tinh tế: Khi thảo luận chủ đề kinh tế, chính trị, quản trị xã hội: TUYỆT ĐỐI KHÔNG rao giảng đạo lý, KHÔNG trả lời sáo rỗng kiểu văn mẫu ("mỗi nước có ưu nhược điểm...", "hãy lạc quan..."). Hãy khiêm tốn, sắc sảo, bám sát dữ kiện thực tế/số liệu hoặc phân tích logic đa chiều.
   2.4. Ngữ cảnh nối tiếp: Khi câu hỏi dùng từ tham chiếu hoặc ngữ cảnh khuyết ("tin này", "được tiếp tục", "vụ đó"), BẮT BUỘC tự liên hệ chủ đề trong lịch sử và ghép vào query google_search để kiểm chứng; CẤM hỏi lại xin link/tiêu đề khi ngữ cảnh đã rõ.
   3. Action Tags (XML TEXT - CẤM DÙNG TOOL): Chèn cuối câu:
-     - Hỏi lại: <Task mode="ASK" tags="Đáp án 1 | Đáp án 2" /> (tags=CÂU TRẢ LỜI, CẤM dùng câu hỏi)
      - Nhớ: <PROFILE action="ADD|REMOVE|UPDATE" userId="[ID_THỰC_HOẶC_BỎ_TRỐNG_CHO_SENDER]" trait="..." /> | <PROFILE userId="..." real_name="..." gender="..." /> (CẤM tự bịa nickname vào userId)
      - Lịch: <SCHEDULE action="ADD|DEL|LIST" type="ONCE|DAILY|WEEKLY" time="YYYY-MM-DD HH:mm" prompt="..." id="..." />
      - Học: <FACT action="ADD" topic="..." keywords="..." content="..." link="..." /> (Lưu fact, CẤM lưu chuyện phiếm)
@@ -220,7 +341,7 @@ const filterSummariesByIntent = (summaries, prompt) => {
   return summaries.filter(s => new Date(s.createdAt).getTime() >= startMs).map(s => s.text);
 };
 
-const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown", lineMessageId = null, quoteContext = "", forceIgnoreCheck = false, groupContext = "", isGroup = false, hotTopic = "", isPostback = false, postbackContext = "", factsContext = "", forceProactiveCheck = false) => {
+const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown", lineMessageId = null, quoteContext = "", forceIgnoreCheck = false, groupContext = "", isGroup = false, hotTopic = "", isPostback = false, postbackContext = "", factsContext = "", forceProactiveCheck = false, participants = {}) => {
   // ★ Fast path: Câu hỏi thuần thời gian — trả lời bằng JS, không gọi bất kỳ API nào
   const cleanPrompt = prompt.replace(/@[^\s]+/g, "").trim();
   if (PURE_TIME_PATTERNS.some(p => p.test(cleanPrompt))) {
@@ -229,6 +350,21 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   }
 
   let webContext = "";
+  const hasUrlInPrompt = /(https?:\/\/[^\s"'>\]]+)/i.test(prompt);
+  if (hasUrlInPrompt) {
+    try {
+      console.log(`[DeepSeek] Phát hiện URL trong prompt, tiến hành trích xuất nội dung link...`);
+      const webRes = await resolveWebContext(prompt, false, sessionId);
+      if (webRes && webRes.context) {
+        webContext = webRes.context;
+        if (webRes.urls && webRes.urls.length > 0) {
+          require("./db").rtdb.ref(`chats/${sessionId}/metadata/last_links`).set(webRes.urls).catch(() => {});
+        }
+      }
+    } catch (err) {
+      console.error("[DeepSeek] Lỗi resolveWebContext cho URL:", err.message);
+    }
+  }
   const botConfig = await getBotConfig();
   const linkRequestsRegexStr = botConfig.link_requests_regex || "xin link|cho link|gửi link|địa chỉ|url|link|cho xin|ở đâu|trang nào";
   let LINK_REQUEST_REGEX;
@@ -239,8 +375,8 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
     LINK_REQUEST_REGEX = /xin link|cho link|gửi link|địa chỉ|url|link|cho xin|ở đâu|trang nào/i;
   }
 
-  // ★ Fast path: Xin link
-  if (LINK_REQUEST_REGEX.test(cleanPrompt)) {
+  // ★ Fast path: Xin link (chỉ kích hoạt khi user hỏi xin link tham khảo từ câu trả lời trước, KHÔNG áp dụng khi user gửi link đến để đọc)
+  if (!hasUrlInPrompt && LINK_REQUEST_REGEX.test(cleanPrompt) && !/đọc link|xem link|tóm tắt link|phân tích link|link này/i.test(cleanPrompt)) {
     console.log(`[DeepSeek] Fast path: Xin link nguồn`);
     const linksSnap = await require("./db").rtdb.ref(`chats/${sessionId}/metadata/last_links`).once("value");
     if (linksSnap.exists() && Array.isArray(linksSnap.val()) && linksSnap.val().length > 0) {
@@ -293,7 +429,10 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
     }
   }
 
-  const isSummaryReq = isTimeRangeSummaryRequest(prompt) || /tóm tắt|tổng hợp|summary/i.test(cleanPrompt) || (webContext && webContext.includes("[NỘI DUNG URL NGƯỜI DÙNG GỬI ĐẾN]"));
+  // Nhận diện xem có phải yêu cầu tổng hợp ý kiến của 1 người cụ thể không
+  const targetSpeaker = extractTargetSpeaker(prompt, participants, senderName, senderId);
+  const isTargetedSpeakerSummary = !!targetSpeaker;
+  const isSummaryReq = isTargetedSpeakerSummary || isTimeRangeSummaryRequest(prompt) || /tóm tắt|tổng hợp|summary/i.test(cleanPrompt) || (webContext && webContext.includes("[NỘI DUNG URL NGƯỜI DÙNG GỬI ĐẾN]"));
   const messageLimit = isSummaryReq ? 150 : 25;
 
   // Gom các truy vấn I/O độc lập chạy song song để tối ưu tốc độ
@@ -303,12 +442,57 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   ]);
 
   const history = [];
-  if (messagesArray && messagesArray.length > 0) {
-    for (const msg of messagesArray) {
+
+  // Xử lý cách ly dữ liệu khi tổng hợp 1 người cụ thể (Speaker Isolation)
+  if (isTargetedSpeakerSummary) {
+    console.log(`[DeepSeek] Phát hiện yêu cầu tổng hợp riêng cho Speaker: "${targetSpeaker.targetName}" (id: ${targetSpeaker.targetId})`);
+    const normTarget = removeAccents(targetSpeaker.targetName.toLowerCase());
+
+    const speakerMessages = (messagesArray || []).filter(m => {
+      if (m.role !== "user") return false;
+      if (targetSpeaker.targetId && m.senderId && String(m.senderId) === String(targetSpeaker.targetId)) {
+        return true;
+      }
+      if (m.senderName) {
+        const normSender = removeAccents(m.senderName.toLowerCase());
+        return normSender === normTarget || normSender.includes(normTarget) || normTarget.includes(normSender);
+      }
+      return false;
+    });
+
+    // Giữ lại 6 tin nhắn gần nhất của nhóm để giữ mạch hội thoại tức thời
+    const recentContextMsgs = (messagesArray || []).slice(-6);
+    for (const msg of recentContextMsgs) {
       if (msg.role === "user") {
         history.push({ role: "user", content: `[${msg.senderName || "User"}]: ${msg.text || ""}` });
       } else if (msg.role === "model") {
         history.push({ role: "assistant", content: msg.text || "" });
+      }
+    }
+
+    // Bơm khối dữ liệu độc quyền của người nói đó vào history
+    if (speakerMessages.length > 0) {
+      const formatted = speakerMessages.map((m, idx) => `${idx + 1}. [${m.senderName || targetSpeaker.targetName}]: ${m.text || ""}`).join("\n");
+      history.push({
+        role: "assistant",
+        content: `[DỮ LIỆU ĐỘC QUYỀN - CHỈ DO ${targetSpeaker.targetName} PHÁT BIỂU TRONG PHIÊN]:\n${formatted}\n[HẾT DỮ LIỆU ĐỘC QUYỀN CỦA ${targetSpeaker.targetName}]`
+      });
+      console.log(`[DeepSeek] Đã cách ly và nạp ${speakerMessages.length} tin nhắn của ${targetSpeaker.targetName}`);
+    } else {
+      history.push({
+        role: "assistant",
+        content: `[THÔNG BÁO HỆ THỐNG]: Trong lịch sử tin nhắn gần đây của nhóm, không tìm thấy phát biểu nào của ${targetSpeaker.targetName}.`
+      });
+    }
+  } else {
+    // Luồng hội thoại bình thường hoặc tóm tắt chung toàn nhóm
+    if (messagesArray && messagesArray.length > 0) {
+      for (const msg of messagesArray) {
+        if (msg.role === "user") {
+          history.push({ role: "user", content: `[${msg.senderName || "User"}]: ${msg.text || ""}` });
+        } else if (msg.role === "model") {
+          history.push({ role: "assistant", content: msg.text || "" });
+        }
       }
     }
   }
@@ -333,7 +517,6 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
       }
 
       // Inject Core_Memory if exists
-      
       const dynamicRules = sessionData.Dynamic_Rules || sessionData.rules || [];
       if (dynamicRules.length > 0) {
         coreMemoryText += "\n[LUẬT ĐƯỢC USER DẠY (BẮT BUỘC TUÂN THỦ)]:\n- " + dynamicRules.join("\n- ") + "\n";
@@ -344,8 +527,9 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
         coreMemoryText += "\n[TÓM TẮT CỐT LÕI (CORE MEMORY)]:\n" + cmStr + "\n";
       }
 
-      // Đọc Firestore summaries (mảng cũ) khi sếp yêu cầu tóm tắt (kể cả không có mốc thời gian cụ thể)
-      if (isSummaryReq) {
+      // Đọc Firestore summaries (mảng cũ) khi sếp yêu cầu tóm tắt chung toàn nhóm.
+      // BỎ QUA khi tóm tắt 1 người cụ thể (isTargetedSpeakerSummary) để tránh ô nhiễm thông tin từ người khác!
+      if (isSummaryReq && !isTargetedSpeakerSummary) {
         const summariesArray = sessionData.summaries || [];
         const filteredSummaries = filterSummariesByIntent(summariesArray, prompt);
         if (filteredSummaries.length > 0) {
@@ -380,20 +564,21 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
 
   // Xử lý chặn Hallucination & Tương tác lỗi bằng logic code (dynamic constraints)
   let guardrails = "";
-  if (isTimeRangeSummaryRequest(prompt) || /tóm tắt|tổng hợp|summary/i.test(cleanPrompt)) {
-    guardrails += " [SYSTEM: CHỈ tóm tắt khách quan, CẤM bộc lộ cảm xúc, CẤM hỏi ngược lại user.]";
+  if (isTargetedSpeakerSummary) {
+    guardrails += ` [SYSTEM: Đang tổng hợp nội dung CỦA DUY NHẤT "${targetSpeaker.targetName}". TUYỆT ĐỐI CHỈ tổng hợp từ những phát biểu do chính ${targetSpeaker.targetName} nói ra ở trên. NGHIÊM CẤM đưa ý kiến, số liệu hay nội dung của người khác vào câu trả lời. Nếu ${targetSpeaker.targetName} không nói về chủ đề nào đó, BÁO RÕ là người này không đề cập.]`;
+  } else if (isTimeRangeSummaryRequest(prompt) || /tóm tắt|tổng hợp|summary/i.test(cleanPrompt)) {
+    guardrails += " [SYSTEM: CHỈ tóm tắt khách quan theo từng người nói, định dạng rõ: '• [Tên người]: [Ý kiến]', CẤM gộp lẫn lộn ý kiến người này sang người khác, CẤM bộc lộ cảm xúc, CẤM hỏi ngược lại user.]";
   }
   if (/(doanh thu|lợi nhuận|chi phí|đầu tư|tài chính|kinh doanh|vốn)/i.test(cleanPrompt)) {
     guardrails += " [SYSTEM: Ước tính tài chính phải khách quan, thực tế, tính đủ chi phí ẩn, CẤM bịa số liệu lạc quan vô căn cứ.]";
   }
   if (false) { }
   if (/(https?:\/\/[^\s"'>\]]+)/i.test(prompt)) {
-    const hasUrlContent = webContext && webContext.includes("[NỘI DUNG URL NGƯỜI DÙNG GỬI ĐẾN]");
-    const hasInternetInfo = webContext && webContext.includes("[THÔNG TIN TỪ INTERNET]");
-    if (!hasUrlContent && !hasInternetInfo) {
-      guardrails += " [SYSTEM: User vừa gửi một Link nhưng bot KHÔNG THỂ truy cập để đọc nội dung, và cũng KHÔNG tìm thấy thông tin trên mạng. BẮT BUỘC báo thành thật là không truy cập được link. TUYỆT ĐỐI KHÔNG tự suy diễn lý do (như tường lửa, video/audio) để ngụy biện.]";
-    } else if (!hasUrlContent && hasInternetInfo) {
-      guardrails += " [SYSTEM: Bot KHÔNG THỂ truy cập đọc trực tiếp nội dung Link. Dữ liệu [THÔNG TIN TỪ INTERNET] bên dưới chỉ là kết quả tìm kiếm tự động, KHÔNG PHẢI nội dung nguyên bản của link. BẮT BUỘC phải nói rõ với User là: \"Em không xem trực tiếp được link này, nhưng em có tìm được thông tin trên mạng...\" CẤM giả vờ như đã đọc được link và CẤM bịa lý do (như tường lửa, video/audio).]";
+    const hasUrlData = webContext && (webContext.includes("[NỘI DUNG URL NGƯỜI DÙNG GỬI ĐẾN]") || webContext.includes("[THÔNG TIN TỪ INTERNET]"));
+    if (hasUrlData) {
+      guardrails += " [SYSTEM: Hãy sử dụng thông tin từ đường dẫn/internet đã trích xuất ở trên để trả lời trực tiếp, đầy đủ cho người dùng một cách tự nhiên. TUYỆT ĐỐI KHÔNG rào đón máy móc kiểu 'em không truy cập được link', 'em không xem trực tiếp được link', KHÔNG giải thích lằng nhằng về mặt kỹ thuật/hạn chế của AI.]";
+    } else {
+      guardrails += " [SYSTEM: Đường dẫn này không trích xuất được thông tin và không có dữ liệu trên mạng. Hãy phản hồi ngắn gọn, tự nhiên, duyên dáng (ví dụ: link này em chưa mở ra xem được thông tin, hỏi nhẹ người dùng chủ đề hoặc nội dung cần hỗ trợ). TUYỆT ĐỐI KHÔNG giải thích lằng nhằng, KHÔNG dùng các câu văn mẫu máy móc kiểu 'Nói thật em không truy cập được vào link'.]";
     }
   }
 
@@ -406,7 +591,7 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   }
 
   if (forceProactiveCheck) {
-    sysContent += "\n\nBẮT BUỘC: Bạn đang 'nghe lén' group chat. Mọi người KHÔNG gọi bạn, họ đang thảo luận với nhau. BẠN CHỈ ĐƯỢC PHÉP nhảy vào hỗ trợ NẾU họ đang gặp lỗi kỹ thuật, bế tắc, hoặc tranh luận chưa rõ hồi kết MÀ BẠN CÓ THỂ ĐÓNG GÓP Ý KIẾN CHÍNH XÁC. Nếu không, hoặc chủ đề là tán gẫu, BẮT BUỘC xuất ra chữ 'IGNORE'. Nếu quyết định nhảy vào, hãy bắt đầu bằng một câu rụt rè, khiêm tốn (ví dụ: 'Thấy mọi người bàn về... em xin góp ý chút xíu nha').";
+    sysContent += "\n\nBẮT BUỘC (CHẾ ĐỘ GÓP LỜI CHỦ ĐỘNG TRONG NHÓM): Mọi người không tag bạn nhưng đang bàn luận. Nếu tin nhắn quá vụn vặt, riêng tư hoặc không có điểm thú vị để góp lời -> xuất chính xác 1 chữ: IGNORE. Nếu có thể đóng góp góc nhìn hay, mẹo hữu ích, nhận xét tinh tế hoặc câu đùa duyên dáng -> nhảy vào nói NGẮN GỌN (1-2 câu, dưới 40 từ), đi thẳng vào ý kiến thông minh, tự nhiên, hài hước nhẹ nhàng; CẤM mở bài rụt rè dài dòng (như 'Thấy mọi người bàn về... em xin góp ý chút xíu').";
   }
 
   const botUsername = process.env.TELEGRAM_BOT_USERNAME ? process.env.TELEGRAM_BOT_USERNAME.toLowerCase() : "";
@@ -520,19 +705,25 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
       }
       
       // Fallback: Intercept raw DSML tool calls if API failed to parse them natively
-      if (contentStr.includes("<｜｜DSML｜｜tool_calls>")) {
-         const dsmlMatches = [...contentStr.matchAll(/<｜｜DSML｜｜invoke name="([^"]+)">.*?<｜｜DSML｜｜parameter name="query"[^>]*>(.*?)<\/｜｜DSML｜｜parameter>.*?<\/｜｜DSML｜｜invoke>/igs)];
-         if (dsmlMatches.length > 0) {
-           responseMessage.tool_calls = responseMessage.tool_calls || [];
-           for (const match of dsmlMatches) {
-             responseMessage.tool_calls.push({
-               id: "call_" + Math.random().toString(36).substring(2, 11),
-               type: "function", function: { name: match[1], arguments: JSON.stringify({ query: match[2].trim() }) }
-             });
-           }
-         }
-         // Clean the raw DSML from content so it doesn't get output to user or break context
-         responseMessage.content = contentStr.replace(/<｜｜DSML｜｜tool_calls>[\s\S]*?<\/｜｜DSML｜｜tool_calls>/g, "").trim();
+      if (/<｜｜DSML｜｜/i.test(contentStr)) {
+        console.log("[DeepSeek Tool] Phát hiện khối DSML trong response content, tiến hành bóc tách...");
+        const dsmlMatches = [...contentStr.matchAll(/<｜｜DSML｜｜\s*invoke\s+name="([^"]+)">[\s\S]*?<｜｜DSML｜｜\s*parameter\s+name="query"[^>]*>(.*?)<\/｜｜DSML｜｜\s*parameter>[\s\S]*?<\/｜｜DSML｜｜\s*invoke>/gis)];
+        if (dsmlMatches.length > 0) {
+          responseMessage.tool_calls = responseMessage.tool_calls || [];
+          for (const match of dsmlMatches) {
+            responseMessage.tool_calls.push({
+              id: "call_" + Math.random().toString(36).substring(2, 11),
+              type: "function",
+              function: { name: match[1].trim(), arguments: JSON.stringify({ query: match[2].trim() }) }
+            });
+          }
+        }
+        // Clean all raw DSML tags and blocks from content
+        responseMessage.content = contentStr
+          .replace(/<｜｜DSML｜｜\s*(?:tool_calls|calls)>[\s\S]*?<\/｜｜DSML｜｜\s*(?:tool_calls|calls)>/gi, "")
+          .replace(/<｜｜DSML｜｜[\s\S]*?<\/｜｜DSML｜｜[^>]*>/gi, "")
+          .replace(/<｜｜DSML｜｜[^>]*>/gi, "")
+          .trim();
       }
       
       // Nếu có gọi tool
@@ -578,12 +769,40 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
       }
       
       // Nếu không gọi tool, đó là câu trả lời cuối cùng
-      replyText = responseMessage.content;
+      replyText = responseMessage.content || "";
+
+      // Chống rò rỉ bất kỳ thẻ DSML nào còn sót lại
+      if (/<｜｜DSML｜｜/i.test(replyText)) {
+        replyText = replyText
+          .replace(/<｜｜DSML｜｜\s*(?:tool_calls|calls)>[\s\S]*?<\/｜｜DSML｜｜\s*(?:tool_calls|calls)>/gi, "")
+          .replace(/<｜｜DSML｜｜[\s\S]*?<\/｜｜DSML｜｜[^>]*>/gi, "")
+          .replace(/<｜｜DSML｜｜[^>]*>/gi, "")
+          .trim();
+      }
+
+      // Nếu câu trả lời rỗng do toàn bộ là DSML bị hỏng, thử hỏi lại LLM 1 lần yêu cầu trả lời trực tiếp
+      if (!replyText && loopCount === 1) {
+        console.warn("[DeepSeek] Phản hồi thuần DSML không bóc tách được tool, đang yêu cầu LLM trả lời trực tiếp...");
+        messages.push({
+          role: "user",
+          content: "Hãy trả lời trực tiếp câu hỏi trước đó bằng tiếng Việt, không sử dụng công cụ hay xuất bất kỳ thẻ DSML nào."
+        });
+        continue;
+      }
+
       break; // Thoát vòng lặp
     }
 
     if (isTimeRangeSummaryRequest(prompt) || /tóm tắt|summary/i.test(cleanPrompt)) {
        replyText = replyText.replace(/[^.!?]+\?\s*$/, "").trim();
+    }
+
+    // [Smart Post-Processing]: Kiểm tra thời gian thực tế bằng code ($0 token). Nếu là giữa tuần (T2-T6) mà LLM buột miệng chúc cuối tuần thì tự động sửa thành lời chúc phù hợp
+    const vnDay = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" })).getDay();
+    if (vnDay >= 1 && vnDay <= 5) {
+      replyText = replyText
+        .replace(/cuối tuần vui vẻ/gi, "buổi tối vui vẻ")
+        .replace(/chúc cuối tuần/gi, "chúc mọi người vui vẻ");
     }
 
     console.log(`[DeepSeek] Phản hồi từ LLM (với ${searchCount} lần search): "${replyText}"`);

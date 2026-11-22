@@ -10,11 +10,19 @@ description: |
 ## Mục tiêu
 Skill này giúp lập trình viên (Developer) và User xem lại những gì hệ thống Bot đã học được trong 3 đến 7 ngày qua. Nó sẽ tổng hợp dữ liệu từ Realtime Database của dự án.
 
-## Cơ chế lấy dữ liệu
+## Cơ chế lấy dữ liệu & Kiến trúc Tự học
 Hệ thống lấy dữ liệu trực tiếp từ `logs/system_logs` trên Firebase RTDB, bao gồm 3 loại sự kiện:
-- `EVOLUTION_HUMAN_STUDY`: Học hỏi kiến thức/kỹ năng mềm tự động (Cron job 3h sáng).
+- `EVOLUTION_HUMAN_STUDY`: Học hỏi 10 bài học/ngày theo 6 Trụ Cột Tri Thức Nhân Loại (Cron job 3h sáng, đồng bộ 2 chiều LINE & Telegram).
 - `EVOLUTION_GUARDRAIL`: Tự kiểm điểm lỗi thông qua Audit Logs (Cron job 3h sáng).
 - `FACT_LEARNED`: Kiến thức (Facts) do cộng đồng dạy hoặc bot tự ghi nhớ.
+
+### 6 Trụ Cột Tri Thức Nhân Loại (Human Wisdom Pillars):
+1. **Thấu cảm & Giao tiếp (Empathy)**: Lắng nghe chủ động, thấu hiểu người hướng nội, mở lòng, nghệ thuật đặt câu hỏi.
+2. **Tư duy phản biện (Critical Thinking)**: Bẫy chi phí chìm (Sunk cost), định kiến xác nhận, bẫy nhị nguyên, tách rời fact và feeling.
+3. **Triết lý sống thực tế (Wisdom & Stoicism)**: Phân định điều kiểm soát được/không kiểm soát được, vượt qua hội chứng kẻ giả mạo (Imposter syndrome).
+4. **Lối sống & Gu thưởng thức (Lifestyle)**: Khoảng lặng cà phê sáng, micro-joys, slow living, ẩm thực đường phố, sạc lại năng lượng.
+5. **Hóm hỉnh & Đối đáp tinh tế (Wit)**: Tự trào duyên dáng, đảo chiều tình huống bất ngờ (twist), dùng hình ảnh ẩn dụ ngộ nghĩnh.
+6. **Tâm lý học hành vi & Thói quen (Habits)**: Quy tắc 2 phút vượt qua trì hoãn, thói quen tí hon (Atomic habits), chống burnout.
 
 ## Quy trình thực hiện
 

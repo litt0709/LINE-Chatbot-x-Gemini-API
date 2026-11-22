@@ -1,4 +1,4 @@
-const { searchTavily, TODAY_KEYWORDS } = require("./tavily");
+const { searchTavily, extractTavily, TODAY_KEYWORDS } = require("./tavily");
 const { searchExa } = require("./exa");
 const { getBotConfig } = require("./configCache");
 const axios = require("axios");
@@ -27,23 +27,43 @@ try {
   console.error("[Search Router] Lỗi nạp stopwords.json:", err.message);
 }
 
+const DOMAIN_REGEX = /\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(com|vn|net|org|cn|io|ai|edu|gov)\b/i;
+
 /**
  * Trích xuất từ khóa tìm kiếm (Dùng Regex nội bộ thay vì LLM để giảm độ trễ).
  * @param {string} contextualPrompt - Câu nói đã được bù đắp ngữ cảnh
  * @returns {Promise<{query: string, has_entity: boolean}>}
  */
 const extractSearchQuery = async (contextualPrompt) => {
-  // 1. Loại bỏ dấu câu trước để tránh cản trở ranh giới từ của các từ rác
-  let query = contextualPrompt.replace(/[.,?!]/g, " ").replace(/\s+/g, ' ').trim();
+  // 1. Bảo vệ tên miền (domain) tránh bị xóa dấu chấm
+  const domainTokens = [];
+  let tempPrompt = contextualPrompt.replace(/\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(com|vn|net|org|cn|io|ai|edu|gov)\b/gi, (match) => {
+    domainTokens.push(match);
+    return `__DOMAIN_TOKEN_${domainTokens.length - 1}__`;
+  });
+
+  // Loại bỏ tiền tố tên người dùng dạng [Tên]: hoặc Tên]: nếu có, và xóa dấu câu
+  let query = tempPrompt
+    .replace(/^\[?[^\]:]+\]?[:\s]+/g, " ")
+    .replace(/[.,?!]/g, " ")
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // Khôi phục tên miền nguyên bản
+  domainTokens.forEach((token, idx) => {
+    query = query.replace(`__DOMAIN_TOKEN_${idx}__`, token);
+  });
 
   // 2. Bộ từ rác (noise words) và chỉ thị tìm kiếm để làm sạch truy vấn
   const noiseWords = [
     "annie ơi", "annie", "bot ơi", "bot", "cho anh hỏi", "cho em hỏi", "cho mình hỏi", "hỏi xíu",
     "tìm kiếm", "tìm giúp", "tìm giùm", "tra cứu", "tra giúp", "tra giùm", "xem giúp", "xem giùm", "giúp anh", "giúp em",
-    "cho anh", "cho em", "cho chị", "cho mình", "với", "nhé", "nha", "đi", "ạ", "ơi",
+    "kiểm tra xem", "kiểm tra giúp", "kiểm tra giùm", "kiểm tra", "check giúp", "check giùm", "check", "xác minh", "xác thực",
+    "cho anh", "cho em", "cho chị", "cho mình", "với", "nhé", "nha", "đi", "ạ", "ơi", "bạn",
     "chưa em", "chưa anh", "nhỉ", "có trận nào", "có ai", "có...không", "có...chưa",
     "thế nào", "ra sao", "chi tiết hơn", "thông tin", "kể về", "biết gì", "nào",
-    "tổng hợp", "đánh giá", "về nhân vật", "về", "được cho là", "làm việc tại", "làm việc", "tin đồn", "tin tức về", "và"
+    "tổng hợp", "đánh giá", "về nhân vật", "về", "được cho là", "làm việc tại", "làm việc", "tin đồn", "tin tức về", "và",
+    "có tin", "vụ này"
   ];
   
   for (const word of noiseWords) {
@@ -61,9 +81,9 @@ const extractSearchQuery = async (contextualPrompt) => {
   // Check viết hoa (Bỏ qua ký tự đầu tiên của câu)
   const hasCapitalized = /[A-ZĐ]/.test(query.substring(1));
   
-  // Check các từ khóa đặc biệt
+  // Check các từ khóa đặc biệt hoặc có tên miền
   const specialKeywords = ["lịch", "tỷ số", "tỉ số", "kết quả", "kqxs", "giá", "thời tiết", "bóng đá", "tứ kết", "bán kết", "chung kết", "trận", "tin tức", "điểm thi", "bầu cử", "chứng khoán", "vàng sjc"];
-  const hasSpecial = specialKeywords.some(kw => query.toLowerCase().includes(kw));
+  const hasSpecial = specialKeywords.some(kw => query.toLowerCase().includes(kw)) || DOMAIN_REGEX.test(query);
 
   // Chấp nhận has_entity nếu có chữ viết hoa, từ khóa đặc biệt, hoặc cụm từ tìm kiếm từ 2 từ trở lên
   const has_entity = hasCapitalized || hasSpecial || query.split(/\s+/).filter(w => w.length > 0).length >= 2;
@@ -87,7 +107,8 @@ const SEARCH_KEYWORDS = [
   "lỗi", "sập", "outage", "bảo trì", "không vào được", "lag", "disconnect",
   "tin hot", "fact check", "kiểm chứng", "sự thật", "tin chuẩn", "tin thật",
   "thông tin", "tổng hợp", "chi tiết", "chi tiế", "tiểu sử", "tác giả", "scandal", "drama", "phốt", "hướng dẫn",
-  "vàng sjc", "bầu cử", "tổng thống mỹ", "thị trường chứng khoán", "chứng khoán"
+  "vàng sjc", "bầu cử", "tổng thống mỹ", "thị trường chứng khoán", "chứng khoán",
+  "kiểm tra", "check", "xác minh", "xác thực", "tin đồn", "vụ này"
 ];
 
 // ─── Mẫu câu hỏi về giờ/ngày hiện tại — KHAI KHÔNG search (bot tự biết từ system prompt) ───
@@ -119,6 +140,10 @@ const checkNeedsSearch = (prompt) => {
     console.log(`[Search Router] Bỏ qua search (câu hỏi thời gian hiện tại): "${query}"`);
     return false;
   }
+  if (DOMAIN_REGEX.test(query)) {
+    console.log(`[Search Router] Khớp tên miền web → cần search: "${query}"`);
+    return true;
+  }
   if (SEARCH_KEYWORDS.some(kw => query.includes(kw))) {
     console.log(`[Search Router] Khớp từ khóa → cần search: "${query}"`);
     return true;
@@ -131,8 +156,71 @@ const checkNeedsSearch = (prompt) => {
   return false;
 };
 
+// ─── Headers mô phỏng hoàn chỉnh Trình duyệt End-User (Chrome macOS) ─────────
+const ENDUSER_BROWSER_HEADERS = {
+  "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+  "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
+  "Accept-Encoding": "gzip, deflate, br",
+  "Cache-Control": "max-age=0",
+  "sec-ch-ua": "\"Google Chrome\";v=\"131\", \"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\"",
+  "sec-ch-ua-mobile": "?0",
+  "sec-ch-ua-platform": "\"macOS\"",
+  "sec-fetch-dest": "document",
+  "sec-fetch-mode": "navigate",
+  "sec-fetch-site": "none",
+  "sec-fetch-user": "?1",
+  "upgrade-insecure-requests": "1"
+};
+
 /**
- * Tải và trích xuất nội dung văn bản thuần từ một URL.
+ * Trích xuất cấu trúc thông tin sản phẩm Amazon từ HTML (chỉ áp dụng cho trang sản phẩm e-commerce)
+ * @param {string} html 
+ * @param {string} url
+ * @returns {string|null}
+ */
+const parseAmazonHtml = (html, url = "") => {
+  if (!html || typeof html !== "string") return null;
+  const isBlocked = /validateCaptcha|Robot Check|Attention Required|triggerInterstitialChallenge|bm-verify/i.test(html);
+  if (isBlocked) return null;
+
+  // CHỈ áp dụng cho sản phẩm E-commerce (có productTitle hoặc URL chứa /dp/, /gp/product/)
+  const isProductUrl = /\/(?:dp|gp\/product)\//i.test(url);
+  const prodTitleMatch = html.match(/id="productTitle"[^>]*>([\s\S]*?)<\/span>/i);
+  if (!prodTitleMatch && !isProductUrl) {
+    // Không phải trang sản phẩm Amazon (ví dụ: AWS Blog, tin tức, tài liệu kỹ thuật), trả về null để luồng đọc bài viết thông thường xử lý
+    return null;
+  }
+
+  const titleMatch = prodTitleMatch || html.match(/<title>([^<]+)<\/title>/i);
+  const title = titleMatch ? titleMatch[1].replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim() : "";
+  if (!title || title.includes("Page Not Found")) return null;
+
+  const priceMatch = html.match(/class="a-price[^"]*"[^>]*>[\s\S]*?<span class="a-offscreen">([^<]+)<\/span>/i) || html.match(/\$[\d,]+\.?\d*/i);
+  const price = priceMatch ? (priceMatch[1] || priceMatch[0] || "").trim() : "";
+
+  const byLineMatch = html.match(/id="bylineInfo"[^>]*>([\s\S]*?)<\/div>/i);
+  const byLine = byLineMatch ? byLineMatch[1].replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim() : "";
+
+  const featureMatch = html.match(/id="feature-bullets"[^>]*>([\s\S]*?)<\/div>/i);
+  const features = featureMatch ? featureMatch[1].replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim() : "";
+
+  const descMatch = html.match(/id="bookDescription_feature_div"[^>]*>([\s\S]*?)<\/div>/i) || html.match(/id="productDescription"[^>]*>([\s\S]*?)<\/div>/i);
+  const desc = descMatch ? descMatch[1].replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim() : "";
+
+  // Nếu không có bất kỳ thông tin sản phẩm nào, trả về null để luồng article/generic xử lý
+  if (!price && !byLine && !features && !desc) return null;
+
+  let res = `[SẢN PHẨM AMAZON]: ${title}\n`;
+  if (price) res += `• Giá: ${price}\n`;
+  if (byLine) res += `• Tác giả / Thương hiệu: ${byLine}\n`;
+  if (features) res += `• Tính năng nổi bật: ${features.substring(0, 1000)}\n`;
+  if (desc) res += `• Mô tả: ${desc.substring(0, 1000)}\n`;
+  return res.trim();
+};
+
+/**
+ * Tải và trích xuất nội dung văn bản thuần từ một URL (Giả lập End-User request).
  * @param {string} url
  * @returns {Promise<string|null>}
  */
@@ -140,17 +228,12 @@ const scrapeUrl = async (url) => {
   if (url.includes("x.com/") || url.includes("twitter.com/")) {
     return "[Hệ thống: Hệ thống không hỗ trợ bot đọc link X/Twitter. Cần báo thành thật với User là không xem được link này.]";
   }
-  const axios = require("axios");
-  const browserHeaders = {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-    "Accept-Language": "vi,en-US;q=0.9,en;q=0.8"
-  };
 
   try {
     const headRes = await axios.head(url, {
-      headers: browserHeaders,
-      timeout: 5000
+      headers: ENDUSER_BROWSER_HEADERS,
+      timeout: 5000,
+      maxRedirects: 5
     }).catch(() => null);
 
     let isPdf = url.toLowerCase().includes(".pdf");
@@ -169,9 +252,10 @@ const scrapeUrl = async (url) => {
       }
       console.log(`[Scraper] Bắt đầu tải file PDF từ URL: ${url}`);
       const { data: pdfBuffer } = await axios.get(url, {
-        headers: browserHeaders,
+        headers: ENDUSER_BROWSER_HEADERS,
         responseType: "arraybuffer",
-        timeout: 15000
+        timeout: 15000,
+        maxRedirects: 5
       });
       if (pdfBuffer.length > 5 * 1024 * 1024) {
         return "[Hệ thống: File PDF tải về quá lớn (>5MB), không hỗ trợ phân tích]";
@@ -189,25 +273,45 @@ const scrapeUrl = async (url) => {
     }
 
     const { data: html } = await axios.get(url, {
-      headers: browserHeaders,
-      timeout: 8000
+      headers: ENDUSER_BROWSER_HEADERS,
+      timeout: 10000,
+      maxRedirects: 5
     });
     if (typeof html !== "string") return null;
 
-    const bodyMatch = html
+    // Nếu là link Amazon hoặc có cấu trúc sản phẩm Amazon
+    if (/amazon\.[a-z.]+|\/dp\/|\/gp\/product\//i.test(url)) {
+      const amazonText = parseAmazonHtml(html, url);
+      if (amazonText) {
+        console.log(`[Scraper] Trích xuất thành công thông tin sản phẩm Amazon trực tiếp.`);
+        return amazonText;
+      }
+    }
+
+    // Phát hiện trang chặn Captcha / Cloudflare / WAF / Akamai
+    const isAntiBotBlocked = /validateCaptcha|Attention Required!|Cloudflare|Just a moment\.\.\.|Robot Check|automated access|triggerInterstitialChallenge|bm-verify/i.test(html);
+    if (isAntiBotBlocked) {
+      console.log(`[Scraper] Trang web bị chặn bởi Captcha/Anti-bot (${url}), chuyển sang fallback.`);
+      return null;
+    }
+
+    // Ưu tiên trích xuất nội dung từ thẻ <article> hoặc <main> (cho blog, báo chí, tài liệu)
+    const articleMatch = html.match(/<article[^>]*>([\s\S]*?)<\/article>/i) ||
+                         html.match(/<main[^>]*>([\s\S]*?)<\/main>/i) ||
+                         html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+
+    const text = (articleMatch ? articleMatch[1] : html)
       .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
       .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
-      .match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-
-    const text = (bodyMatch ? bodyMatch[1] : html)
       .replace(/<[^>]*>/g, " ")
       .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 4000);
+      .trim();
 
-    return text || null;
+    if (text.length < 100) return null;
+
+    return text.slice(0, 4000);
   } catch (error) {
-    console.error("[Scraper] Lỗi đọc URL:", url, error.message);
+    console.error("[Scraper] Lỗi đọc URL trực tiếp:", url, error.message);
     return null;
   }
 };
@@ -229,28 +333,55 @@ const resolveWebContext = async (prompt, isPreOptimized = false, sessionId = nul
     console.log(`[Scraper] Đọc nội dung từ: ${targetUrl}`);
     urlText = await scrapeUrl(targetUrl);
     
-    // Fallback: nếu scrape URL thất bại, thử trích xuất slug để search internet
+    // Fallback 1: nếu scrape trực tiếp thất bại (Captcha/WAF), dùng Tavily Extract API (residential proxy + headless render)
     if (!urlText) {
       try {
-        const parsed = new URL(targetUrl);
-        const pathSlug = parsed.pathname
-          .replace(/\.[a-zA-Z0-9]+$/, "")
-          .replace(/[^a-zA-Z0-9\-_]/g, " ")
-          .split(/[-_\s]+/)
-          .filter(w => w.length >= 2 && isNaN(w))
-          .join(" ");
-        const domainName = parsed.hostname.replace("www.", "");
-        if (pathSlug) {
-          const fallbackQuery = `${pathSlug} ${domainName}`.trim();
-          console.log(`[Scraper Fallback] Kích hoạt search theo slug URL: "${fallbackQuery}"`);
-          const fallbackRes = await searchTavily(fallbackQuery);
-          if (fallbackRes && fallbackRes.summary) {
-            urlText = `[Thông tin từ tìm kiếm liên quan đến link ${targetUrl}]:\n${fallbackRes.summary}`;
+        console.log(`[Scraper Fallback 1] Thử trích xuất qua Tavily Extract API: "${targetUrl}"`);
+        urlText = await extractTavily(targetUrl);
+      } catch (e) {
+        console.error("[Scraper Fallback 1] Lỗi extractTavily:", e.message);
+      }
+    }
+
+    // Fallback 2: nếu vẫn chưa có nội dung, tìm kiếm mở trên Web (Open Web Search qua Tavily)
+    if (!urlText) {
+      try {
+        const cleanTargetUrl = targetUrl.split("?")[0].replace(/\/+$/, "");
+        console.log(`[Scraper Fallback 2] Kích hoạt search theo URL trực tiếp: "${cleanTargetUrl}"`);
+        let fallbackRes = await searchTavily(cleanTargetUrl, { include_answer: true, open_search: true });
+        
+        if (!fallbackRes || (!fallbackRes.answer && !fallbackRes.summary)) {
+          // Thử trích xuất slug nếu search URL thuần không ra
+          const parsed = new URL(targetUrl);
+          const pathSlug = parsed.pathname
+            .replace(/\.[a-zA-Z0-9]+$/, "")
+            .replace(/[^a-zA-Z0-9\-_]/g, " ")
+            .split(/[-_\s]+/)
+            .filter(w => w.length >= 2 && isNaN(w))
+            .join(" ");
+          const domainName = parsed.hostname.replace("www.", "");
+          if (pathSlug) {
+            const fallbackQuery = `${pathSlug} ${domainName}`.trim();
+            console.log(`[Scraper Fallback 2] Thử search theo slug URL: "${fallbackQuery}"`);
+            fallbackRes = await searchTavily(fallbackQuery, { open_search: true });
           }
         }
+        
+        if (fallbackRes && (fallbackRes.answer || fallbackRes.summary)) {
+          const info = fallbackRes.answer ? `${fallbackRes.answer}\n\n${fallbackRes.summary || ""}` : fallbackRes.summary;
+          urlText = info.trim();
+        }
       } catch (e) {
-        console.error("[Scraper Fallback] Lỗi:", e.message);
+        console.error("[Scraper Fallback 2] Lỗi:", e.message);
       }
+    }
+
+    if (urlText) {
+      console.log(`[Search Router] Đã trích xuất thành công nội dung URL (${urlText.length} ký tự).`);
+      return {
+        context: `\n\n[NỘI DUNG URL NGƯỜI DÙNG GỬI ĐẾN]:\n${urlText}\n`,
+        urls: urls || []
+      };
     }
   }
 

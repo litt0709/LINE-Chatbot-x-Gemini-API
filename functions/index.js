@@ -8,9 +8,17 @@ const telegram = require("./utils/telegram");
 
 // ─── EQ Empathy Analysis (Phase 7) ─────────────
 const analyzeEmotion = (text) => {
-  if (/(😭|😢|😔|😞|💔|khóc|buồn|sad|cry|thất vọng)/i.test(text)) return "negative";
-  if (/(😡|🤬|😤|tức|giận|mad|angry)/i.test(text)) return "angry";
-  if (/(😍|🥰|😂|🤣|vui|cười|haha|happy|love|tuyệt)/i.test(text)) return "positive";
+  if (!text) return "neutral";
+  const hasPoliteOrGratitude = /(🙏|cảm ơn|cám ơn|xin lỗi|\b(thank|thanks|thank you|grateful|appreciate|sorry|apologize|apologies|bow|bowing|please)\b)/i.test(text);
+  const hasPositive = /(😍|🥰|😂|🤣|vui|cười|\b(haha|laugh|laughing|happy|love|joy|excited|smile|smiling|cheer|yay)\b|tuyệt|thích)/i.test(text);
+  const hasAngry = /(😡|🤬|😤|tức giận|bực mình|cáu gắt|\b(mad|angry|furious|rage|annoyed|tức|giận|bực|cáu)\b)/i.test(text);
+  const hasNegative = /(😭|😢|😔|😞|💔|khóc|buồn|thất vọng|tủi thân|dỗi|tự ái|bày trò|quá đà|chua chát|cay cú|\b(sad|cry|crying|depressed|stunned|knocked out|hurt|sulking|upset)\b)/i.test(text);
+
+  // Sticker/tin nhắn chứa từ khóa lịch sự (cảm ơn/xin lỗi) hoặc tích cực lẫn với cry/sad -> không gán negative
+  if (hasPoliteOrGratitude) return hasPositive ? "positive" : "neutral";
+  if (hasPositive && !hasAngry) return "positive";
+  if (hasAngry) return "angry";
+  if (hasNegative) return "negative";
   return "neutral";
 };
 const getEmotionSystemPrompt = (emotion) => {
@@ -42,6 +50,34 @@ const userFactsIndexCache = new Map(); // key: userId/groupId -> { data: {...}, 
 // Smart Group Chat Caches & Config
 const focusModeCache = new Map(); // key: chatId -> { userId, expiresAt }
 const proactiveRateLimitCache = new Map(); // key: chatId -> nextAllowedTimestamp
+const proactiveMsgCountCache = new Map(); // key: chatId -> count of non-targeted group msgs
+const PROACTIVE_COOLDOWN_MS = 20 * 60 * 1000; // 20 phút sau khi góp lời thành công
+const PROACTIVE_IGNORE_BACKOFF_MS = 5 * 60 * 1000; // 5 phút backoff nếu LLM chọn IGNORE
+const PROACTIVE_MSG_INTERVAL = 8; // Sau 8 tin thảo luận sôi nổi (hết cooldown) -> cho phép góp lời
+const PROACTIVE_DISCUSSION_REGEX = /(\?|nghĩ sao|thấy sao|theo mọi người|có nên|chọn cái nào|đáng mua|ngon không|ổn không|hợp lý|vô lý|ảo thật|căng nhỉ|chán nhỉ|hay phết|xịn phết|kèo nào|đi đâu|ăn gì|uống gì|các bác|anh em)/i;
+
+const shouldTriggerProactive = (chatId, text, botConfig) => {
+  const key = String(chatId);
+  const trimmed = (text || "").trim();
+  if (trimmed.length <= 10) return false;
+
+  const count = (proactiveMsgCountCache.get(key) || 0) + 1;
+  proactiveMsgCountCache.set(key, count);
+
+  const nextAllowed = proactiveRateLimitCache.get(key) || 0;
+  if (Date.now() < nextAllowed) return false;
+
+  const lower = trimmed.toLowerCase();
+  const hasConfigTrigger = (botConfig?.proactive_trigger_words || []).some(w => w && lower.includes(String(w).toLowerCase()));
+  const hasDiscussionCue = trimmed.length >= 15 && PROACTIVE_DISCUSSION_REGEX.test(trimmed);
+  const reachedInterval = count >= PROACTIVE_MSG_INTERVAL;
+
+  if (hasConfigTrigger || hasDiscussionCue || reachedInterval) {
+    proactiveMsgCountCache.set(key, 0);
+    return true;
+  }
+  return false;
+};
 // PROACTIVE_TRIGGER_WORDS is now fetched from botConfig
 const QUESTION_OR_COMMAND_REGEX = /\?|(?:^|\s)(?:tại sao|vì sao|làm sao|như nào|thế nào|bao nhiêu|kể|tính)(?=[.,?!:;\s]|$)|(?:^|\s)(?:nhỉ|hả|nhé|đi)(?=[.?!,;:\s]*$)/i;
 
@@ -177,8 +213,40 @@ const isUserAllowed = (userId, platform) => {
   else list = ALLOWED_LINE_USERS;
   return list.includes("*") || list.includes(userId);
 };
+const syncPassiveParticipant = async (platform, userId, senderName, extraAlias = null) => {
+  if (!userId || !senderName || senderName === "User") return;
+  try {
+    const isLine = platform.toUpperCase() === "LINE";
+    const key = isLine ? "line" : "tg";
+    let cache = isLine ? cachedLineParticipants : cachedTgParticipants;
+    if (!cache) {
+      cache = await getGlobalParticipants(key);
+      if (isLine) cachedLineParticipants = cache;
+      else cachedTgParticipants = cache;
+    }
+    let changed = false;
+    const lowerName = senderName.trim().toLowerCase();
+    if (lowerName && cache[lowerName] !== userId) {
+      cache[lowerName] = userId;
+      changed = true;
+    }
+    if (extraAlias) {
+      const lowerAlias = extraAlias.trim().toLowerCase();
+      if (lowerAlias && cache[lowerAlias] !== userId) {
+        cache[lowerAlias] = userId;
+        changed = true;
+      }
+    }
+    if (changed) {
+      saveGlobalParticipants(key, cache).catch(e => console.error(`[${platform}] Lỗi syncPassiveParticipant:`, e.message));
+    }
+  } catch (e) {
+    console.error(`[${platform}] Lỗi syncPassiveParticipant:`, e.message);
+  }
+};
+
 const buildGroupProfileContext = async (participantsMap, promptText = "", senderId = "", isGroup = false, senderName = "") => {
-  const uniqueIds = [...new Set(Object.values(participantsMap))].filter(Boolean);
+  const uniqueIds = [...new Set([...Object.values(participantsMap), senderId].filter(Boolean))];
   const lowerPrompt = promptText.toLowerCase();
   
   // Lọc bỏ các danh từ ghép phổ biến để tránh nhận diện nhầm tên riêng trong nhóm
@@ -186,30 +254,41 @@ const buildGroupProfileContext = async (participantsMap, promptText = "", sender
     .replace(/\b(châu\s+(á|âu|mỹ|phi|đại dương|lục|thổ|quỳ|chấu)|trân\s+châu)\b/gi, " ")
     .replace(/\b(hải\s+(sản|quan|phòng|dương|đăng|trình|ngoại|lý|cảng)|du\s+(lịch|khách|thuyền|hành|xuân)|lâm\s+(nghiệp|sản|tặc|thời|sàng))\b/gi, " ");
 
-  // Pad the prompt for simple word boundary checking (since JS \b is bad with Unicode)
+  // Pad the prompt for simple word boundary checking (cả có dấu lẫn không dấu)
   const paddedPrompt = ` ${sanitizedPrompt.replace(/[.,!?()[\]{}"':;]/g, ' ')} `;
+  const paddedPromptNoAccent = ` ${removeAccents(sanitizedPrompt).replace(/[.,!?()[\]{}"':;]/g, ' ')} `;
 
   const PROFILE_TRIGGER_KEYWORDS = [" anh ", " chị ", " tôi ", " mình ", " em ", " nhớ ", " quên ", " sở thích ", " tên gì ", " làm gì ", " quê "];
   const hasTrigger = PROFILE_TRIGGER_KEYWORDS.some(kw => paddedPrompt.includes(kw));
 
   // Lấy profile song song
   const results = await Promise.all(uniqueIds.map(async (uid) => {
-    let name = Object.keys(participantsMap).find(k => participantsMap[k] === uid) || uid;
+    const matchedAliases = Object.keys(participantsMap).filter(k => participantsMap[k] === uid);
+    const nickName = matchedAliases[0] || uid;
+    let displayName = nickName;
     const isSender = (uid === senderId);
     if (isSender && senderName) {
-      name = senderName; 
+      displayName = senderName;
     }
-    
-    // Strict mention checking
-    const nameLower = name.toLowerCase();
-    let isMentioned = paddedPrompt.includes(` ${nameLower} `);
-    
-    if (!isMentioned) {
-      // Check individual parts of the name (e.g. "Hải" from "Nguyễn Văn Hải")
-      const nameWords = nameLower.split(/\s+/).filter(w => w.length >= 3); // Bỏ qua chữ < 3 ký tự (như A, Lê, An, Mì...) để tránh false positive
-      isMentioned = nameWords.some(w => paddedPrompt.includes(` ${w} `));
+
+    // Kiểm tra mention theo cả bản gốc và không dấu (để "Dầu" khớp "Dau Dinh", "Trịnh" khớp "TrinhNX")
+    const candidateNames = new Set([displayName, ...matchedAliases].filter(Boolean));
+    let isMentioned = false;
+    for (const cand of candidateNames) {
+      const candLower = cand.toLowerCase();
+      const candNoAccent = removeAccents(candLower);
+      if (paddedPrompt.includes(` ${candLower} `) || paddedPromptNoAccent.includes(` ${candNoAccent} `)) {
+        isMentioned = true;
+        break;
+      }
+      const words = candLower.split(/\s+/).filter(w => w.length >= 3);
+      const wordsNoAccent = candNoAccent.split(/\s+/).filter(w => w.length >= 3);
+      if (words.some(w => paddedPrompt.includes(` ${w} `)) || wordsNoAccent.some(w => paddedPromptNoAccent.includes(` ${w} `))) {
+        isMentioned = true;
+        break;
+      }
     }
-    
+
     if (!isSender && !isMentioned) return null;
 
     let profile = userProfileCache.get(uid);
@@ -217,14 +296,18 @@ const buildGroupProfileContext = async (participantsMap, promptText = "", sender
       profile = await getUserProfile(uid);
       if (profile) userProfileCache.set(uid, profile);
     }
-    if (!profile) return null;
 
-    if (profile.real_name) {
-      name = profile.real_name;
-    } else if (profile.name) {
-      name = profile.name;
-    } else if (isSender && senderName) {
-      name = senderName;
+    let finalName = displayName;
+    const realName = profile?.real_name || profile?.name || "";
+    if (realName) {
+      const normReal = removeAccents(realName.toLowerCase()).trim();
+      const normNick = removeAccents(displayName.toLowerCase()).trim();
+      finalName = (displayName && displayName !== uid && normNick !== normReal)
+        ? `${realName} (nick: ${displayName})`
+        : realName;
+    } else if (!profile) {
+      // Chưa có user_profiles trên Firestore nhưng vẫn bơm Ground Truth tên để chống nhầm lẫn danh tính
+      return `[${finalName}]`;
     }
 
     const p = [];
@@ -246,7 +329,7 @@ const buildGroupProfileContext = async (participantsMap, promptText = "", sender
       }
     }
 
-    return p.length > 0 ? `[${name}: ${p.join(" | ")}]` : `[${name}]`;
+    return p.length > 0 ? `[${finalName}: ${p.join(" | ")}]` : `[${finalName}]`;
   }));
 
   const ctx = results.filter(Boolean).join(" ");
@@ -289,7 +372,7 @@ const resolveCanonicalUserId = async (userIdAttr, senderId, participants = {}, p
     if (mapObj[rawLower] && isPlatformId(String(mapObj[rawLower]))) return String(mapObj[rawLower]);
     if (mapObj[noAccentLower] && isPlatformId(String(mapObj[noAccentLower]))) return String(mapObj[noAccentLower]);
 
-    // 2. Word boundary match
+    // 2. Word boundary match (chỉ khớp trọn từ, chống nhầm tên gần giống nhau)
     for (const [k, v] of Object.entries(mapObj)) {
       const kLower = k.toLowerCase();
       const kNoAccent = removeAccents(kLower);
@@ -301,8 +384,8 @@ const resolveCanonicalUserId = async (userIdAttr, senderId, participants = {}, p
       }
     }
 
-    // 3. Fallback contains for multi-word phrases (>= 3 chars)
-    if (rawLower.length >= 3) {
+    // 3. Fallback cho cụm nhiều từ (họ + tên đầy đủ)
+    if (rawLower.includes(" ") && rawLower.length >= 5) {
       for (const [k, v] of Object.entries(mapObj)) {
         const kLower = k.toLowerCase();
         const kNoAccent = removeAccents(kLower);
@@ -328,11 +411,7 @@ const resolveCanonicalUserId = async (userIdAttr, senderId, participants = {}, p
     console.error("[Profile] Lỗi tra cứu global participants:", e.message);
   }
 
-  // Nếu không tìm thấy, nếu senderId hợp lệ thì fallback về senderId
-  if (senderId && isPlatformId(String(senderId))) {
-    return String(senderId);
-  }
-
+  // TUYỆT ĐỐI KHÔNG fallback về senderId khi userIdAttr đã được chỉ định rõ nhưng không tìm thấy (chống ghi đè nhầm profile người khác)
   return null;
 };
 
@@ -412,7 +491,9 @@ const processAndExtractProfile = async (text, senderId, participants = {}, sessi
 
       saveUserProfile(uid, updateData);
       userProfileCache.set(uid, { ...existing, ...updateData });
-      cleanedText = cleanedText.replace(match[0], `\n[Hệ thống: Đã cập nhật hồ sơ cá nhân]`);
+      cleanedText = cleanedText.replace(match[0], "");
+    } else {
+      cleanedText = cleanedText.replace(match[0], "");
     }
   }
 
@@ -704,28 +785,6 @@ const convertTelegramMentions = (text, participants) => {
 const buildLineMessage = (text, participants, isGroup = true, hotTopic = "") => {
   let cleanedText = text.replace(/\*\*/g, ""); // Strip markdown bold
 
-  let quickReply = undefined;
-  const taskMatch = cleanedText.match(/<Task\s+mode=["']?ASK["']?\s+tags=["']([^"']+)["']\s*\/?>/i) || cleanedText.match(/\[TAGS:\s*(.+?)\]/i);
-  if (taskMatch) {
-    const tags = taskMatch[1].split("|").map(t => t.trim()).filter(Boolean);
-    cleanedText = cleanedText.replace(/<Task[^>]*>/gi, "").replace(/\[TAGS:.*?\]/gi, "").trim();
-
-    quickReply = {
-      items: tags.map(tag => {
-        const dataString = `action=quick_reply&text=${encodeURIComponent(tag)}&topic=${encodeURIComponent(hotTopic || "")}&ts=${Date.now()}`;
-        return {
-          type: "action",
-          action: {
-            type: "postback",
-            label: tag.substring(0, 20),
-            data: dataString.substring(0, 300),
-            displayText: tag
-          }
-        };
-      })
-    };
-  }
-
   // Luôn dọn dẹp sạch sẽ mọi thẻ <Task> còn sót lại (kể cả tag lỗi cấu trúc không khớp regex)
   cleanedText = cleanedText.replace(/<Task[^>]*>/gi, "").replace(/<\/Task>/gi, "").replace(/\[TAGS:.*?\]/gi, "").replace(/\[TOPIC\].*?\[\/TOPIC\]/gi, "").trim();
 
@@ -733,8 +792,7 @@ const buildLineMessage = (text, participants, isGroup = true, hotTopic = "") => 
   if (!isGroup) {
     return {
       type: "text",
-      text: cleanedText,
-      ...(quickReply && { quickReply })
+      text: cleanedText
     };
   }
 
@@ -784,22 +842,22 @@ const buildLineMessage = (text, participants, isGroup = true, hotTopic = "") => 
     return {
       type: "textV2",
       text: replacedText,
-      substitution: substitution,
-      ...(quickReply && { quickReply })
+      substitution: substitution
     };
   }
 
   // Nếu không có mention, trả về dạng text thường để tối ưu
   return {
     type: "text",
-    text: cleanedText,
-    ...(quickReply && { quickReply })
+    text: cleanedText
   };
 };
 
 // ─── WEBHOOK ─────────────────────────────────────────────────────────────────
 
 exports.webhook = onRequest({
+  cpu: "gcf_gen1",
+  concurrency: 1,
   timeoutSeconds: 300,
   memory: "256MiB",
   maxInstances: 10
@@ -1002,13 +1060,9 @@ exports.webhook = onRequest({
 
     // --- Smart Group Chat: Proactive Intervention ---
     if (chatType !== "private" && !isDirectlyTargeted && !isImplicitlyTargeted && !isSticker && rawText) {
-      const hasTrigger = rawText.length > 10 && (botConfig.proactive_trigger_words || []).some(w => rawText.toLowerCase().includes(w));
-      if (hasTrigger) {
-        const nextAllowed = proactiveRateLimitCache.get(String(chatId)) || 0;
-        if (Date.now() >= nextAllowed) {
-          isProactiveTargeted = true;
-          console.log(`[Proactive] Telegram: Triggered in Group ${chatId}`);
-        }
+      if (shouldTriggerProactive(chatId, rawText, botConfig)) {
+        isProactiveTargeted = true;
+        console.log(`[Proactive] Telegram: Triggered in Group ${chatId}`);
       }
     }
 
@@ -1144,6 +1198,7 @@ exports.webhook = onRequest({
     // Group chat: lưu background history (ảnh không tag bot đã xử lý ở block isRawMedia trên)
     if (chatType !== "private") {
       if (!isDirectlyTargeted && !isImplicitlyTargeted && !isProactiveTargeted) {
+        syncPassiveParticipant("Telegram", userId, senderName, message.from.username).catch(() => {});
         const userMsg = {
           role: "user",
           text: messageContent || "",
@@ -1206,8 +1261,10 @@ exports.webhook = onRequest({
       return res.end();
     }
 
-    // Gửi chat action 'typing' để người dùng nhận được UX phản hồi tức thì
-    telegram.sendChatAction(chatId, "typing").catch(e => console.error("[Telegram] Lỗi sendChatAction:", e.message));
+    // Gửi chat action 'typing' để người dùng nhận được UX phản hồi tức thì (chỉ gửi khi chat 1-1 hoặc trực tiếp tag/hỏi bot để tránh typing ảo khi nghe lén)
+    if (chatType === "private" || isDirectlyTargeted) {
+      telegram.sendChatAction(chatId, "typing").catch(e => console.error("[Telegram] Lỗi sendChatAction:", e.message));
+    }
 
     // Modular Command Dispatcher (System Commands)
     const commandReply = await handleCommand(cleanPrompt, { platform: "TELEGRAM", userId, senderName, chatId });
@@ -1263,7 +1320,7 @@ exports.webhook = onRequest({
     
     let rawMsg = "";
     try {
-      rawMsg = await llm.chat(String(chatId), cleanPrompt, senderName, userId, null, quoteContext, forceIgnoreCheck, groupContext, isGroup, hotTopic, isPostback, postbackContext, factsContext, isProactiveTargeted);
+      rawMsg = await llm.chat(String(chatId), cleanPrompt, senderName, userId, null, quoteContext, forceIgnoreCheck, groupContext, isGroup, hotTopic, isPostback, postbackContext, factsContext, isProactiveTargeted, participants);
     } catch (err) {
       console.error("[Telegram] Lỗi gọi LLM:", err.message);
       await telegram.reply(chatId, "Dạ hiện tại máy chủ AI đang bận hoặc quá tải xíu, anh/chị đợi vài phút rồi hỏi lại em nha! 🥺").catch(e => {});
@@ -1273,6 +1330,9 @@ exports.webhook = onRequest({
     const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, createdAt: new Date().toISOString() };
 
     if (rawMsg.trim() === "IGNORE") {
+      if (isProactiveTargeted) {
+        proactiveRateLimitCache.set(String(chatId), Date.now() + PROACTIVE_IGNORE_BACKOFF_MS);
+      }
       appendRawMessage(String(chatId), userMsgData).catch(e => console.error(e));
       return res.end();
     }
@@ -1297,7 +1357,7 @@ exports.webhook = onRequest({
     if (chatType !== "private") {
       focusModeCache.set(String(chatId), { userId: String(userId), expiresAt: Date.now() + 3 * 60 * 1000 });
       if (isProactiveTargeted) {
-        proactiveRateLimitCache.set(String(chatId), Date.now() + 60 * 60 * 1000);
+        proactiveRateLimitCache.set(String(chatId), Date.now() + PROACTIVE_COOLDOWN_MS);
       }
     }
 
@@ -1489,6 +1549,7 @@ exports.webhook = onRequest({
 
       let isDirectlyTargeted = false;
       let isImplicitlyTargeted = false;
+      let isProactiveTargeted = false;
 
       if (event.source.type === "user" || event.type === "postback") {
         isDirectlyTargeted = true;
@@ -1499,25 +1560,32 @@ exports.webhook = onRequest({
         } else if (/\bannie\b/i.test(messageContent)) {
           isImplicitlyTargeted = true;
         } else if (!isSticker) {
+          const rawText = (event.type === "message" && event.message.type === "text") ? (event.message.text || "") : "";
           // --- Smart Group Chat: Focus Mode ---
           const focus = focusModeCache.get(String(sessionId));
           if (focus && focus.userId === String(userId) && Date.now() < focus.expiresAt) {
-            const rawText = (event.type === "message" && event.message.type === "text") ? (event.message.text || "") : "";
             const isQuestionOrCommand = QUESTION_OR_COMMAND_REGEX.test(rawText);
             if (isQuestionOrCommand) {
               isImplicitlyTargeted = true;
               console.log(`[Focus Mode] LINE: Bot tự động follow up với User ${userId} trong Group ${sessionId}`);
             }
           }
+          // --- Smart Group Chat: Proactive Intervention ---
+          if (!isImplicitlyTargeted && rawText && shouldTriggerProactive(sessionId, rawText, botConfig)) {
+            isProactiveTargeted = true;
+            console.log(`[Proactive] LINE: Triggered in Group ${sessionId}`);
+          }
         }
 
-        if (!isDirectlyTargeted && !isImplicitlyTargeted) {
+        if (!isDirectlyTargeted && !isImplicitlyTargeted && !isProactiveTargeted) {
           const profile = await line.getUserProfile(userId, sessionId);
-          let senderName = profile?.displayName || "User";
+          const displayName = profile?.displayName || "User";
+          let senderName = displayName;
           const userProfile = await getUserProfile(userId);
           if (userProfile && (userProfile.real_name || userProfile.name)) {
             senderName = userProfile.real_name || userProfile.name;
           }
+          syncPassiveParticipant("LINE", userId, senderName, displayName !== senderName ? displayName : null).catch(() => {});
           await appendRawMessage(sessionId, {
             role: "user",
             text: messageContent,
@@ -1660,7 +1728,7 @@ exports.webhook = onRequest({
       
       let rawMsg = "";
       try {
-        rawMsg = await llm.chat(sessionId, cleanPrompt, senderName, userId, eventMessageId, quoteContext, forceIgnoreCheck, groupContext, isGroup, hotTopic, isPostback, postbackContext, factsContext);
+        rawMsg = await llm.chat(sessionId, cleanPrompt, senderName, userId, eventMessageId, quoteContext, forceIgnoreCheck, groupContext, isGroup, hotTopic, isPostback, postbackContext, factsContext, isProactiveTargeted, participants);
       } catch (err) {
         console.error("[LINE] Lỗi gọi LLM:", err.message);
         const fallbackMsg = { type: "text", text: "Dạ hiện tại máy chủ AI đang bận hoặc quá tải xíu, anh/chị đợi vài phút rồi hỏi lại em nha! 🥺" };
@@ -1671,6 +1739,9 @@ exports.webhook = onRequest({
       const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, lineMessageId: eventMessageId, createdAt: new Date().toISOString() };
 
       if (rawMsg.trim() === "IGNORE") {
+        if (isProactiveTargeted) {
+          proactiveRateLimitCache.set(String(sessionId), Date.now() + PROACTIVE_IGNORE_BACKOFF_MS);
+        }
         appendRawMessage(sessionId, userMsgData).catch(e => console.error(e));
         continue;
       }
@@ -1696,6 +1767,9 @@ exports.webhook = onRequest({
       
       if (isGroup) {
         focusModeCache.set(String(sessionId), { userId: String(userId), expiresAt: Date.now() + 3 * 60 * 1000 });
+        if (isProactiveTargeted) {
+          proactiveRateLimitCache.set(String(sessionId), Date.now() + PROACTIVE_COOLDOWN_MS);
+        }
       }
 
       continue;
@@ -1707,7 +1781,14 @@ exports.webhook = onRequest({
 });
 
 // ─── SCHEDULED NOTIFICATIONS ──────────────────────────────────────────────────
+const ENABLE_NEWS = false; // Tạm thời disabled chức năng bản tin hàng ngày (Daily News Digest)
+
 const sendNotifications = async (type = "afternoon") => {
+  if (!ENABLE_NEWS) {
+    console.log("[Schedule] Tính năng tin tức (News Digest) đang tạm thời bị vô hiệu hóa.");
+    return;
+  }
+
   const targetIdsStr = process.env.NOTIFICATION_TARGET_IDS || "";
   const targetIds = targetIdsStr.split(",").map(id => id.trim()).filter(Boolean);
 
@@ -1741,11 +1822,12 @@ const sendNotifications = async (type = "afternoon") => {
 // ─── MASTER CRONJOB (ALL-IN-ONE) ──────────────────────────────────────────────
 // Giảm thiểu tối đa số lượng Job trên Cloud Scheduler để đảm bảo chi phí 0đ
 exports.masterScheduler = onSchedule({
-  schedule: "*/5 * * * *", // Chạy mỗi 5 phút
-
+  schedule: "*/15 * * * *", // Giảm tần suất từ 5 phút xuống 15 phút (giảm 66% số lần chạy cron)
   timeZone: "Asia/Ho_Chi_Minh",
   timeoutSeconds: 300,
-  memory: "512MiB"
+  memory: "256MiB", // Giảm từ 512MiB xuống 256MiB để tiết kiệm 50% GiB-seconds
+  cpu: "gcf_gen1",  // Dùng fractional CPU (0.166 vCPU) thay vì 1.0 Full vCPU mặc định
+  omit: process.env.PLATFORM === "TELEGRAM" // Không deploy scheduler lên tele-ai-chatbot để tránh chạy trùng lặp
 }, async (event) => {
   const now = new Date();
   const vnTime = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }));
@@ -1755,8 +1837,8 @@ exports.masterScheduler = onSchedule({
   const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5;
   const dateKey = `${vnTime.getFullYear()}_${String(vnTime.getMonth() + 1).padStart(2, "0")}_${String(vnTime.getDate()).padStart(2, "0")}`;
 
-  // 1. Bản tin Sáng: 8:00 (Thứ 2 - Thứ 6)
-  if (isWeekday && hour === 8 && minute >= 0 && minute < 20) {
+  // 1. Bản tin Sáng: 8:00 (Thứ 2 - Thứ 6) [TẠM THỜI DISABLED]
+  if (ENABLE_NEWS && isWeekday && hour === 8 && minute >= 0 && minute < 20) {
     const stateKey = `news/morning_${dateKey}`;
     const hasSent = await getSystemState(stateKey);
     if (!hasSent) {
@@ -1766,8 +1848,8 @@ exports.masterScheduler = onSchedule({
     }
   }
 
-  // 2. Bản tin Chiều: 13:30 (Thứ 2 - Thứ 6)
-  if (isWeekday && hour === 13 && minute >= 30 && minute < 50) {
+  // 2. Bản tin Chiều: 13:30 (Thứ 2 - Thứ 6) [TẠM THỜI DISABLED]
+  if (ENABLE_NEWS && isWeekday && hour === 13 && minute >= 30 && minute < 50) {
     const stateKey = `news/afternoon_${dateKey}`;
     const hasSent = await getSystemState(stateKey);
     if (!hasSent) {

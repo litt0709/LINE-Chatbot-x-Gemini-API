@@ -11,33 +11,14 @@ const TELEGRAM_BASE_URL = `https://api.telegram.org/bot${TELEGRAM_TOKEN}`;
  * @param {number|string} chatId - ID của phòng chat hoặc người dùng
  * @param {string} text - Nội dung phản hồi
  */
-const reply = async (chatId, text) => {
+const reply = async (chatId, text, reply_markup = undefined) => {
   if (!TELEGRAM_TOKEN) {
     console.error("[Telegram] BOT_TOKEN chưa được cấu hình.");
     return;
   }
 
-  // --- Bóc tách XML Tags TRƯỚC KHI xử lý ký tự HTML ---
-  let reply_markup = undefined;
+  // --- Bóc tách và làm sạch XML Tags TRƯỚC KHI xử lý ký tự HTML ---
   let rawText = text;
-
-  const taskMatch = rawText.match(/<Task\s+mode=["']?ASK["']?\s+tags=["']([^"']+)["']\s*\/?>/i) || rawText.match(/\[TAGS:\s*(.+?)\]/i);
-  if (taskMatch) {
-    const tags = taskMatch[1].split("|").map(t => t.trim()).filter(Boolean);
-    rawText = rawText.replace(/<Task[^>]*>/gi, "").replace(/\[TAGS:.*?\]/gi, "").trim();
-    
-    reply_markup = {
-      inline_keyboard: tags.map(tag => {
-        let safeTag = tag;
-        // Rút gọn dần chuỗi tag cho đến khi toàn bộ cục JSON nhỏ hơn hoặc bằng 64 bytes
-        while (Buffer.byteLength(JSON.stringify({ ts: Date.now(), t: safeTag })) > 64 && safeTag.length > 0) {
-          safeTag = safeTag.slice(0, -1);
-        }
-        const payload = JSON.stringify({ ts: Date.now(), t: safeTag });
-        return [{ text: tag, callback_data: payload }];
-      })
-    };
-  }
 
   // Luôn dọn dẹp sạch sẽ mọi thẻ <Task> và các thẻ chức năng khác còn sót lại
   rawText = rawText.replace(/<Task[^>]*>/gi, "").replace(/<\/Task>/gi, "")

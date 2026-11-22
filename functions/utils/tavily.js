@@ -120,7 +120,7 @@ const searchTavily = async (query, options = {}) => {
     topic: options.topic || "general",
     include_answer: true,
     max_results: 7,
-    include_domains: targetDomains,
+    ...(!options.open_search && { include_domains: options.include_domains || targetDomains }),
     sort_by: "date",
     ...(options.topic === "news" && { days: 90 }),
     ...(isTodaySensitive && !isWeather && { time_range: "day" })
@@ -168,5 +168,28 @@ const searchTavily = async (query, options = {}) => {
   }
 };
 
-module.exports = { searchTavily, TODAY_KEYWORDS };
+/**
+ * Trích xuất nội dung trang web bằng Tavily Extract API (hỗ trợ residential proxy & headless rendering).
+ * @param {string} url
+ * @returns {Promise<string|null>}
+ */
+const extractTavily = async (url) => {
+  if (!TAVILY_API_KEY || TAVILY_API_KEY === "YOUR_TAVILY_API_KEY_HERE") return null;
+  try {
+    console.log(`[Tavily Extract] Gọi API bóc tách URL: ${url}`);
+    const res = await axios.post("https://api.tavily.com/extract", {
+      api_key: TAVILY_API_KEY,
+      urls: [url]
+    }, { timeout: 15000 });
+    const item = res.data?.results?.[0];
+    if (item && item.raw_content && item.raw_content.trim().length > 100) {
+      return item.raw_content.slice(0, 4000);
+    }
+  } catch (err) {
+    console.error("[Tavily Extract] Lỗi:", err?.response?.data || err.message);
+  }
+  return null;
+};
+
+module.exports = { searchTavily, extractTavily, TODAY_KEYWORDS };
 // optimize tavily speed: Fri Jul 10 07:46:48 +07 2026
