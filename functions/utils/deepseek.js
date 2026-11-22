@@ -565,9 +565,9 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   // Xử lý chặn Hallucination & Tương tác lỗi bằng logic code (dynamic constraints)
   let guardrails = "";
   if (isTargetedSpeakerSummary) {
-    guardrails += ` [SYSTEM: Đang tổng hợp nội dung CỦA DUY NHẤT "${targetSpeaker.targetName}". TUYỆT ĐỐI CHỈ tổng hợp từ những phát biểu do chính ${targetSpeaker.targetName} nói ra ở trên. NGHIÊM CẤM đưa ý kiến, số liệu hay nội dung của người khác vào câu trả lời. Nếu ${targetSpeaker.targetName} không nói về chủ đề nào đó, BÁO RÕ là người này không đề cập.]`;
+    guardrails += ` [SYSTEM: Đang tổng hợp nội dung CỦA DUY NHẤT "${targetSpeaker.targetName}". TUYỆT ĐỐI CHỈ tổng hợp từ phát biểu của ${targetSpeaker.targetName} ở trên thành các ý chính súc tích (KHÔNG chép lại từng câu rời rạc). NGHIÊM CẤM đưa ý kiến/số liệu của người khác vào câu trả lời. Nếu ${targetSpeaker.targetName} không đề cập chủ đề nào, báo rõ ngắn gọn.]`;
   } else if (isTimeRangeSummaryRequest(prompt) || /tóm tắt|tổng hợp|summary/i.test(cleanPrompt)) {
-    guardrails += " [SYSTEM: CHỈ tóm tắt khách quan theo từng người nói, định dạng rõ: '• [Tên người]: [Ý kiến]', CẤM gộp lẫn lộn ý kiến người này sang người khác, CẤM bộc lộ cảm xúc, CẤM hỏi ngược lại user.]";
+    guardrails += " [SYSTEM: Tóm tắt SÚC TÍCH theo từng CHỦ ĐỀ / VẤN ĐỀ CHÍNH để người đọc nắm nhanh bức tranh tổng thể (định dạng: '• **[Chủ đề]**: nội dung cốt lõi, luận điểm chính và kết luận nếu có'). CẤM liệt kê máy móc từng câu theo từng người nói; lược bỏ tán gẫu vụn vặt. Chỉ nhắc tên người khi cần phân biệt quan điểm trái chiều quan trọng (CẤM gán nhầm ý kiến giữa các thành viên). Khách quan, CẤM hỏi ngược lại user.]";
   }
   if (/(doanh thu|lợi nhuận|chi phí|đầu tư|tài chính|kinh doanh|vốn)/i.test(cleanPrompt)) {
     guardrails += " [SYSTEM: Ước tính tài chính phải khách quan, thực tế, tính đủ chi phí ẩn, CẤM bịa số liệu lạc quan vô căn cứ.]";

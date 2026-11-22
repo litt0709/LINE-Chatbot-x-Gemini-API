@@ -183,6 +183,13 @@ Tài liệu này liệt kê danh sách các tính năng (features) của Bot, ba
 - **Cập nhật Hồ sơ Ngầm (`processAndExtractProfile`):**
   - Xóa bỏ hoàn toàn thông báo `[Hệ thống: Đã cập nhật hồ sơ cá nhân]` khỏi tin nhắn trả lời, lưu hồ sơ ngầm 100% và triệt tiêu lỗi lặp thông báo 2 lần.
 
+## 27. Tóm tắt Tổng hợp theo Chủ đề / Vấn đề Chính (Topic-Centric Summary) — 2026-11-22
+- **Nâng cấp định dạng tóm tắt chung (`deepseek.js` - $0 Compute Cost):**
+  - Thay thế định dạng liệt kê máy móc từng người nói (`• [Tên người]: [Ý kiến]`) bằng tổng hợp theo **Chủ đề / Vấn đề chính** (`• **[Chủ đề]**: nội dung cốt lõi, luận điểm chính và kết luận nếu có`), tự động lược bỏ tán gẫu vụn vặt để người dùng nắm nhanh bức tranh toàn cảnh.
+  - Chỉ nhắc tên thành viên khi cần phân biệt quan điểm trái chiều quan trọng, vẫn đảm bảo nguyên tắc không gán nhầm ý kiến giữa các thành viên.
+  - Giữ nguyên cơ chế Cô lập Người nói (`Speaker Isolation`) khi user yêu cầu tổng hợp riêng một cá nhân cụ thể, đồng thời cô đọng theo các ý chính thay vì chép lại từng tin nhắn rời rạc.
+
+
 
 
 
