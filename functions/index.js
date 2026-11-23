@@ -51,25 +51,27 @@ const userFactsIndexCache = new Map(); // key: userId/groupId -> { data: {...}, 
 const focusModeCache = new Map(); // key: chatId -> { userId, expiresAt }
 const proactiveRateLimitCache = new Map(); // key: chatId -> nextAllowedTimestamp
 const proactiveMsgCountCache = new Map(); // key: chatId -> count of non-targeted group msgs
-const PROACTIVE_COOLDOWN_MS = 20 * 60 * 1000; // 20 phút sau khi góp lời thành công
-const PROACTIVE_IGNORE_BACKOFF_MS = 5 * 60 * 1000; // 5 phút backoff nếu LLM chọn IGNORE
-const PROACTIVE_MSG_INTERVAL = 8; // Sau 8 tin thảo luận sôi nổi (hết cooldown) -> cho phép góp lời
-const PROACTIVE_DISCUSSION_REGEX = /(\?|nghĩ sao|thấy sao|theo mọi người|có nên|chọn cái nào|đáng mua|ngon không|ổn không|hợp lý|vô lý|ảo thật|căng nhỉ|chán nhỉ|hay phết|xịn phết|kèo nào|đi đâu|ăn gì|uống gì|các bác|anh em)/i;
+const PROACTIVE_COOLDOWN_MS = 60 * 60 * 1000; // 60 phút sau khi góp lời thành công
+const PROACTIVE_IGNORE_BACKOFF_MS = 15 * 60 * 1000; // 15 phút backoff nếu LLM chọn IGNORE
+const PROACTIVE_MIN_MSGS_BEFORE_TRIGGER = 4; // Chờ ít nhất 4 tin nhắn trước khi góp lời (tránh nhảy vào ngay sau cold start)
+const PROACTIVE_MSG_INTERVAL = 20; // Sau 20 tin thảo luận sôi nổi (hết cooldown) -> cho phép góp lời
+const PROACTIVE_DISCUSSION_REGEX = /(nghĩ sao|thấy sao|theo mọi người|có nên|chọn cái nào|đáng mua|xin ý kiến|kèo nào|ăn gì|đi đâu)/i;
 
 const shouldTriggerProactive = (chatId, text, botConfig) => {
   const key = String(chatId);
   const trimmed = (text || "").trim();
-  if (trimmed.length <= 10) return false;
+  if (trimmed.length <= 15) return false;
 
   const count = (proactiveMsgCountCache.get(key) || 0) + 1;
   proactiveMsgCountCache.set(key, count);
 
   const nextAllowed = proactiveRateLimitCache.get(key) || 0;
   if (Date.now() < nextAllowed) return false;
+  if (count < PROACTIVE_MIN_MSGS_BEFORE_TRIGGER) return false;
 
   const lower = trimmed.toLowerCase();
   const hasConfigTrigger = (botConfig?.proactive_trigger_words || []).some(w => w && lower.includes(String(w).toLowerCase()));
-  const hasDiscussionCue = trimmed.length >= 15 && PROACTIVE_DISCUSSION_REGEX.test(trimmed);
+  const hasDiscussionCue = trimmed.length >= 25 && PROACTIVE_DISCUSSION_REGEX.test(trimmed);
   const reachedInterval = count >= PROACTIVE_MSG_INTERVAL;
 
   if (hasConfigTrigger || hasDiscussionCue || reachedInterval) {

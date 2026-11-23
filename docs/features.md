@@ -169,8 +169,8 @@ Tài liệu này liệt kê danh sách các tính năng (features) của Bot, ba
 - **Giao tiếp Không chắc chắn Tự nhiên (Anti-Robotic Rule Recitation trong `deepseek.js`):**
   - Tinh chỉnh Rule `2` & `2.2` để khi thiếu dữ kiện hoặc chưa rõ thông tin, bot phản hồi ngắn gọn, tự nhiên như người thật (*"cái này em không rõ lắm ạ"*), cấm lải nhải giải thích nội quy hay phân trần máy móc (*"em không thể nói điều chưa xác thực"*, *"anh chỉ cho phép em nói..."*).
 - **Góp lời Chủ động Thông minh, Ngắn gọn & Đồng bộ 2 Nền tảng (`shouldTriggerProactive` trong `index.js` & `deepseek.js`):**
-  - Mở rộng cơ chế Proactive Group Interjection cho **cả LINE và Telegram** với cooldown **20 phút** (giảm từ 60 phút, kèm backoff 5 phút khi `IGNORE`).
-  - Bổ sung kích hoạt offline ($0) theo câu hỏi/tín hiệu thảo luận mở (`PROACTIVE_DISCUSSION_REGEX`) và chu kỳ mỗi **8 tin nhắn** thảo luận sôi nổi khi hết cooldown.
+  - Mở rộng cơ chế Proactive Group Interjection cho **cả LINE và Telegram** với cooldown **60 phút** (kèm backoff **15 phút** khi `IGNORE`, và yêu cầu tối thiểu **4 tin nhắn** trong mạch hội thoại trước khi góp lời để tránh nhảy vào ngay sau cold start).
+  - Bổ sung kích hoạt offline ($0) theo tín hiệu xin ý kiến mở (`PROACTIVE_DISCUSSION_REGEX`, tối thiểu 25 ký tự) hoặc chu kỳ mỗi **20 tin nhắn** thảo luận sôi nổi khi hết cooldown.
   - Tinh chỉnh prompt chế độ góp lời: chỉ nói **1–2 câu ngắn gọn (dưới 40 từ)**, đưa thẳng góc nhìn thông minh, tinh tế hoặc hài hước duyên dáng, bỏ hoàn toàn mở bài rụt rè dài dòng.
 
 ## 26. Chống Nhận Nhầm Tên Người (Dầu ≠ Duy) & Cập nhật Hồ sơ Ngầm — 2026-11-22
