@@ -140,11 +140,12 @@ const dailyHumanStudy = async () => {
     const vnTime = new Date(Date.now() + 7 * 60 * 60 * 1000);
     const todayStr = vnTime.toISOString().split("T")[0];
 
-    // Tránh trùng lặp nếu hôm nay đã học rồi (tránh cả LINE & Tele cùng tốn token)
+    // Tránh trùng lặp nếu hôm nay đã học rồi (Lock-before-compute: ghi cờ TRƯỚC khi gọi LLM)
     if (configData.last_human_study_date === todayStr) {
       console.log(`[Evolution] Hôm nay (${todayStr}) đã hoàn tất Tầm Sư Học Đạo. Bỏ qua để tiết kiệm chi phí.`);
       return;
     }
+    await configRef.set({ last_human_study_date: todayStr }, { merge: true });
 
     // Lọc các chủ đề chưa học từ kho catalog
     const existingTopicsLower = new Set(insights.map(i => (i.topic || "").toLowerCase().trim()));
@@ -358,6 +359,7 @@ const evolveTaxonomyFromLogs = async () => {
       console.log(`[Evolution] Hôm nay (${todayStr}) đã hoàn tất cập nhật Taxonomy. Bỏ qua.`);
       return;
     }
+    await configRef.set({ last_taxonomy_update_date: todayStr }, { merge: true });
 
     const logsSnapshot = await db.collection("audit_logs").limit(50).get();
     if (logsSnapshot.empty) {
@@ -556,6 +558,7 @@ const dailySkillEvolution = async () => {
       console.log(`[Evolution] Hôm nay (${todayStr}) đã hoàn tất học/tối ưu Skills. Bỏ qua.`);
       return;
     }
+    await skillsRef.set({ last_skill_study_date: todayStr }, { merge: true });
 
     let skillsMap = (docData.skills && Object.keys(docData.skills).length > 0)
       ? { ...docData.skills }
@@ -645,6 +648,11 @@ Trả về DUY NHẤT JSON:
 };
 
 const runDailyEvolution = async () => {
+  const platform = (process.env.PLATFORM || "LINE").toUpperCase();
+  if (platform !== "LINE") {
+    console.log(`[Evolution] Bỏ qua runDailyEvolution trên ${platform} (LINE là node chủ đồng bộ 2 chiều sang Companion Project).`);
+    return;
+  }
   await dailyHumanStudy();
   await dailySkillEvolution();
   await processAuditIssues();

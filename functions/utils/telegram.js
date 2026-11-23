@@ -67,6 +67,8 @@ const reply = async (chatId, text, reply_markup = undefined) => {
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i];
     let htmlText = chunk.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>");
+    // Convert single *italic* sang <i> để không bao giờ hiện dấu * thô trên Telegram
+    htmlText = htmlText.replace(/(^|[\s(])\*([^\s*][^*\n]*?[^\s*]|\S)\*(?=[\s.,!?:;)]|$)/gm, "$1<i>$2</i>");
     
     // Convert markdown bullet points
     htmlText = htmlText.replace(/^[-*]\s+/gm, "• ");

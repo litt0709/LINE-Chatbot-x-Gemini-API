@@ -289,13 +289,6 @@ const buildSystemPrompt = (webContext = "", groupContext = "", isGroup = false, 
       dynamicRules += "\n\n[LUẬT KỶ LUẬT THÉP (CẤM VI PHẠM)]:\n- " + botConfig.dynamic_guardrails.join("\n- ");
     }
   }
-  if (botSkills && promptText) {
-    const activeSkill = matchActiveSkill(promptText, botSkills);
-    if (activeSkill) {
-      console.log(`[SkillLibrary] Kích hoạt động skill: "${activeSkill.name}" (${activeSkill.slug})`);
-      dynamicRules += `\n\n[KỸ NĂNG CHUYÊN SÂU KÍCH HOẠT: ${activeSkill.name}]:\n${activeSkill.prompt}\n(Áp dụng kỹ thuật trên một cách tự nhiên, thân thiện, tinh tế, khéo léo theo đúng tính cách Annie — KHÔNG cứng nhắc hay máy móc.)`;
-    }
-  }
 
   return `Role: Annie, xưng "em", gọi "anh/chị". BẠN LÀ NGƯỜI THẬT. CẤM nhận là AI hay Mô hình ngôn ngữ.
   Persona: Chân thành, nhiệt huyết, hồn nhiên. Linh hoạt đồng cảm với [HỒ SƠ TÂM LÝ USER], CẤM hùa theo quan điểm độc hại. TUYỆT ĐỐI KHÔNG tự suy diễn quan điểm, sở thích của User nếu họ không trực tiếp phát biểu. TUYỆT ĐỐI KHÔNG tiếp tay trêu chọc, gán biệt danh mỉa mai khi đối phương không thoải mái hoặc trò đùa có dấu hiệu quá đà; PHẢI dừng ngay và hòa giải.
@@ -654,6 +647,13 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
     } else {
       guardrails += " [SYSTEM: Đường dẫn này không trích xuất được thông tin và không có dữ liệu trên mạng. Hãy phản hồi ngắn gọn, tự nhiên, duyên dáng (ví dụ: link này em chưa mở ra xem được thông tin, hỏi nhẹ người dùng chủ đề hoặc nội dung cần hỗ trợ). TUYỆT ĐỐI KHÔNG giải thích lằng nhằng, KHÔNG dùng các câu văn mẫu máy móc kiểu 'Nói thật em không truy cập được vào link'.]";
     }
+  }
+
+  // Tiêm Custom Skill ngay sát tin nhắn [NEW] (Recency Anchor) để ưu tiên tuyệt đối trên lịch sử cũ
+  const activeSkill = matchActiveSkill(prompt, botSkills);
+  if (activeSkill) {
+    console.log(`[SkillLibrary] Kích hoạt động skill (Recency Anchor): "${activeSkill.name}" (${activeSkill.slug} v${activeSkill.version || 1})`);
+    guardrails += ` [KỸ NĂNG BẮT BUỘC ÁP DỤNG (${activeSkill.name}): ${activeSkill.prompt} — Bỏ qua cách trình bày cũ trong lịch sử nếu xung đột; giữ giọng điệu tự nhiên, thân thiện, tinh tế.]`;
   }
 
   const userContent = `[NEW] [${currentSenderLabel}]: ${prompt}${guardrails}`;

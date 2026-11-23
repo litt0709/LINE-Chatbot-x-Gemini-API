@@ -219,7 +219,10 @@ Tài liệu này liệt kê danh sách các tính năng (features) của Bot, ba
 - **Khóa Trọng tâm Tuyệt đối & Nâng cấp Skill `lam_tho` v4 ([deepseek.js](file:///Users/snow/Documents/www/LINE-Chatbot/functions/utils/deepseek.js), [commands/index.js](file:///Users/snow/Documents/www/LINE-Chatbot/functions/commands/index.js), Firestore `bot_skills`):**
   - Siết chặt `brevityRule`: chỉ trả lời duy nhất câu hỏi `[NEW]`, cấm lôi chuyện cũ từ `Core_Memory`/lịch sử không liên quan và cấm giải thích lê thê hạn chế bản thân (*"em nói thật..."*).
   - Bổ sung Fast Path nhận diện câu hỏi tự nhiên về kỹ năng của bot (vd *"em có những skill gì"*) → trả thẳng từ Firestore `$0` token.
-  - Nâng cấp `lam_tho` v4 theo **4 nguyên tắc vàng Lục Bát**: mặc định lục bát vui vẻ, hóm hỉnh, **tối thiểu 8 câu** (4–6 cặp chẵn 6–8), vần Bằng chuẩn phối ngang–huyền, luật `B-T-B` / `B-T-B-B`, nhịp chẵn `2/2/2` & `4/4` (chỉ đổi thể loại/sắc thái khi user yêu cầu rõ).
+  - Nâng cấp `lam_tho` v5 theo **4 nguyên tắc vàng Lục Bát**: mặc định lục bát vui vẻ, hóm hỉnh, **đúng 8 câu** (4 cặp 6–8), vần Bằng chuẩn phối ngang–huyền, không chen văn xuôi hay dấu `*`; chuyển tiêm Custom Skill xuống **Recency Anchor** ngay sát `[NEW]` và hỗ trợ convert `*italic*` → `<i>` trong [telegram.js](file:///Users/snow/Documents/www/LINE-Chatbot/functions/utils/telegram.js).
+- **Chống Race Condition Cron Tiến hóa Đêm ([evolution.js](file:///Users/snow/Documents/www/LINE-Chatbot/functions/utils/evolution.js)):**
+  - Khóa `runDailyEvolution()` chỉ chạy trên node chủ `PLATFORM === "LINE"` (tự đồng bộ 2 chiều sang Telegram) kèm cơ chế **Lock-before-compute** (ghi cờ ngày trước khi gọi DeepSeek), triệt tiêu lỗi chạy song song tốn x2 token lúc `03:00` sáng.
+
 
 
 
