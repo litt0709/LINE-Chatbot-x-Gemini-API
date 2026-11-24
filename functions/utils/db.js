@@ -3,7 +3,8 @@ const { FieldValue } = require("firebase-admin/firestore");
 
 let isInit = false;
 const initAdmin = () => {
-  if (!isInit && admin.apps.length === 0) {
+  const hasDefaultApp = admin.apps.some(a => a && a.name === "[DEFAULT]");
+  if (!isInit && !hasDefaultApp) {
     const isTelegram = process.env.PLATFORM === "TELEGRAM" || (process.env.TELEGRAM_BOT_TOKEN && !process.env.CHANNEL_SECRET);
     const defaultProject = isTelegram ? "tele-ai-chatbot" : "line-ai-chatbot-eab18";
     let projectId = process.env.GCLOUD_PROJECT;
@@ -25,7 +26,14 @@ const initAdmin = () => {
   isInit = true;
 };
 
-const db = new Proxy({}, { get: (target, prop) => { initAdmin(); return admin.firestore()[prop]; } });
+const db = new Proxy({}, {
+  get: (target, prop) => {
+    initAdmin();
+    const fsInst = admin.firestore();
+    const val = fsInst[prop];
+    return typeof val === "function" ? val.bind(fsInst) : val;
+  }
+});
 const rtdb = { ref: (path) => { initAdmin(); return admin.database().ref(path); } };
 
 /**

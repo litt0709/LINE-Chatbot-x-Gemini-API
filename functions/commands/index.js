@@ -53,6 +53,15 @@ async function handleCommand(prompt, context) {
     return await handleSkillsCommand("/skills", context);
   }
 
+  // 6. Lệnh đánh giá độc lập Chatbot (/review - chỉ cho phép Admin Eddy 2140581850)
+  if (/^\/review(?:@\w+)?$/i.test(cleanPrompt)) {
+    const { runIndependentReview, EDDY_TELEGRAM_ID } = require('../utils/reviewer');
+    if (String(context?.userId) !== EDDY_TELEGRAM_ID) {
+      return "⛔ Lệnh `/review` chỉ dành riêng cho Admin hệ thống ạ.";
+    }
+    return await runIndependentReview({ force: true, skipTelegramPush: true });
+  }
+
   return null;
 }
 

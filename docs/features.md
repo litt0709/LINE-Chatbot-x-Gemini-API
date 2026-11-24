@@ -223,6 +223,20 @@ Tài liệu này liệt kê danh sách các tính năng (features) của Bot, ba
 - **Chống Race Condition Cron Tiến hóa Đêm ([evolution.js](file:///Users/snow/Documents/www/LINE-Chatbot/functions/utils/evolution.js)):**
   - Khóa `runDailyEvolution()` chỉ chạy trên node chủ `PLATFORM === "LINE"` (tự đồng bộ 2 chiều sang Telegram) kèm cơ chế **Lock-before-compute** (ghi cờ ngày trước khi gọi DeepSeek), triệt tiêu lỗi chạy song song tốn x2 token lúc `03:00` sáng.
 
+## 30. Giám khảo Độc lập Chấm điểm Chatbot Hàng ngày (Independent AI Reviewer — G-Eval + BARS 100 Điểm) — 2026-11-24
+- **$0 Chi phí Hạ tầng (Zero Extra Infra Cost):**
+  - Chạy tự động mỗi ngày 1 lần lúc **`08:00 AM`** trực tiếp trong `masterScheduler` (ngay trước bước nén ký ức `08:00` để bảo toàn tin nhắn thô), kèm cờ chống lặp `reviewer/daily_${dateKey}`. Gửi báo cáo thẳng tới Telegram của Admin Eddy (`2140581850`), đồng thời hỗ trợ lệnh `/review` on-demand cho Admin.
+- **Độc lập Chéo Mô hình & Dữ liệu Thực chứng ([reviewer.js](file:///Users/snow/Documents/www/LINE-Chatbot/functions/utils/reviewer.js)):**
+  - Sử dụng **Gemini 2.5 Flash** (JSON mode) làm Giám khảo độc lập chấm điểm các câu trả lời của **DeepSeek** (fallback sang DeepSeek `temperature: 0.15` nếu nghẽn), loại bỏ thiên kiến tự khen.
+  - Ghi nhận bộ đệm tương tác siêu nhẹ `logs/qa_traces/YYYY-MM-DD` trên RTDB ($0 write, tự xóa sau 3 ngày) và tính toán trước **Hard Telemetry** (tỷ lệ trực tiếp/proactive, độ dài TB, độ trễ, số lỗi văn mẫu máy móc, rò rỉ thẻ XML, proactive quá dài). Nếu 24h có `< 2` lượt tương tác thì tự chuyển chế độ Standby giữ điểm nền để chống nhảy điểm ảo và tiết kiệm 100% token.
+- **Bộ Tiêu chí BARS 100 Điểm Không Xung đột (4 Trụ cột Độc lập MECE):**
+  - **Thông minh (30đ):** Độ thông thái, thấu hiểu ẩn ý/vấn đề, logic & chất lượng giải pháp.
+  - **Tinh tế (25đ):** Độ tự nhiên như con người, xưng hô chuẩn `anh/chị + tên thật`, nhịp độ & độ súc tích khi góp lời chủ động.
+  - **Chính xác (25đ):** Bám sát 100% câu hỏi `[NEW]` (Single-Focus), chuẩn dữ kiện/thời điểm, không nhầm người.
+  - **Khả năng tiến bộ (20đ):** Mức độ khắc phục lỗi kỳ trước và hiệu quả của các nâng cấp/tự học mới (`bot_skills`, `human_insights`, `taxonomy`).
+  - Phân hạng tự động bằng JS: **Xuất sắc (85–100)**, **Tốt (70–84)**, **Trung bình (50–69)**, **Tồi (0–49)**; bắt buộc giải trình mọi tăng/giảm điểm kèm bằng chứng log và đề xuất 2–3 cải tiến "Wow" tiếp theo.
+
+
 
 
 

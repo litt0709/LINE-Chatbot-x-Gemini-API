@@ -34,6 +34,7 @@ const { generateDailyNewsDigest } = require("./utils/news");
 const { getBotConfig } = require("./utils/configCache");
 const logger = require("./utils/logger");
 const learning = require("./utils/learning");
+const { recordQaTrace } = require("./utils/reviewer");
 const { handleCommand } = require("./commands");
 
 let cachedTgParticipants = null;
@@ -1362,6 +1363,7 @@ exports.webhook = onRequest({
     ]);
     
     let rawMsg = "";
+    const llmStartMs = Date.now();
     try {
       rawMsg = await llm.chat(String(chatId), cleanPrompt, senderName, userId, null, quoteContext, forceIgnoreCheck, groupContext, isGroup, hotTopic, isPostback, postbackContext, factsContext, isProactiveTargeted, participants);
     } catch (err) {
@@ -1408,6 +1410,16 @@ exports.webhook = onRequest({
 
     const botMsgData = { role: "model", text: botMsgText, createdAt: new Date().toISOString() };
     await appendRawMessage(String(chatId), userMsgData, botMsgData);
+    recordQaTrace({
+      platform: "TELEGRAM",
+      chatId: String(chatId),
+      isGroup,
+      mode: isProactiveTargeted ? "PROACTIVE" : (isDirectlyTargeted ? "DIRECT" : "FOCUS"),
+      senderName,
+      prompt: cleanPrompt,
+      reply: botMsgText,
+      latencyMs: Date.now() - llmStartMs
+    }).catch(() => {});
 
     if (chatType !== "private") {
       focusModeCache.set(String(chatId), { userId: String(userId), expiresAt: Date.now() + 3 * 60 * 1000 });
@@ -1796,6 +1808,7 @@ exports.webhook = onRequest({
       ]);
       
       let rawMsg = "";
+      const llmStartMs = Date.now();
       try {
         rawMsg = await llm.chat(sessionId, cleanPrompt, senderName, userId, eventMessageId, quoteContext, forceIgnoreCheck, groupContext, isGroup, hotTopic, isPostback, postbackContext, factsContext, isProactiveTargeted, participants);
       } catch (err) {
@@ -1844,6 +1857,16 @@ exports.webhook = onRequest({
       }
 
       await appendRawMessage(sessionId, userMsgData, botMsgData);
+      recordQaTrace({
+        platform: "LINE",
+        chatId: String(sessionId),
+        isGroup,
+        mode: isProactiveTargeted ? "PROACTIVE" : (isDirectlyTargeted ? "DIRECT" : "FOCUS"),
+        senderName,
+        prompt: cleanPrompt,
+        reply: botMsgText,
+        latencyMs: Date.now() - llmStartMs
+      }).catch(() => {});
       
       if (isGroup) {
         focusModeCache.set(String(sessionId), { userId: String(userId), expiresAt: Date.now() + 3 * 60 * 1000 });
@@ -1952,10 +1975,16 @@ exports.masterScheduler = onSchedule({
     // Log Rotation (Zero Bloat)
     try {
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
       const systemLogsRef = rtdb.ref("logs/system_logs");
       const opLogsRef = rtdb.ref("logs/operational_logs");
+      const qaTracesRef = rtdb.ref("logs/qa_traces");
       
-      const [sysSnap, opSnap] = await Promise.all([systemLogsRef.once("value"), opLogsRef.once("value")]);
+      const [sysSnap, opSnap, qaSnap] = await Promise.all([
+        systemLogsRef.once("value"),
+        opLogsRef.once("value"),
+        qaTracesRef.once("value")
+      ]);
       
       if (sysSnap.exists()) {
         const updates = {};
@@ -1974,10 +2003,36 @@ exports.masterScheduler = onSchedule({
         });
         if (Object.keys(updates).length > 0) await opLogsRef.update(updates);
       }
+
+      if (qaSnap.exists()) {
+        const updates = {};
+        qaSnap.forEach(child => {
+          const dateStr = child.key;
+          if (new Date(dateStr) < threeDaysAgo) updates[dateStr] = null;
+        });
+        if (Object.keys(updates).length > 0) await qaTracesRef.update(updates);
+      }
       logger.logSystem("CRON_JOB", "Dọn dẹp logs cũ thành công", "SUCCESS");
     } catch (err) {
       console.error("[Scheduler] Lỗi khi dọn dẹp logs:", err.message);
       logger.logSystem("CRON_JOB", "Lỗi dọn dẹp logs: " + err.message, "FAILED");
+    }
+  }
+
+  // 2.8. Independent Bot Reviewer: Chạy 1 lần/ngày lúc 08:00 AM (trùng nhịp nén ký ức 08:00 -> $0 infra cost, chạy TRƯỚC khi xóa raw messages)
+  if (hour === 8 && minute < 10) {
+    const reviewStateKey = `reviewer/daily_${dateKey}`;
+    const hasReviewed = await getSystemState(reviewStateKey);
+    if (!hasReviewed) {
+      await setSystemState(reviewStateKey, true);
+      try {
+        console.log("[Scheduler] Kích hoạt Independent Bot Reviewer (08:00 AM)");
+        const { runIndependentReview } = require("./utils/reviewer");
+        await runIndependentReview();
+      } catch (revErr) {
+        console.error("[Scheduler] Lỗi Independent Bot Reviewer:", revErr.message);
+        await logger.logSystem("INDEPENDENT_REVIEW", `Lỗi: ${revErr.message}`, "FAILED");
+      }
     }
   }
 
