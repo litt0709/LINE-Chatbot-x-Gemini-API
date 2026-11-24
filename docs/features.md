@@ -168,10 +168,10 @@ Tài liệu này liệt kê danh sách các tính năng (features) của Bot, ba
   - Tự động đồng bộ 2 chiều `dynamic_guardrails` sang Companion Project (`LINE ↔ Telegram`), đảm bảo Cross-Platform Parity.
 - **Giao tiếp Không chắc chắn Tự nhiên (Anti-Robotic Rule Recitation trong `deepseek.js`):**
   - Tinh chỉnh Rule `2` & `2.2` để khi thiếu dữ kiện hoặc chưa rõ thông tin, bot phản hồi ngắn gọn, tự nhiên như người thật (*"cái này em không rõ lắm ạ"*), cấm lải nhải giải thích nội quy hay phân trần máy móc (*"em không thể nói điều chưa xác thực"*, *"anh chỉ cho phép em nói..."*).
-- **Góp lời Chủ động Thông minh, Ngắn gọn & Đồng bộ 2 Nền tảng (`shouldTriggerProactive` trong `index.js` & `deepseek.js`):**
-  - Mở rộng cơ chế Proactive Group Interjection cho **cả LINE và Telegram** với cooldown **60 phút** (kèm backoff **15 phút** khi `IGNORE`, và yêu cầu tối thiểu **4 tin nhắn** trong mạch hội thoại trước khi góp lời để tránh nhảy vào ngay sau cold start).
-  - Bổ sung kích hoạt offline ($0) theo tín hiệu xin ý kiến mở (`PROACTIVE_DISCUSSION_REGEX`, tối thiểu 25 ký tự) hoặc chu kỳ mỗi **20 tin nhắn** thảo luận sôi nổi khi hết cooldown.
-  - Tinh chỉnh prompt chế độ góp lời: chỉ nói **1–2 câu ngắn gọn (dưới 40 từ)**, đưa thẳng góc nhìn thông minh, tinh tế hoặc hài hước duyên dáng, bỏ hoàn toàn mở bài rụt rè dài dòng.
+- **Góp lời Chủ động Thông minh, Ngắn gọn & Đồng bộ 2 Nền tảng (`shouldTriggerProactive` + `waitForGroupSilence` trong `index.js` & `deepseek.js`):**
+  - Mở rộng cơ chế Proactive Group Interjection cho **cả LINE và Telegram** với cooldown **60 phút** (kèm backoff **15 phút** khi `IGNORE`, và yêu cầu tối thiểu **4 tin nhắn** trong mạch hội thoại trước khi góp lời).
+  - **Smart Silence Debounce (Chống chen ngang — \$0 API Cost):** Trước khi gọi LLM góp lời, chờ **4 giây im lặng** (kiểm tra cả RAM + RTDB cross-instance) và double-check lại ngay trước khi gửi — nếu có thành viên nhắn tiếp thì tự hủy để không bao giờ cắt ngang cuộc trò chuyện và tiết kiệm 100% token.
+  - Tinh chỉnh prompt chế độ góp lời: chỉ nói **đúng 1 câu ngắn súc tích (tối đa 22 từ, 1 dòng)** mang tính chấm phá thông minh, tinh tế, hóm hỉnh và vui vẻ.
 
 ## 26. Chống Nhận Nhầm Tên Người (Dầu ≠ Duy) & Cập nhật Hồ sơ Ngầm — 2026-11-22
 - **Tự động Đồng bộ `participants` khi Nghe ngầm (`syncPassiveParticipant` trong `index.js` - $0 API Cost):**

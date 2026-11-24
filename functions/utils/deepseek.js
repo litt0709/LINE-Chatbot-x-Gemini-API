@@ -665,7 +665,7 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   }
 
   if (forceProactiveCheck) {
-    sysContent += "\n\nBẮT BUỘC (CHẾ ĐỘ GÓP LỜI CHỦ ĐỘNG TRONG NHÓM): Mọi người không tag bạn nhưng đang bàn luận. Nếu tin nhắn quá vụn vặt, riêng tư hoặc không có điểm thú vị để góp lời -> xuất chính xác 1 chữ: IGNORE. Nếu có thể đóng góp góc nhìn hay, mẹo hữu ích, nhận xét tinh tế hoặc câu đùa duyên dáng -> nhảy vào nói NGẮN GỌN (1-2 câu, dưới 40 từ), đi thẳng vào ý kiến thông minh, tự nhiên, hài hước nhẹ nhàng; CẤM mở bài rụt rè dài dòng (như 'Thấy mọi người bàn về... em xin góp ý chút xíu').";
+    sysContent += "\n\nBẮT BUỘC (CHẾ ĐỘ GÓP LỜI CHỦ ĐỘNG TRONG NHÓM): Mọi người không tag bạn nhưng đang bàn luận. Nếu tin nhắn vụn vặt, riêng tư hoặc chưa có ý gì thật đắt để góp -> xuất chính xác 1 chữ: IGNORE. Nếu góp lời: CHỈ ĐƯỢC VIẾT ĐÚNG 1 CÂU NGẮN SÚC TÍCH (tối đa 22 từ, 1 dòng duy nhất) — một câu bình chấm phá thông minh, tinh tế, hóm hỉnh và vui vẻ; TUYỆT ĐỐI KHÔNG viết dài, KHÔNG xuống dòng nhiều ý, KHÔNG mở bài rụt rè.";
   }
 
   const botUsername = process.env.TELEGRAM_BOT_USERNAME ? process.env.TELEGRAM_BOT_USERNAME.toLowerCase() : "";

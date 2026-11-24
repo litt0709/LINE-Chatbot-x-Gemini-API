@@ -51,11 +51,38 @@ const userFactsIndexCache = new Map(); // key: userId/groupId -> { data: {...}, 
 const focusModeCache = new Map(); // key: chatId -> { userId, expiresAt }
 const proactiveRateLimitCache = new Map(); // key: chatId -> nextAllowedTimestamp
 const proactiveMsgCountCache = new Map(); // key: chatId -> count of non-targeted group msgs
+const lastGroupMsgAt = new Map(); // key: chatId -> timestamp of latest message in group (RAM debounce)
 const PROACTIVE_COOLDOWN_MS = 60 * 60 * 1000; // 60 phút sau khi góp lời thành công
 const PROACTIVE_IGNORE_BACKOFF_MS = 15 * 60 * 1000; // 15 phút backoff nếu LLM chọn IGNORE
+const PROACTIVE_SILENCE_MS = 4000; // Chờ 4 giây im lặng trước khi chủ động góp lời (chống chen ngang khi user đang gõ)
 const PROACTIVE_MIN_MSGS_BEFORE_TRIGGER = 4; // Chờ ít nhất 4 tin nhắn trước khi góp lời (tránh nhảy vào ngay sau cold start)
 const PROACTIVE_MSG_INTERVAL = 20; // Sau 20 tin thảo luận sôi nổi (hết cooldown) -> cho phép góp lời
 const PROACTIVE_DISCUSSION_REGEX = /(nghĩ sao|thấy sao|theo mọi người|có nên|chọn cái nào|đáng mua|xin ý kiến|kèo nào|ăn gì|đi đâu)/i;
+
+/**
+ * Kiểm tra xem nhóm có thực sự im lặng kể từ mốc trigger hay không (RAM + RTDB cross-instance check).
+ */
+const isGroupQuietSince = async (chatId, triggerMs, triggerIso) => {
+  const key = String(chatId);
+  if ((lastGroupMsgAt.get(key) || 0) > triggerMs) return false;
+  try {
+    const snap = await rtdb.ref(`chats/${key}/messages`).orderByKey().limitToLast(1).once("value");
+    if (snap.exists()) {
+      const latest = Object.values(snap.val())[0];
+      if (latest && latest.createdAt && latest.createdAt > triggerIso) {
+        return false;
+      }
+    }
+  } catch (e) {
+    // Nếu lỗi đọc RTDB thì dựa theo RAM
+  }
+  return true;
+};
+
+const waitForGroupSilence = async (chatId, triggerMs, triggerIso) => {
+  await new Promise(resolve => setTimeout(resolve, PROACTIVE_SILENCE_MS));
+  return isGroupQuietSince(chatId, triggerMs, triggerIso);
+};
 
 const shouldTriggerProactive = (chatId, text, botConfig) => {
   const key = String(chatId);
@@ -1199,6 +1226,7 @@ exports.webhook = onRequest({
 
     // Group chat: lưu background history (ảnh không tag bot đã xử lý ở block isRawMedia trên)
     if (chatType !== "private") {
+      lastGroupMsgAt.set(String(chatId), Date.now());
       if (!isDirectlyTargeted && !isImplicitlyTargeted && !isProactiveTargeted) {
         syncPassiveParticipant("Telegram", userId, senderName, message.from.username).catch(() => {});
         const userMsg = {
@@ -1313,6 +1341,19 @@ exports.webhook = onRequest({
 
     const forceIgnoreCheck = (!isDirectlyTargeted && isImplicitlyTargeted);
     const isGroup = chatType !== "private";
+    const proactiveTriggerMs = Date.now();
+    const proactiveTriggerIso = new Date(proactiveTriggerMs).toISOString();
+
+    // Smart Silence Debounce: chờ 4 giây không có tin nhắn mới trong group rồi mới gọi LLM góp lời
+    if (isProactiveTargeted) {
+      const quietBefore = await waitForGroupSilence(String(chatId), proactiveTriggerMs, proactiveTriggerIso);
+      if (!quietBefore) {
+        console.log(`[Proactive] Telegram: Có tin nhắn mới trong lúc chờ im lặng (${PROACTIVE_SILENCE_MS}ms) → hủy góp lời để không chen ngang.`);
+        const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, createdAt: proactiveTriggerIso };
+        appendRawMessage(String(chatId), userMsgData).catch(e => console.error(e));
+        return res.end();
+      }
+    }
     
     // Gom các truy vấn I/O độc lập chạy song song để tối ưu tốc độ
     const [groupContext, factsContext] = await Promise.all([
@@ -1325,11 +1366,13 @@ exports.webhook = onRequest({
       rawMsg = await llm.chat(String(chatId), cleanPrompt, senderName, userId, null, quoteContext, forceIgnoreCheck, groupContext, isGroup, hotTopic, isPostback, postbackContext, factsContext, isProactiveTargeted, participants);
     } catch (err) {
       console.error("[Telegram] Lỗi gọi LLM:", err.message);
-      await telegram.reply(chatId, "Dạ hiện tại máy chủ AI đang bận hoặc quá tải xíu, anh/chị đợi vài phút rồi hỏi lại em nha! 🥺").catch(e => {});
+      if (!isProactiveTargeted) {
+        await telegram.reply(chatId, "Dạ hiện tại máy chủ AI đang bận hoặc quá tải xíu, anh/chị đợi vài phút rồi hỏi lại em nha! 🥺").catch(e => {});
+      }
       return res.end();
     }
 
-    const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, createdAt: new Date().toISOString() };
+    const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, createdAt: proactiveTriggerIso };
 
     if (rawMsg.trim() === "IGNORE") {
       if (isProactiveTargeted) {
@@ -1337,6 +1380,16 @@ exports.webhook = onRequest({
       }
       appendRawMessage(String(chatId), userMsgData).catch(e => console.error(e));
       return res.end();
+    }
+
+    // Double-check sau khi LLM trả lời xong: nếu đúng lúc LLM đang nghĩ có người vừa nhắn tiếp → hủy gửi để không cắt ngang
+    if (isProactiveTargeted) {
+      const quietAfter = await isGroupQuietSince(String(chatId), proactiveTriggerMs, proactiveTriggerIso);
+      if (!quietAfter) {
+        console.log(`[Proactive] Telegram: Có tin nhắn mới trong lúc LLM xử lý → hủy gửi để không cắt ngang.`);
+        appendRawMessage(String(chatId), userMsgData).catch(e => console.error(e));
+        return res.end();
+      }
     }
 
     const { text: botMsgText, topic, reaction } = await processAndExtractProfile(rawMsg, userId, participants, String(chatId), senderName, "Telegram");
@@ -1556,6 +1609,7 @@ exports.webhook = onRequest({
       if (event.source.type === "user" || event.type === "postback") {
         isDirectlyTargeted = true;
       } else {
+        lastGroupMsgAt.set(String(sessionId), Date.now());
         const isMentioned = event.message?.mention?.mentionees?.some(m => m.isSelf === true);
         if (isMentioned) {
           isDirectlyTargeted = true;
@@ -1721,6 +1775,19 @@ exports.webhook = onRequest({
 
       let forceIgnoreCheck = (!isDirectlyTargeted && isImplicitlyTargeted);
       const isGroup = event.source.type !== "user";
+      const proactiveTriggerMs = Date.now();
+      const proactiveTriggerIso = new Date(proactiveTriggerMs).toISOString();
+
+      // Smart Silence Debounce: chờ 4 giây không có tin nhắn mới trong group rồi mới gọi LLM góp lời
+      if (isProactiveTargeted) {
+        const quietBefore = await waitForGroupSilence(sessionId, proactiveTriggerMs, proactiveTriggerIso);
+        if (!quietBefore) {
+          console.log(`[Proactive] LINE: Có tin nhắn mới trong lúc chờ im lặng (${PROACTIVE_SILENCE_MS}ms) → hủy góp lời để không chen ngang.`);
+          const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, lineMessageId: eventMessageId, createdAt: proactiveTriggerIso };
+          appendRawMessage(sessionId, userMsgData).catch(e => console.error(e));
+          continue;
+        }
+      }
 
       // Gom các truy vấn I/O độc lập chạy song song để tối ưu tốc độ
       const [groupContext, factsContext] = await Promise.all([
@@ -1733,12 +1800,14 @@ exports.webhook = onRequest({
         rawMsg = await llm.chat(sessionId, cleanPrompt, senderName, userId, eventMessageId, quoteContext, forceIgnoreCheck, groupContext, isGroup, hotTopic, isPostback, postbackContext, factsContext, isProactiveTargeted, participants);
       } catch (err) {
         console.error("[LINE] Lỗi gọi LLM:", err.message);
-        const fallbackMsg = { type: "text", text: "Dạ hiện tại máy chủ AI đang bận hoặc quá tải xíu, anh/chị đợi vài phút rồi hỏi lại em nha! 🥺" };
-        await line.reply(event.replyToken, [fallbackMsg]).catch(e => {});
+        if (!isProactiveTargeted) {
+          const fallbackMsg = { type: "text", text: "Dạ hiện tại máy chủ AI đang bận hoặc quá tải xíu, anh/chị đợi vài phút rồi hỏi lại em nha! 🥺" };
+          await line.reply(event.replyToken, [fallbackMsg]).catch(e => {});
+        }
         continue;
       }
 
-      const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, lineMessageId: eventMessageId, createdAt: new Date().toISOString() };
+      const userMsgData = { role: "user", text: messageContent, senderName, senderId: userId, lineMessageId: eventMessageId, createdAt: proactiveTriggerIso };
 
       if (rawMsg.trim() === "IGNORE") {
         if (isProactiveTargeted) {
@@ -1746,6 +1815,15 @@ exports.webhook = onRequest({
         }
         appendRawMessage(sessionId, userMsgData).catch(e => console.error(e));
         continue;
+      }
+
+      if (isProactiveTargeted) {
+        const quietAfter = await isGroupQuietSince(sessionId, proactiveTriggerMs, proactiveTriggerIso);
+        if (!quietAfter) {
+          console.log(`[Proactive] LINE: Có tin nhắn mới trong lúc LLM xử lý → hủy gửi để không cắt ngang.`);
+          appendRawMessage(sessionId, userMsgData).catch(e => console.error(e));
+          continue;
+        }
       }
 
       const { text: botMsgText, topic } = await processAndExtractProfile(rawMsg, userId, participants, sessionId, senderName, "LINE");
