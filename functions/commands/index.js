@@ -53,13 +53,15 @@ async function handleCommand(prompt, context) {
     return await handleSkillsCommand("/skills", context);
   }
 
-  // 6. Lệnh đánh giá độc lập Chatbot (/review - chỉ cho phép Admin Eddy 2140581850)
-  if (/^\/review(?:@\w+)?$/i.test(cleanPrompt)) {
+  // 6. Lệnh đánh giá độc lập Chatbot (/review hoặc /review <số_ngày> - chỉ cho phép Admin Eddy 2140581850)
+  const reviewMatch = cleanPrompt.match(/^\/review(?:@\w+)?(?:\s+(\d+))?$/i);
+  if (reviewMatch) {
     const { runIndependentReview, EDDY_TELEGRAM_ID } = require('../utils/reviewer');
     if (String(context?.userId) !== EDDY_TELEGRAM_ID) {
       return "⛔ Lệnh `/review` chỉ dành riêng cho Admin hệ thống ạ.";
     }
-    return await runIndependentReview({ force: true, skipTelegramPush: true });
+    const customDays = reviewMatch[1] ? Number(reviewMatch[1]) : null;
+    return await runIndependentReview({ force: true, skipTelegramPush: true, customDays });
   }
 
   return null;

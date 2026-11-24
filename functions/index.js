@@ -34,7 +34,7 @@ const { generateDailyNewsDigest } = require("./utils/news");
 const { getBotConfig } = require("./utils/configCache");
 const logger = require("./utils/logger");
 const learning = require("./utils/learning");
-const { recordQaTrace } = require("./utils/reviewer");
+const { recordQaTrace, getReviewConfig, getRetentionDaysForReview } = require("./utils/reviewer");
 const { handleCommand } = require("./commands");
 
 let cachedTgParticipants = null;
@@ -1974,8 +1974,9 @@ exports.masterScheduler = onSchedule({
     
     // Log Rotation (Zero Bloat)
     try {
+      const retentionDays = getRetentionDaysForReview(); // Tự động co giãn theo REVIEW_INTERVAL_DAYS (vd 1, 7, 30 ngày)
+      const dynamicRetentionCutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-      const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
       const systemLogsRef = rtdb.ref("logs/system_logs");
       const opLogsRef = rtdb.ref("logs/operational_logs");
       const qaTracesRef = rtdb.ref("logs/qa_traces");
@@ -1990,7 +1991,7 @@ exports.masterScheduler = onSchedule({
         const updates = {};
         sysSnap.forEach(child => {
           const dateStr = child.key; // YYYY-MM-DD
-          if (new Date(dateStr) < sevenDaysAgo) updates[dateStr] = null;
+          if (new Date(dateStr) < dynamicRetentionCutoff) updates[dateStr] = null;
         });
         if (Object.keys(updates).length > 0) await systemLogsRef.update(updates);
       }
@@ -2008,7 +2009,7 @@ exports.masterScheduler = onSchedule({
         const updates = {};
         qaSnap.forEach(child => {
           const dateStr = child.key;
-          if (new Date(dateStr) < threeDaysAgo) updates[dateStr] = null;
+          if (new Date(dateStr) < dynamicRetentionCutoff) updates[dateStr] = null;
         });
         if (Object.keys(updates).length > 0) await qaTracesRef.update(updates);
       }
@@ -2019,14 +2020,15 @@ exports.masterScheduler = onSchedule({
     }
   }
 
-  // 2.8. Independent Bot Reviewer: Chạy 1 lần/ngày lúc 08:00 AM (trùng nhịp nén ký ức 08:00 -> $0 infra cost, chạy TRƯỚC khi xóa raw messages)
-  if (hour === 8 && minute < 10) {
-    const reviewStateKey = `reviewer/daily_${dateKey}`;
-    const hasReviewed = await getSystemState(reviewStateKey);
-    if (!hasReviewed) {
+  // 2.8. Independent Bot Reviewer: Chạy theo chu kỳ động từ .env (REVIEW_INTERVAL_DAYS & REVIEW_HOUR, mặc định 1 ngày lúc 08:00 AM)
+  const { intervalDays: revIntervalDays, reviewHour: revHour } = getReviewConfig();
+  if (revIntervalDays > 0 && hour === revHour && minute < 10) {
+    const reviewStateKey = `reviewer/checked_${dateKey}`;
+    const hasCheckedToday = await getSystemState(reviewStateKey);
+    if (!hasCheckedToday) {
       await setSystemState(reviewStateKey, true);
       try {
-        console.log("[Scheduler] Kích hoạt Independent Bot Reviewer (08:00 AM)");
+        console.log(`[Scheduler] Kiểm tra chu kỳ Independent Bot Reviewer (interval=${revIntervalDays}d, hour=${revHour}h)`);
         const { runIndependentReview } = require("./utils/reviewer");
         await runIndependentReview();
       } catch (revErr) {

@@ -223,12 +223,16 @@ Tài liệu này liệt kê danh sách các tính năng (features) của Bot, ba
 - **Chống Race Condition Cron Tiến hóa Đêm ([evolution.js](file:///Users/snow/Documents/www/LINE-Chatbot/functions/utils/evolution.js)):**
   - Khóa `runDailyEvolution()` chỉ chạy trên node chủ `PLATFORM === "LINE"` (tự đồng bộ 2 chiều sang Telegram) kèm cơ chế **Lock-before-compute** (ghi cờ ngày trước khi gọi DeepSeek), triệt tiêu lỗi chạy song song tốn x2 token lúc `03:00` sáng.
 
-## 30. Giám khảo Độc lập Chấm điểm Chatbot Hàng ngày (Independent AI Reviewer — G-Eval + BARS 100 Điểm) — 2026-11-24
-- **$0 Chi phí Hạ tầng (Zero Extra Infra Cost):**
-  - Chạy tự động mỗi ngày 1 lần lúc **`08:00 AM`** trực tiếp trong `masterScheduler` (ngay trước bước nén ký ức `08:00` để bảo toàn tin nhắn thô), kèm cờ chống lặp `reviewer/daily_${dateKey}`. Gửi báo cáo thẳng tới Telegram của Admin Eddy (`2140581850`), đồng thời hỗ trợ lệnh `/review` on-demand cho Admin.
-- **Độc lập Chéo Mô hình & Dữ liệu Thực chứng ([reviewer.js](file:///Users/snow/Documents/www/LINE-Chatbot/functions/utils/reviewer.js)):**
-  - Sử dụng **Gemini 2.5 Flash** (JSON mode) làm Giám khảo độc lập chấm điểm các câu trả lời của **DeepSeek** (fallback sang DeepSeek `temperature: 0.15` nếu nghẽn), loại bỏ thiên kiến tự khen.
-  - Ghi nhận bộ đệm tương tác siêu nhẹ `logs/qa_traces/YYYY-MM-DD` trên RTDB ($0 write, tự xóa sau 3 ngày) và tính toán trước **Hard Telemetry** (tỷ lệ trực tiếp/proactive, độ dài TB, độ trễ, số lỗi văn mẫu máy móc, rò rỉ thẻ XML, proactive quá dài). Nếu 24h có `< 2` lượt tương tác thì tự chuyển chế độ Standby giữ điểm nền để chống nhảy điểm ảo và tiết kiệm 100% token.
+## 30. Giám khảo Độc lập Chấm điểm Chatbot Theo Chu kỳ Động (Independent AI Reviewer — G-Eval + BARS 100 Điểm) — 2026-11-24
+- **Cấu hình Chu kỳ Động qua `.env` & \$0 Chi phí Hạ tầng:**
+  - Chạy trực tiếp trên `masterScheduler` theo biến `REVIEW_INTERVAL_DAYS` (`1` = hàng ngày, `7` = hàng tuần, `30` = hàng tháng, `0` = tắt) và `REVIEW_HOUR` (mặc định `8` = `08:00 AM`), không tốn thêm Cloud Scheduler hay Cloud Function. Hỗ trợ lệnh `/review` hoặc `/review <số_ngày>` cho Admin Eddy (`2140581850`).
+  - Tự động co giãn thời gian giữ `logs/qa_traces` và `logs/system_logs` theo `REVIEW_INTERVAL_DAYS + 3` ngày (tối đa 43 ngày) để luôn bao phủ trọn vẹn 100% khoảng thời gian giữa 2 kỳ chấm.
+- **Lưu trữ Đầy đủ cho Antigravity IDE (`system_configs/bot_reviews_history`):**
+  - Lưu trọn vẹn 24 kỳ chấm gần nhất (điểm số, `pillars_analysis`, `delta_explanation`, `weaknesses`, `next_upgrades`, `hardMetrics` kèm xu hướng đầu kỳ vs cuối kỳ, và `reportText`) đồng bộ trên cả 2 nền tảng.
+  - Tích hợp sẵn skill `.agents/skills/review/SKILL.md` và script [read_bot_reviews.js](file:///Users/snow/Documents/www/LINE-Chatbot/functions/scratch/read_bot_reviews.js) để Antigravity IDE có thể đọc lại lịch sử chấm điểm và đề xuất nâng cấp bất cứ lúc nào.
+- **Độc lập Chéo Mô hình & Lấy mẫu Phân tầng Đa Ngày ([reviewer.js](file:///Users/snow/Documents/www/LINE-Chatbot/functions/utils/reviewer.js)):**
+  - Sử dụng **Gemini 2.5 Flash** (JSON mode) làm Giám khảo độc lập chấm điểm **DeepSeek** (fallback sang DeepSeek `temperature: 0.15`).
+  - Tính **Hard Telemetry** trên 100% toàn bộ lượt chat của cả kỳ, kết hợp **Time-Stratified Sampling** (tối đa 30 mẫu đại diện từ đầu → giữa → cuối kỳ + ưu tiên bắt mẫu bất thường/proactive) giúp chấm kỳ 30 ngày vẫn giữ nguyên chi phí token thấp như chấm 1 ngày.
 - **Bộ Tiêu chí BARS 100 Điểm Không Xung đột (4 Trụ cột Độc lập MECE):**
   - **Thông minh (30đ):** Độ thông thái, thấu hiểu ẩn ý/vấn đề, logic & chất lượng giải pháp.
   - **Tinh tế (25đ):** Độ tự nhiên như con người, xưng hô chuẩn `anh/chị + tên thật`, nhịp độ & độ súc tích khi góp lời chủ động.
