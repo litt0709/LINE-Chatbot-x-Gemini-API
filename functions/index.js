@@ -49,7 +49,99 @@ const globalFactsIndexCache = {
 const userFactsIndexCache = new Map(); // key: userId/groupId -> { data: {...}, expiresAt: timestamp }
 
 // Smart Group Chat Caches & Config
-const focusModeCache = new Map(); // key: chatId -> { userId, expiresAt }
+const focusModeCache = new Map(); // key: chatId -> { userId, expiresAt, peerSpokeSinceBot, lastBotMsgId }
+const FOCUS_DURATION_MS = 5 * 60 * 1000; // 5 phút sliding window cho mạch hội thoại liên tục
+const PEER_OR_THIRD_PERSON_REGEX = /(?:^|[\s,.:;!?])(?:tớ|cậu|mày|tao|ông ơi|bà ơi|các ông|các bác|ae ơi|anh em ơi|mọi người ơi|con bot|bảo nó|nó làm)(?=[\s,.:;!?]|$)/i;
+const DIRECT_EM_ADDRESS_REGEX = /(?:^|[\s,.:;!?])em(?=[\s,.:;!?]|$)/i;
+const FOLLOWUP_INTENT_REGEX = /\?|(?:^|\s)(?:tại sao|vì sao|làm sao|như nào|thế nào|bao nhiêu|kể|tính|sửa|viết lại|làm lại|giải thích|tóm tắt|thử|check|kiểm tra|xem|tìm|cho anh|cho chị|giúp anh|giúp chị|còn|vậy còn|thế còn|ý anh|ý chị|vẫn chưa|sai rồi|chưa đúng|ngắn lại|chi tiết hơn)(?=[.,?!:;\s]|$)|(?:^|\s)(?:nhỉ|hả|nhé|nha|đi|xem|không|chưa|sao)(?=[.?!,;:\s]*$)/i;
+
+const getFocusState = async (chatId) => {
+  const key = String(chatId);
+  let state = focusModeCache.get(key);
+  if (state) return state;
+  try {
+    const snap = await rtdb.ref(`chats/${key}/metadata/focusState`).once("value");
+    if (snap.exists()) {
+      state = snap.val();
+      if (state && state.expiresAt > Date.now()) {
+        focusModeCache.set(key, state);
+        return state;
+      }
+    }
+  } catch (e) { /* fallback RAM */ }
+  return null;
+};
+
+const setFocusState = (chatId, userId, lastBotMsgId = null) => {
+  const key = String(chatId);
+  const state = {
+    userId: String(userId),
+    expiresAt: Date.now() + FOCUS_DURATION_MS,
+    peerSpokeSinceBot: false,
+    ...(lastBotMsgId ? { lastBotMsgId: String(lastBotMsgId) } : {})
+  };
+  focusModeCache.set(key, state);
+  rtdb.ref(`chats/${key}/metadata/focusState`).set(state).catch(() => {});
+};
+
+const clearFocusState = (chatId) => {
+  const key = String(chatId);
+  focusModeCache.delete(key);
+  rtdb.ref(`chats/${key}/metadata/focusState`).remove().catch(() => {});
+};
+
+const markPeerSpokeInFocus = async (chatId, speakerId) => {
+  const key = String(chatId);
+  const state = await getFocusState(key);
+  if (state && state.expiresAt > Date.now() && String(state.userId) !== String(speakerId) && !state.peerSpokeSinceBot) {
+    const updated = { ...state, peerSpokeSinceBot: true };
+    focusModeCache.set(key, updated);
+    rtdb.ref(`chats/${key}/metadata/focusState/peerSpokeSinceBot`).set(true).catch(() => {});
+  }
+};
+
+/**
+ * Đánh giá thông minh xem tin nhắn không tag bot có phải là câu nói nối tiếp với Annie trong Focus Mode không.
+ */
+const evaluateFocusFollowUp = async (chatId, userId, rawText, { hasOtherMentions = false, isReplyingToOtherHuman = false } = {}) => {
+  const focus = await getFocusState(chatId);
+  if (!focus || Date.now() >= focus.expiresAt) return false;
+
+  // Nếu người gửi là thành viên khác -> đánh dấu có người xen vào hội thoại nhóm
+  if (String(focus.userId) !== String(userId)) {
+    markPeerSpokeInFocus(chatId, userId).catch(() => {});
+    return false;
+  }
+
+  // Nếu chính user đang Focus lại reply tin nhắn người khác hoặc tag người khác -> ngắt Focus ngay
+  if (hasOtherMentions || isReplyingToOtherHuman) {
+    clearFocusState(chatId);
+    console.log(`[Focus Mode] Ngắt Focus tại Group ${chatId} do User ${userId} chuyển sang tag/reply người khác.`);
+    return false;
+  }
+
+  const trimmed = String(rawText || "").trim();
+  if (trimmed.length <= 3) return false; // Bỏ qua từ cảm thán ngắn (ok, ừ, =)))
+
+  // Nếu dùng đại từ ngang hàng với bạn bè (tớ/cậu/mày/tao/ae...) hoặc gọi bot ngôi thứ 3 (con bot/bảo nó) -> ngắt Focus ngay
+  if (PEER_OR_THIRD_PERSON_REGEX.test(trimmed)) {
+    clearFocusState(chatId);
+    console.log(`[Focus Mode] Ngắt Focus tại Group ${chatId} do phát hiện đại từ giao tiếp ngang hàng / ngôi thứ 3.`);
+    return false;
+  }
+
+  // 1. Có gọi trực tiếp "em" -> kích hoạt ngay kể cả khi đã có thành viên khác nói xen vào
+  if (DIRECT_EM_ADDRESS_REGEX.test(trimmed)) {
+    return true;
+  }
+
+  // 2. Nếu chưa có ai khác xen vào (mạch 1-1 liên tục ngay sau câu trả lời của Annie) -> chấp nhận cả câu nhận xét/yêu cầu/hỏi tiếp tự nhiên
+  if (!focus.peerSpokeSinceBot && (FOLLOWUP_INTENT_REGEX.test(trimmed) || trimmed.length >= 6)) {
+    return true;
+  }
+
+  return false;
+};
 const proactiveRateLimitCache = new Map(); // key: chatId -> nextAllowedTimestamp
 const proactiveMsgCountCache = new Map(); // key: chatId -> count of non-targeted group msgs
 const lastGroupMsgAt = new Map(); // key: chatId -> timestamp of latest message in group (RAM debounce)
@@ -1075,16 +1167,20 @@ exports.webhook = onRequest({
     let isImplicitlyTargeted = !isDirectlyTargeted && messageContent && /\bannie\b/i.test(messageContent);
     let isProactiveTargeted = false;
 
-    // --- Smart Group Chat: Focus Mode ---
-    if (chatType !== "private" && !isDirectlyTargeted && !isImplicitlyTargeted && !isSticker) {
-      const focus = focusModeCache.get(String(chatId));
-      if (focus && focus.userId === String(userId) && Date.now() < focus.expiresAt) {
-        const hasOtherMentions = /@\w+\b/gi.test(rawText) && !rawText.toLowerCase().includes(`@${botUsername}`);
-        const isQuestionOrCommand = QUESTION_OR_COMMAND_REGEX.test(rawText);
-        if (!hasOtherMentions && isQuestionOrCommand) {
+    // --- Smart Group Chat: Focus Mode (3-Layer Conversational Continuity) ---
+    if (chatType !== "private") {
+      if (isDirectlyTargeted) {
+        // Giữ mạch mới
+      } else if (!isImplicitlyTargeted && !isSticker) {
+        const hasOtherMentions = /@\w+\b/gi.test(rawText) && (!botUsername || !rawText.toLowerCase().includes(`@${botUsername}`));
+        const isReplyingToOtherHuman = !!(message.reply_to_message && (!botUsername || message.reply_to_message.from?.username?.toLowerCase() !== botUsername));
+        const shouldFollowUp = await evaluateFocusFollowUp(chatId, userId, rawText, { hasOtherMentions, isReplyingToOtherHuman });
+        if (shouldFollowUp) {
           isImplicitlyTargeted = true;
-          console.log(`[Focus Mode] Telegram: Bot tự động follow up với User ${userId} trong Group ${chatId}`);
+          console.log(`[Focus Mode] Telegram: Bot tự động nối mạch hội thoại với User ${userId} trong Group ${chatId}`);
         }
+      } else if (isSticker) {
+        markPeerSpokeInFocus(chatId, userId).catch(() => {});
       }
     }
 
@@ -1379,6 +1475,10 @@ exports.webhook = onRequest({
     if (rawMsg.trim() === "IGNORE") {
       if (isProactiveTargeted) {
         proactiveRateLimitCache.set(String(chatId), Date.now() + PROACTIVE_IGNORE_BACKOFF_MS);
+      } else if (forceIgnoreCheck && !/\bannie\b/i.test(messageContent || "")) {
+        // LLM xác nhận user đã đổi chủ đề sang nói chuyện với người khác -> nhả Focus Mode ngay để không làm phiền
+        clearFocusState(chatId);
+        console.log(`[Focus Mode] Telegram: Đã nhả Focus tại Group ${chatId} do user đổi chủ đề.`);
       }
       appendRawMessage(String(chatId), userMsgData).catch(e => console.error(e));
       return res.end();
@@ -1422,8 +1522,9 @@ exports.webhook = onRequest({
     }).catch(() => {});
 
     if (chatType !== "private") {
-      focusModeCache.set(String(chatId), { userId: String(userId), expiresAt: Date.now() + 3 * 60 * 1000 });
-      if (isProactiveTargeted) {
+      if (!isProactiveTargeted) {
+        setFocusState(chatId, userId);
+      } else {
         proactiveRateLimitCache.set(String(chatId), Date.now() + PROACTIVE_COOLDOWN_MS);
       }
     }
@@ -1623,26 +1724,34 @@ exports.webhook = onRequest({
       } else {
         lastGroupMsgAt.set(String(sessionId), Date.now());
         const isMentioned = event.message?.mention?.mentionees?.some(m => m.isSelf === true);
-        if (isMentioned) {
+        const hasOtherLineMentions = !isMentioned && event.message?.mention?.mentionees?.length > 0;
+        const focusSnapshot = await getFocusState(sessionId);
+        const quotedId = event.message?.quotedMessageId || null;
+        const isQuotingBot = !!(quotedId && focusSnapshot?.lastBotMsgId && String(quotedId) === String(focusSnapshot.lastBotMsgId));
+        const isQuotingOtherHuman = !!(quotedId && !isQuotingBot);
+
+        if (isMentioned || isQuotingBot) {
           isDirectlyTargeted = true;
         } else if (/\bannie\b/i.test(messageContent)) {
           isImplicitlyTargeted = true;
         } else if (!isSticker) {
           const rawText = (event.type === "message" && event.message.type === "text") ? (event.message.text || "") : "";
-          // --- Smart Group Chat: Focus Mode ---
-          const focus = focusModeCache.get(String(sessionId));
-          if (focus && focus.userId === String(userId) && Date.now() < focus.expiresAt) {
-            const isQuestionOrCommand = QUESTION_OR_COMMAND_REGEX.test(rawText);
-            if (isQuestionOrCommand) {
-              isImplicitlyTargeted = true;
-              console.log(`[Focus Mode] LINE: Bot tự động follow up với User ${userId} trong Group ${sessionId}`);
-            }
+          // --- Smart Group Chat: Focus Mode (3-Layer Conversational Continuity) ---
+          const shouldFollowUp = await evaluateFocusFollowUp(sessionId, userId, rawText, {
+            hasOtherMentions: hasOtherLineMentions,
+            isReplyingToOtherHuman: isQuotingOtherHuman
+          });
+          if (shouldFollowUp) {
+            isImplicitlyTargeted = true;
+            console.log(`[Focus Mode] LINE: Bot tự động nối mạch hội thoại với User ${userId} trong Group ${sessionId}`);
           }
           // --- Smart Group Chat: Proactive Intervention ---
           if (!isImplicitlyTargeted && rawText && shouldTriggerProactive(sessionId, rawText, botConfig)) {
             isProactiveTargeted = true;
             console.log(`[Proactive] LINE: Triggered in Group ${sessionId}`);
           }
+        } else {
+          markPeerSpokeInFocus(sessionId, userId).catch(() => {});
         }
 
         if (!isDirectlyTargeted && !isImplicitlyTargeted && !isProactiveTargeted) {
@@ -1825,6 +1934,9 @@ exports.webhook = onRequest({
       if (rawMsg.trim() === "IGNORE") {
         if (isProactiveTargeted) {
           proactiveRateLimitCache.set(String(sessionId), Date.now() + PROACTIVE_IGNORE_BACKOFF_MS);
+        } else if (forceIgnoreCheck && !/\bannie\b/i.test(messageContent || "")) {
+          clearFocusState(sessionId);
+          console.log(`[Focus Mode] LINE: Đã nhả Focus tại Group ${sessionId} do user đổi chủ đề.`);
         }
         appendRawMessage(sessionId, userMsgData).catch(e => console.error(e));
         continue;
@@ -1869,8 +1981,9 @@ exports.webhook = onRequest({
       }).catch(() => {});
       
       if (isGroup) {
-        focusModeCache.set(String(sessionId), { userId: String(userId), expiresAt: Date.now() + 3 * 60 * 1000 });
-        if (isProactiveTargeted) {
+        if (!isProactiveTargeted) {
+          setFocusState(sessionId, userId, sentMessages?.[0]?.id || null);
+        } else {
           proactiveRateLimitCache.set(String(sessionId), Date.now() + PROACTIVE_COOLDOWN_MS);
         }
       }

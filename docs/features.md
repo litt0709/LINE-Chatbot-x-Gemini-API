@@ -233,6 +233,24 @@ Tài liệu này liệt kê danh sách các tính năng (features) của Bot, ba
 - **Độc lập Chéo Mô hình & Lấy mẫu Phân tầng Đa Ngày ([reviewer.js](file:///Users/snow/Documents/www/LINE-Chatbot/functions/utils/reviewer.js)):**
   - Sử dụng **Gemini 2.5 Flash** (JSON mode) làm Giám khảo độc lập chấm điểm **DeepSeek** (fallback sang DeepSeek `temperature: 0.15`).
   - Tính **Hard Telemetry** trên 100% toàn bộ lượt chat của cả kỳ, kết hợp **Time-Stratified Sampling** (tối đa 30 mẫu đại diện từ đầu → giữa → cuối kỳ + ưu tiên bắt mẫu bất thường/proactive) giúp chấm kỳ 30 ngày vẫn giữ nguyên chi phí token thấp như chấm 1 ngày.
+
+## 31. Smart Conversational Focus Mode 3 Lớp (Nối mạch Tự nhiên & Tự động Nhả Focus khi Đổi Chủ đề) — 2026-11-24
+- **Lớp 1 — Đồng bộ Trạng thái Focus Xuyên Instance (RAM + RTDB, Sliding Window 5 phút):**
+  - Lưu trạng thái Focus tại cả RAM và RTDB `chats/${chatId}/metadata/focusState` ($0 write), giữ mạch xuyên suốt kể cả khi Cloud Functions scale nhiều instance. Tự gia hạn 5 phút mỗi khi bot trả lời trực tiếp user (không bật Focus cho câu góp lời Proactive ngầm để tránh đeo bám).
+  - Theo dõi cờ `peerSpokeSinceBot` khi có thành viên khác xen vào hội thoại, và hỗ trợ nhận diện quote trực tiếp tin nhắn của bot trên LINE (`lastBotMsgId`).
+- **Lớp 2 — Bộ Lọc Luân phiên Lượt nói & Đại từ Offline (`evaluateFocusFollowUp` — <0.5ms, $0):**
+  - Chấp nhận các câu phản hồi/yêu cầu/góp ý nối tiếp tự nhiên không có dấu `?` khi đang trong mạch 1-1 liên tục với bot hoặc khi gọi `"em"`.
+  - **Tự ngắt Focus tức thì ($0 LLM cost)** khi user tag/reply thành viên khác, hoặc chuyển sang đại từ ngang hàng với bạn bè (`tớ`, `cậu`, `mày`, `tao`, `các bác`, `ae ơi`...) hay nhắc bot ở ngôi thứ 3 (`con bot`, `bảo nó`).
+- **Lớp 3 — Cổng Kiểm định Đổi Chủ đề bằng LLM & Tự động Nhả Focus (`deepseek.js` + `index.js`):**
+  - Đối chiếu tin `[NEW]` với câu trả lời vừa xong của bot: nếu user đã đổi hẳn sang chủ đề tán gẫu khác với nhóm, LLM trả về `IGNORE` và hệ thống lập tức xóa trạng thái Focus (`clearFocusState`) để không gọi LLM ở các tin tán gẫu tiếp theo.
+
+## 32. Bộ Kiểm định Lục Bát Bằng Thuật Toán & Tự Sửa 1-Shot (`lucBatValidator.js` + `lam_tho` v6) — 2026-11-24
+- **Nâng cấp `lam_tho` v6 (Firestore LINE & Telegram):** Bổ sung sơ đồ vần nối liên hoàn `A → B → C → D → E` kèm ví dụ mẫu (few-shot) chuẩn vần nối hóm hỉnh, thuần Việt 100%, đồng thời rà soát dọn trùng trigger cho `ky_nang_thuong_luong`, `lich_trinh_du_lich`, `giai_ma_hop_dong`.
+- **Programmatic Lục Bát Verifier & 1-Shot Auto-Repair ([lucBatValidator.js](file:///Users/snow/Documents/www/LINE-Chatbot/functions/utils/lucBatValidator.js) & [deepseek.js](file:///Users/snow/Documents/www/LINE-Chatbot/functions/utils/deepseek.js)):**
+  - Tách phần vần tiếng Việt và kiểm tra tự động (< 0.2ms, $0) số tiếng (6–8) + vần trong cặp + vần nối liên cặp + thanh Bằng ngay sau khi bot làm thơ.
+  - Nếu đạt chuẩn ngay lượt đầu → gửi thẳng ($0 phụ phí); nếu phát hiện dòng gãy vần/sai tiếng → tự kích hoạt 1 lượt sửa chính xác vào đúng dòng lỗi trước khi gửi cho user.
+
+
 - **Bộ Tiêu chí BARS 100 Điểm Không Xung đột (4 Trụ cột Độc lập MECE):**
   - **Thông minh (30đ):** Độ thông thái, thấu hiểu ẩn ý/vấn đề, logic & chất lượng giải pháp.
   - **Tinh tế (25đ):** Độ tự nhiên như con người, xưng hô chuẩn `anh/chị + tên thật`, nhịp độ & độ súc tích khi góp lời chủ động.

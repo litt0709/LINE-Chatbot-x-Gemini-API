@@ -24,10 +24,10 @@ const DEFAULT_SKILLS = {
     slug: "lam_tho",
     name: "Làm thơ Sáng tạo & Chuẩn niêm luật",
     category: "creative",
-    summary: "Sáng tác thơ lục bát vui vẻ chuẩn niêm luật (tối thiểu 8 câu), hoặc thể thơ khác theo yêu cầu.",
+    summary: "Sáng tác thơ lục bát vui vẻ, hóm hỉnh chuẩn vần nối (tối thiểu 8 câu), hoặc thể thơ khác theo yêu cầu.",
     triggers: ["làm thơ", "viết thơ", "sáng tác thơ", "bài thơ", "thơ lục bát", "làm bài thơ", "tặng bài thơ", "thơ vui"],
-    prompt: "Mặc định làm thơ LỤC BÁT vui vẻ, hóm hỉnh, đúng 8 câu (4 cặp 6-8; chỉ đổi thể/sắc thái nếu user yêu cầu rõ). Thuần Việt có dấu, KHÔNG chen tiếng Anh/chữ số, KHÔNG viết văn xuôi ở câu cuối, KHÔNG dùng dấu *. Tự đếm kỹ từng cặp: câu trên ĐÚNG 6 tiếng (kết vần Bằng A), câu dưới ĐÚNG 8 tiếng (tiếng thứ 6 vần A, tiếng thứ 8 vần Bằng B nối sang tiếng 6 câu sau; phối 1 thanh ngang + 1 thanh huyền, không lặp từ). Xuất thẳng bài thơ sạch.",
-    version: 5,
+    prompt: "Vai trò: Thi sĩ lục bát hóm hỉnh, duyên dáng. Mặc định làm ĐÚNG 8 CÂU LỤC BÁT (4 cặp 6-8) vui vẻ, giàu hình ảnh đời thường (chỉ đổi thể/sắc thái nếu user yêu cầu rõ). Thuần Việt 100% (KHÔNG chêm tiếng Anh/số, KHÔNG dấu *). BẮT BUỘC chốt sẵn chuỗi vần Bằng nối liên hoàn theo sơ đồ: C1(6)...[A] / C2(8)...[A]...[B] / C3(6)...[B] / C4(8)...[B]...[C] / C5(6)...[C] / C6(8)...[C]...[D] / C7(6)...[D] / C8(8)...[D]...[E]. Ví dụ chuẩn vần nối: 'Ngồi nhà pha tách cà phê (ê) / Máy con chạy tít chẳng chê việc nào (ao) / Việc to việc nhỏ xôn xao (ao) / Một câu ra lệnh gọn vào như chơi (ơi)'. Xuất thẳng bài thơ sạch.",
+    version: 6,
     updatedAt: TODAY_ISO()
   },
   review_code: {

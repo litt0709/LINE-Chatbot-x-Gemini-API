@@ -4,6 +4,7 @@ const { db, FieldValue, getUserProfile, getRawMessages } = require("./db");
 const { resolveWebContext } = require("./search");
 const { getBotConfig } = require("./configCache");
 const { getBotSkills, matchActiveSkill } = require("./skillLibrary");
+const { validateLucBat } = require("./lucBatValidator");
 const logger = require("./logger");
 
 const DEEPSEEK_URL = process.env.DEEPSEEK_URL || "https://api.deepseek.com/chat/completions";
@@ -661,7 +662,7 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
   history.unshift({ role: "system", content: buildSystemPrompt(webContext, groupContext, isGroup, factsContext, botConfig, isSummaryReq, mbtiProfile, skillVectorsStr, prompt, botSkills) });
   let sysContent = history[0].content;
   if (forceIgnoreCheck) {
-    sysContent += "\n\nBẮT BUỘC: Bạn đang ở trong group chat. Người dùng có thể chỉ vô tình nhắc tên bạn khi nói chuyện với người khác. BẠN PHẢI đánh giá xem họ CÓ THỰC SỰ ĐANG NÓI CHUYỆN VỚI BẠN HAY KHÔNG. Nếu họ ĐANG NÓI VỚI NGƯỜI KHÁC (nhắc bạn ở ngôi thứ 3), BẠN PHẢI trả lời chính xác bằng 1 chữ: IGNORE. Tuyệt đối không giải thích thêm. Nếu họ đang hỏi hoặc gọi bạn, hãy trả lời bình thường.";
+    sysContent += "\n\nBẮT BUỘC (NHẬN DIỆN NGƯỜI NHẬN & MẠCH HỘI THOẠI TRONG GROUP): Tin nhắn [NEW] không tag trực tiếp @username của bạn. Hãy đối chiếu với câu trả lời ngay trước đó của bạn và lịch sử sát cạnh:\n- PHẢI TRẢ LỜI BÌNH THƯỜNG nếu: người dùng đang gọi bạn, dùng chữ 'em' hướng về bạn, hoặc đang nối tiếp mạch chủ đề vừa trao đổi với bạn (hỏi thêm, phản biện, nhờ sửa lại, nhận xét kết quả bạn vừa đưa).\n- BẮT BUỘC XUẤT ĐÚNG 1 CHỮ 'IGNORE' (tuyệt đối không giải thích thêm) nếu: (1) họ chỉ nhắc tên bạn ở ngôi thứ 3 khi đang nói với người khác, HOẶC (2) họ đã ĐỔI HẲN CHỦ ĐỀ để quay sang trò chuyện riêng/tán gẫu với thành viên khác trong nhóm.";
   }
 
   if (forceProactiveCheck) {
@@ -865,6 +866,48 @@ const chat = async (sessionId, prompt, senderName = "User", senderId = "unknown"
       }
 
       break; // Thoát vòng lặp
+    }
+
+    // [Programmatic Lục Bát Auto-Verifier & 1-Shot Repair]: Chỉ chạy khi kích hoạt skill lam_tho (mặc định lục bát)
+    const isNonLucBatPoem = /tự do|thất ngôn|ngũ ngôn|4 chữ|bốn chữ|5 chữ|năm chữ|7 chữ|bảy chữ|haiku|rap|đường luật/i.test(prompt);
+    if (activeSkill?.slug === "lam_tho" && !isNonLucBatPoem && replyText && replyText.trim() !== "IGNORE") {
+      const check1 = validateLucBat(replyText);
+      if (!check1.valid) {
+        console.log(`[LucBat Validator] Phát hiện ${check1.errorCount} lỗi vần/số tiếng, kích hoạt 1-shot sửa chuẩn:\n  - ${check1.errors.join("\n  - ")}`);
+        try {
+          const repairMessages = [
+            {
+              role: "system",
+              content: "Bạn là thi sĩ bậc thầy về thơ Lục Bát tiếng Việt hài hước, dí dỏm. Hãy viết lại bài thơ sửa TRIỆT ĐỂ mọi lỗi số tiếng và gieo vần được liệt kê, giữ đúng chủ đề vui vẻ, hóm hỉnh, thuần Việt (KHÔNG chen tiếng Anh, KHÔNG dấu *). Chỉ xuất DUY NHẤT bài thơ 8 câu (4 cặp 6-8), không giải thích."
+            },
+            {
+              role: "user",
+              content: `Yêu cầu gốc: "${prompt}"\n\nBản nháp bị lỗi:\n${replyText}\n\nCác lỗi bắt buộc phải sửa:\n- ${check1.errors.join("\n- ")}\n\nHãy chọn chuỗi vần Bằng dễ và tự nhiên (vd: -a -> -ơi -> -ây -> -iên -> -ười) rồi viết lại đúng 8 câu chuẩn 100% số tiếng (6-8-6-8-6-8-6-8) và chuẩn 100% vần nối giữa mọi cặp!`
+            }
+          ];
+          const repairRes = await axios.post(DEEPSEEK_URL, {
+            model: targetModel,
+            messages: repairMessages,
+            temperature: 0.45
+          }, {
+            headers: DEFAULT_DEEPSEEK_HEADERS,
+            httpsAgent,
+            timeout: 30000
+          });
+          const repairedText = (repairRes.data?.choices?.[0]?.message?.content || "").trim();
+          if (repairedText) {
+            const check2 = validateLucBat(repairedText);
+            console.log(`[LucBat Validator] Sau khi sửa: ${check2.errorCount} lỗi (trước đó: ${check1.errorCount} lỗi).`);
+            if (check2.errorCount < check1.errorCount) {
+              replyText = repairedText;
+            }
+          }
+        } catch (repErr) {
+          console.warn("[LucBat Validator] Lỗi khi sửa thơ:", repErr.message);
+        }
+      } else {
+        console.log(`[LucBat Validator] Bài thơ ĐẠT CHUẨN 100% ngay lượt đầu (${check1.lineCount} câu)!`);
+      }
     }
 
     if (isTimeRangeSummaryRequest(prompt) || /tóm tắt|summary/i.test(cleanPrompt)) {
